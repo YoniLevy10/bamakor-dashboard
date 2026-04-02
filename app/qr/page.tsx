@@ -121,12 +121,14 @@ export default function QrPage() {
               </div>
             </div>
 
-            <nav style={styles.nav}>
-              <Link href="/" style={styles.navItem}>Dashboard</Link>
-              <Link href="/tickets" style={styles.navItem}>Tickets</Link>
-              <Link href="/qr" style={{ ...styles.navItem, ...styles.navItemActive }}>QR Codes</Link>
-              <Link href="/workers" style={styles.navItemDisabled}>Workers</Link>
-            </nav>
+           <nav style={styles.sidebarNav}>
+  <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
+  <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
+  <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
+  <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
+  <a href="/qr" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>QR Codes</a>
+</nav>
+
           </aside>
         )}
 

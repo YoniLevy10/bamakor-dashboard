@@ -262,12 +262,13 @@ export default function TicketsPage() {
               </div>
             </div>
 
-            <nav style={styles.nav}>
-              <Link href="/" style={styles.navItem}>Dashboard</Link>
-              <Link href="/tickets" style={{ ...styles.navItem, ...styles.navItemActive }}>Tickets</Link>
-              <Link href="/workers" style={styles.navItemDisabled}>Workers</Link>
-              <Link href="/qr" style={styles.navItem}>QR Codes</Link>
-            </nav>
+           <nav style={styles.sidebarNav}>
+  <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
+  <a href="/tickets" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Tickets</a>
+  <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
+  <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
+  <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
+</nav>
 
             <div style={styles.sidebarFooter}>
               Maintenance Management System

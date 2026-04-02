@@ -725,24 +725,15 @@ export default function HomePage() {
               </div>
             </div>
 
-           <nav style={styles.sidebarNav}>
+      <nav style={styles.sidebarNav}>
   <a href="/" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>
     Dashboard
   </a>
-  <a href="/tickets" style={styles.sidebarNavLink}>
-    Tickets
-  </a>
-  <a href="/workers" style={styles.sidebarNavLink}>
-    Workers
-  </a>
-  <a href="/projects" style={styles.sidebarNavLink}>
-    Projects
-  </a>
-  <a href="/qr" style={styles.sidebarNavLink}>
-    QR Codes
-  </a>
+  <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
+  <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
+  <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
+  <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
 </nav>
-
 
             <div style={styles.sidebarFooter}>Maintenance Management System</div>
           </aside>
@@ -1431,16 +1422,6 @@ const styles: Record<string, CSSProperties> = {
     padding: '12px 14px',
     borderRadius: '12px',
     background: '#FFFFFF',
-  },
-  sidebarNavItemDisabled: {
-    textAlign: 'left',
-    background: '#F9FAFB',
-    color: '#9CA3AF',
-    border: '1px solid #F3F4F6',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    fontWeight: 700,
-    cursor: 'default',
   },
   sidebarFooter: {
     marginTop: 'auto',

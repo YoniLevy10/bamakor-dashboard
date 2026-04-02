@@ -291,20 +291,13 @@ export default function WorkersPage() {
               </div>
             </div>
 
-            <nav style={styles.sidebarNav}>
-              <Link href="/" style={styles.sidebarNavLink}>
-                Dashboard
-              </Link>
-              <Link href="/tickets" style={styles.sidebarNavLink}>
-                Tickets
-              </Link>
-              <button style={{ ...styles.sidebarNavItem, ...styles.sidebarNavItemActive }}>
-                Workers
-              </button>
-              <Link href="/qr" style={styles.sidebarNavLink}>
-                QR Codes
-              </Link>
-            </nav>
+           <nav style={styles.sidebarNav}>
+  <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
+  <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
+  <a href="/workers" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Workers</a>
+  <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
+  <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
+</nav>
 
             <div style={styles.sidebarFooter}>Team & project setup</div>
           </aside>
