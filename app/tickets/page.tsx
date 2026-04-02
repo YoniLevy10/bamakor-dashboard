@@ -262,13 +262,28 @@ export default function TicketsPage() {
               </div>
             </div>
 
-           <nav style={styles.sidebarNav}>
-  <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
-  <a href="/tickets" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Tickets</a>
-  <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
-  <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
-  <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
+       <nav style={styles.nav}>
+  <Link href="/" style={styles.navItem}>
+    Dashboard
+  </Link>
+
+  <Link href="/tickets" style={{ ...styles.navItem, ...styles.navItemActive }}>
+    Tickets
+  </Link>
+
+  <Link href="/workers" style={styles.navItem}>
+    Workers
+  </Link>
+
+  <Link href="/projects" style={styles.navItem}>
+    Projects
+  </Link>
+
+  <Link href="/qr" style={styles.navItem}>
+    QR Codes
+  </Link>
 </nav>
+
 
             <div style={styles.sidebarFooter}>
               Maintenance Management System
@@ -592,22 +607,29 @@ const styles: Record<string, CSSProperties> = {
     color: '#6B7280',
   },
   nav: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  navItem: {
-    textDecoration: 'none',
-    color: '#374151',
-    fontWeight: 700,
-    padding: '12px 14px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-  },
-  navItemActive: {
-    background: '#111827',
-    color: '#FFFFFF',
-  },
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '12px',
+},
+
+navItem: {
+  textDecoration: 'none',
+  color: '#111827',
+  fontWeight: 700,
+  fontSize: '18px',
+  padding: '16px 18px',
+  borderRadius: '20px',
+  display: 'block',
+  width: '100%',
+  boxSizing: 'border-box',
+},
+
+navItemActive: {
+  background: '#111827',
+  color: '#FFFFFF',
+  boxShadow: '0 12px 24px rgba(17, 24, 39, 0.16)',
+},
+
   navItemDisabled: {
     textDecoration: 'none',
     color: '#9CA3AF',
