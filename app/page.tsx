@@ -726,13 +726,20 @@ export default function HomePage() {
             </div>
 
             <nav style={styles.sidebarNav}>
-              <button style={{ ...styles.sidebarNavItem, ...styles.sidebarNavItemActive }}>
-                Dashboard
-              </button>
-              <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
-              <button style={styles.sidebarNavItemDisabled}>Workers</button>
-              <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
-            </nav>
+  <a href="/" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>
+    Dashboard
+  </a>
+  <a href="/tickets" style={styles.sidebarNavLink}>
+    Tickets
+  </a>
+  <a href="/workers" style={styles.sidebarNavLink}>
+    Workers
+  </a>
+  <a href="/qr" style={styles.sidebarNavLink}>
+    QR Codes
+  </a>
+</nav>
+
 
             <div style={styles.sidebarFooter}>Maintenance Management System</div>
           </aside>
@@ -798,13 +805,22 @@ export default function HomePage() {
           {menuOpen && isMobile && (
             <div style={styles.mobileMenuCard}>
               <div style={styles.mobileMenuTitle}>Navigation</div>
+
               <div style={styles.mobileMenuList}>
-                <button style={{ ...styles.mobileMenuItem, ...styles.mobileMenuItemActive }}>
-                  Dashboard
-                </button>
-                <a href="/tickets" style={styles.mobileMenuLink}>Tickets</a>
-                <a href="/qr" style={styles.mobileMenuLink}>QR Codes</a>
-              </div>
+  <a href="/" style={{ ...styles.mobileMenuLink, ...styles.mobileMenuItemActive }}>
+    Dashboard
+  </a>
+  <a href="/tickets" style={styles.mobileMenuLink}>
+    Tickets
+  </a>
+  <a href="/workers" style={styles.mobileMenuLink}>
+    Workers
+  </a>
+  <a href="/qr" style={styles.mobileMenuLink}>
+    QR Codes
+  </a>
+</div>
+
             </div>
           )}
 
