@@ -1,9 +1,7 @@
 'use client'
 
-
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
-
 
 type TicketRow = {
   id: string
@@ -19,7 +17,6 @@ type TicketRow = {
   closed_at: string | null
 }
 
-
 type TicketLog = {
   id: string
   ticket_id: string
@@ -31,13 +28,11 @@ type TicketLog = {
   created_at: string
 }
 
-
 type ProjectRow = {
   id: string
   name: string
   project_code: string
 }
-
 
 const tabs = [
   { key: 'all', label: 'All Tickets', source: 'all' },
@@ -48,13 +43,10 @@ const tabs = [
   { key: 'BMK5', label: 'BMK5 - קטמון הישנה', source: 'project_bmk5_tickets' },
 ] as const
 
-
 const statusOptions = ['ALL', 'NEW', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED'] as const
 const editableStatusOptions = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED'] as const
 
-
 const WHATSAPP_NUMBER = '972500000000'
-
 
 function MobileTicketCard({
   ticket,
@@ -76,14 +68,13 @@ function MobileTicketCard({
   return (
     <div onClick={() => openTicket(ticket)} style={styles.mobileCard}>
       <div style={styles.mobileCardHeader}>
-        <div>
+        <div style={styles.mobileCardHeaderLeft}>
           <div style={styles.mobileCardTicketNumber}>#{ticket.ticket_number}</div>
           <div style={styles.mobileProject}>
             {ticket.project_name || '-'}
           </div>
           <div style={styles.mobileProjectCode}>{ticket.project_code || '-'}</div>
         </div>
-
 
         <span
           style={{
@@ -95,22 +86,22 @@ function MobileTicketCard({
         </span>
       </div>
 
-
       <div style={styles.mobileDescription}>{ticket.description || '-'}</div>
 
-
-      <div style={styles.mobileMeta}>📞 {ticket.reporter_phone}</div>
-      <div style={styles.mobileMeta}>
-        🕒 {new Date(ticket.created_at).toLocaleString()}
+      <div style={styles.mobileMetaGroup}>
+        <div style={styles.mobileMeta}>📞 {ticket.reporter_phone}</div>
+        <div style={styles.mobileMeta}>🕒 {new Date(ticket.created_at).toLocaleString()}</div>
       </div>
-
 
       <div style={styles.mobileField} onClick={(e) => e.stopPropagation()}>
         <div style={styles.mobileFieldLabel}>Status</div>
         <select
           value={ticket.status}
           onChange={(e) => updateTicketStatus(ticket.id, e.target.value)}
-          style={styles.select}
+          style={{
+            ...styles.select,
+            ...styles.mobileTouchSelect,
+          }}
         >
           {editableStatusOptions.map((status) => (
             <option key={status} value={status}>
@@ -120,13 +111,15 @@ function MobileTicketCard({
         </select>
       </div>
 
-
       <div style={styles.mobileField} onClick={(e) => e.stopPropagation()}>
         <div style={styles.mobileFieldLabel}>Worker</div>
         <select
           value={ticket.assigned_worker_id || ''}
           onChange={(e) => assignWorker(ticket.id, e.target.value)}
-          style={styles.select}
+          style={{
+            ...styles.select,
+            ...styles.mobileTouchSelect,
+          }}
         >
           <option value="">Assign Worker</option>
           {Object.entries(workersMap).map(([id, name]) => (
@@ -136,7 +129,6 @@ function MobileTicketCard({
           ))}
         </select>
       </div>
-
 
       <div style={styles.mobileActions} onClick={(e) => e.stopPropagation()}>
         {ticket.status !== 'CLOSED' ? (
@@ -151,7 +143,6 @@ function MobileTicketCard({
   )
 }
 
-
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState('all')
   const [tickets, setTickets] = useState<TicketRow[]>([])
@@ -162,12 +153,10 @@ export default function HomePage() {
   const [workersMap, setWorkersMap] = useState<Record<string, string>>({})
   const [menuOpen, setMenuOpen] = useState(false)
 
-
   const [selectedTicket, setSelectedTicket] = useState<TicketRow | null>(null)
   const [ticketLogs, setTicketLogs] = useState<TicketLog[]>([])
   const [drawerLoading, setDrawerLoading] = useState(false)
   const [savingTicket, setSavingTicket] = useState(false)
-
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -177,16 +166,13 @@ export default function HomePage() {
   const [activeKpi, setActiveKpi] = useState<'ALL' | 'NEW' | 'ASSIGNED' | 'CLOSED'>('ALL')
   const [selectedProjectCode, setSelectedProjectCode] = useState<string>('ALL')
 
-
   const [draftDescription, setDraftDescription] = useState('')
   const [draftStatus, setDraftStatus] = useState('NEW')
   const [draftWorkerId, setDraftWorkerId] = useState('')
 
-
   const activeSource = useMemo(() => {
     return tabs.find((t) => t.key === activeTab)?.source || 'all'
   }, [activeTab])
-
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -195,26 +181,22 @@ export default function HomePage() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
-
   useEffect(() => {
     loadWorkers()
     loadProjects()
     loadAllTickets()
   }, [])
 
-
   useEffect(() => {
     loadTickets(activeSource)
     setMenuOpen(false)
   }, [activeSource])
-
 
   useEffect(() => {
     if (!copyMessage) return
     const timer = window.setTimeout(() => setCopyMessage(''), 1800)
     return () => window.clearTimeout(timer)
   }, [copyMessage])
-
 
   useEffect(() => {
     const channel = supabase
@@ -240,19 +222,16 @@ export default function HomePage() {
       )
       .subscribe()
 
-
     return () => {
       supabase.removeChannel(channel)
     }
   }, [activeSource, selectedTicket?.id])
-
 
   async function loadWorkers() {
     const { data, error } = await supabase
       .from('workers')
       .select('id, full_name')
       .order('full_name', { ascending: true })
-
 
     if (!error && data) {
       const map: Record<string, string> = {}
@@ -263,19 +242,16 @@ export default function HomePage() {
     }
   }
 
-
   async function loadProjects() {
     const { data, error } = await supabase
       .from('projects')
       .select('id, name, project_code')
       .order('project_code', { ascending: true })
 
-
     if (!error && data) {
       setProjects(data as ProjectRow[])
     }
   }
-
 
   async function loadAllTickets() {
     const { data, error } = await supabase
@@ -297,7 +273,6 @@ export default function HomePage() {
       `)
       .order('created_at', { ascending: false })
 
-
     if (!error && data) {
       const formatted: TicketRow[] =
         data?.map((row: any) => ({
@@ -314,16 +289,13 @@ export default function HomePage() {
           closed_at: row.closed_at,
         })) || []
 
-
       setAllTickets(formatted)
     }
   }
 
-
   async function loadTickets(source: string) {
     setLoading(true)
     setError('')
-
 
     try {
       if (source === 'all') {
@@ -346,9 +318,7 @@ export default function HomePage() {
           `)
           .order('created_at', { ascending: false })
 
-
         if (error) throw error
-
 
         const formatted: TicketRow[] =
           data?.map((row: any) => ({
@@ -365,7 +335,6 @@ export default function HomePage() {
             closed_at: row.closed_at,
           })) || []
 
-
         setTickets(formatted)
       } else {
         const { data, error } = await supabase
@@ -373,9 +342,7 @@ export default function HomePage() {
           .select('*')
           .order('created_at', { ascending: false })
 
-
         if (error) throw error
-
 
         setTickets((data as TicketRow[]) || [])
       }
@@ -387,10 +354,8 @@ export default function HomePage() {
     }
   }
 
-
   async function loadTicketLogs(ticketId: string) {
     setDrawerLoading(true)
-
 
     const { data, error } = await supabase
       .from('ticket_logs')
@@ -398,25 +363,20 @@ export default function HomePage() {
       .eq('ticket_id', ticketId)
       .order('created_at', { ascending: false })
 
-
     if (!error) {
       setTicketLogs((data as TicketLog[]) || [])
     } else {
       setTicketLogs([])
     }
 
-
     setDrawerLoading(false)
   }
-
 
   async function refreshData() {
     await Promise.all([loadTickets(activeSource), loadAllTickets()])
 
-
     if (selectedTicket) {
       let nextTicket: TicketRow | null = null
-
 
       if (activeSource === 'all') {
         const { data } = await supabase
@@ -438,7 +398,6 @@ export default function HomePage() {
           `)
           .eq('id', selectedTicket.id)
           .single()
-
 
         if (data) {
           const project = Array.isArray(data.projects) ? data.projects?.[0] : data.projects
@@ -463,12 +422,10 @@ export default function HomePage() {
           .eq('id', selectedTicket.id)
           .single()
 
-
         if (data) {
           nextTicket = data as TicketRow
         }
       }
-
 
       if (nextTicket) {
         setSelectedTicket(nextTicket)
@@ -480,14 +437,12 @@ export default function HomePage() {
     }
   }
 
-
   async function assignWorker(ticketId: string, workerId: string) {
     if (!workerId) {
       await supabase.from('tickets').update({ assigned_worker_id: null }).eq('id', ticketId)
       await refreshData()
       return
     }
-
 
     try {
       const response = await fetch('/api/assign-ticket', {
@@ -496,12 +451,10 @@ export default function HomePage() {
         body: JSON.stringify({ ticket_id: ticketId, worker_id: workerId }),
       })
 
-
       if (!response.ok) {
         const result = await response.json()
         throw new Error(result.error || 'Failed to assign worker')
       }
-
 
       await refreshData()
     } catch (err: any) {
@@ -509,22 +462,18 @@ export default function HomePage() {
     }
   }
 
-
   async function updateTicketStatus(ticketId: string, nextStatus: string) {
     try {
       const payload: any = { status: nextStatus }
       if (nextStatus === 'CLOSED') payload.closed_at = new Date().toISOString()
       if (nextStatus !== 'CLOSED') payload.closed_at = null
 
-
       const { error } = await supabase
         .from('tickets')
         .update(payload)
         .eq('id', ticketId)
 
-
       if (error) throw error
-
 
       await refreshData()
     } catch (err: any) {
@@ -532,11 +481,9 @@ export default function HomePage() {
     }
   }
 
-
   async function saveSelectedTicket() {
     if (!selectedTicket) return
     setSavingTicket(true)
-
 
     try {
       const payload: any = {
@@ -545,22 +492,18 @@ export default function HomePage() {
         assigned_worker_id: draftWorkerId || null,
       }
 
-
       if (draftStatus === 'CLOSED') {
         payload.closed_at = selectedTicket.closed_at || new Date().toISOString()
       } else {
         payload.closed_at = null
       }
 
-
       const { error } = await supabase
         .from('tickets')
         .update(payload)
         .eq('id', selectedTicket.id)
 
-
       if (error) throw error
-
 
       await refreshData()
     } catch (err: any) {
@@ -570,7 +513,6 @@ export default function HomePage() {
     }
   }
 
-
   async function closeTicket(ticketId: string) {
     try {
       const response = await fetch('/api/close-ticket', {
@@ -579,19 +521,16 @@ export default function HomePage() {
         body: JSON.stringify({ ticket_id: ticketId }),
       })
 
-
       if (!response.ok) {
         const result = await response.json()
         throw new Error(result.error || 'Failed to close ticket')
       }
-
 
       await refreshData()
     } catch (err: any) {
       alert(err.message || 'Failed to close ticket')
     }
   }
-
 
   function openTicket(ticket: TicketRow) {
     setSelectedTicket(ticket)
@@ -601,7 +540,6 @@ export default function HomePage() {
     loadTicketLogs(ticket.id)
   }
 
-
   async function copyText(value: string, label = 'Copied') {
     try {
       await navigator.clipboard.writeText(value)
@@ -610,7 +548,6 @@ export default function HomePage() {
       alert('Copy failed')
     }
   }
-
 
   function exportCurrentViewToCsv() {
     const rows = filteredTickets.map((ticket) => ({
@@ -627,7 +564,6 @@ export default function HomePage() {
       closed_at: ticket.closed_at || '',
     }))
 
-
     const headers = [
       'ticket_number',
       'project_code',
@@ -640,7 +576,6 @@ export default function HomePage() {
       'closed_at',
     ]
 
-
     const csv = [
       headers.join(','),
       ...rows.map((row) =>
@@ -649,7 +584,6 @@ export default function HomePage() {
           .join(',')
       ),
     ].join('\n')
-
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -662,11 +596,9 @@ export default function HomePage() {
     URL.revokeObjectURL(url)
   }
 
-
   function buildWhatsappLink(projectCode: string) {
     return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`START_${projectCode}`)}`
   }
-
 
   const stats = useMemo(() => {
     const total = allTickets.length
@@ -674,15 +606,12 @@ export default function HomePage() {
     const assigned = allTickets.filter((t) => t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS').length
     const closed = allTickets.filter((t) => t.status === 'CLOSED').length
 
-
     return { total, open, assigned, closed }
   }, [allTickets])
-
 
   const projectCounts = useMemo(() => {
     return projects.map((project) => {
       const ticketsForProject = allTickets.filter((t) => t.project_code === project.project_code)
-
 
       return {
         ...project,
@@ -694,7 +623,6 @@ export default function HomePage() {
     })
   }, [projects, allTickets])
 
-
   const filteredTickets = useMemo(() => {
     return tickets.filter((ticket) => {
       const matchesSearch =
@@ -704,10 +632,8 @@ export default function HomePage() {
         (ticket.project_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (ticket.project_code || '').toLowerCase().includes(searchTerm.toLowerCase())
 
-
       const matchesStatus =
         statusFilter === 'ALL' || ticket.status === statusFilter
-
 
       const matchesKpi =
         activeKpi === 'ALL' ||
@@ -715,15 +641,12 @@ export default function HomePage() {
         (activeKpi === 'ASSIGNED' && (ticket.status === 'ASSIGNED' || ticket.status === 'IN_PROGRESS')) ||
         (activeKpi === 'CLOSED' && ticket.status === 'CLOSED')
 
-
       const matchesProject =
         selectedProjectCode === 'ALL' || ticket.project_code === selectedProjectCode
-
 
       return matchesSearch && matchesStatus && matchesKpi && matchesProject
     })
   }, [tickets, searchTerm, statusFilter, activeKpi, selectedProjectCode])
-
 
   function getStatusStyle(status: string): CSSProperties {
     switch (status) {
@@ -740,7 +663,6 @@ export default function HomePage() {
     }
   }
 
-
   function getRowStyle(status: string, ticketId: string): CSSProperties {
     const base =
       status === 'NEW'
@@ -753,7 +675,6 @@ export default function HomePage() {
         ? { background: '#F0FDF4' }
         : { background: '#FFFFFF' }
 
-
     if (selectedTicket?.id === ticketId) {
       return {
         ...base,
@@ -761,10 +682,8 @@ export default function HomePage() {
       }
     }
 
-
     return base
   }
-
 
   function formatLogTitle(actionType: string) {
     switch (actionType) {
@@ -783,7 +702,6 @@ export default function HomePage() {
     }
   }
 
-
   function resetAllFilters() {
     setActiveKpi('ALL')
     setSelectedProjectCode('ALL')
@@ -791,10 +709,14 @@ export default function HomePage() {
     setSearchTerm('')
   }
 
-
   return (
-    <main style={styles.page}>
-      <div style={styles.appShell}>
+   <main style={styles.page}>
+  <div
+    style={{
+      ...styles.appShell,
+      gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
+    }}
+  >
         {!isMobile && (
           <aside style={styles.sidebar}>
             <div style={styles.sidebarBrand}>
@@ -805,7 +727,6 @@ export default function HomePage() {
               </div>
             </div>
 
-
             <nav style={styles.sidebarNav}>
               <button style={{ ...styles.sidebarNavItem, ...styles.sidebarNavItemActive }}>
                 Dashboard
@@ -815,24 +736,48 @@ export default function HomePage() {
               <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
             </nav>
 
-
             <div style={styles.sidebarFooter}>Maintenance Management System</div>
           </aside>
         )}
 
-
-        <div style={styles.mainArea}>
+        <div
+  style={{
+    ...styles.mainArea,
+    ...(isMobile ? styles.mainAreaMobile : {}),
+  }}
+>
           <div style={styles.topBar}>
             <div style={styles.brandWrap}>
               <div style={styles.brandRow}>
-                {isMobile && <div style={styles.logoBox}>B</div>}
+                {isMobile && (
+                  <button
+                    onClick={() => setMenuOpen((prev) => !prev)}
+                    style={styles.hamburgerButton}
+                  >
+                    ☰
+                  </button>
+                )}
+
                 <div>
-                  <h1 style={styles.title}>Dashboard</h1>
-                  <p style={styles.subtitle}>Welcome back. Here's what's happening today.</p>
+                  <h1
+  style={{
+    ...styles.title,
+    ...(isMobile ? styles.titleMobile : {}),
+  }}
+>
+  Dashboard
+</h1>
+                  <p
+  style={{
+    ...styles.subtitle,
+    ...(isMobile ? styles.subtitleMobile : {}),
+  }}
+>
+  Welcome back. Here's what's happening today.
+</p>
                 </div>
               </div>
             </div>
-
 
             <div style={styles.topActions}>
               <button
@@ -842,26 +787,15 @@ export default function HomePage() {
                 {showQrSection ? 'Hide QR' : 'QR Management'}
               </button>
 
-
-              <button onClick={exportCurrentViewToCsv} style={styles.secondaryButton}>
-                Export CSV
-              </button>
-
-
-              {isMobile && (
-                <button
-                  onClick={() => setMenuOpen((prev) => !prev)}
-                  style={styles.hamburgerButton}
-                >
-                  ☰
+              {!isMobile && (
+                <button onClick={exportCurrentViewToCsv} style={styles.secondaryButton}>
+                  Export CSV
                 </button>
               )}
             </div>
           </div>
 
-
           {copyMessage && <div style={styles.copyToast}>{copyMessage}</div>}
-
 
           {menuOpen && isMobile && (
             <div style={styles.mobileMenuCard}>
@@ -876,7 +810,6 @@ export default function HomePage() {
             </div>
           )}
 
-
           <div
             style={{
               ...styles.statsGrid,
@@ -888,6 +821,7 @@ export default function HomePage() {
             <button
               style={{
                 ...styles.kpiCard,
+                ...(isMobile ? styles.kpiCardMobile : {}),
                 ...(activeKpi === 'ALL' ? styles.kpiCardActive : {}),
               }}
               onClick={() => setActiveKpi('ALL')}
@@ -896,10 +830,10 @@ export default function HomePage() {
               <div style={styles.kpiValue}>{stats.total}</div>
             </button>
 
-
             <button
               style={{
                 ...styles.kpiCard,
+                ...(isMobile ? styles.kpiCardMobile : {}),
                 ...(activeKpi === 'NEW' ? styles.kpiCardActive : {}),
               }}
               onClick={() => setActiveKpi('NEW')}
@@ -908,10 +842,10 @@ export default function HomePage() {
               <div style={styles.kpiValue}>{stats.open}</div>
             </button>
 
-
             <button
               style={{
                 ...styles.kpiCard,
+                ...(isMobile ? styles.kpiCardMobile : {}),
                 ...(activeKpi === 'ASSIGNED' ? styles.kpiCardActive : {}),
               }}
               onClick={() => setActiveKpi('ASSIGNED')}
@@ -920,10 +854,10 @@ export default function HomePage() {
               <div style={styles.kpiValue}>{stats.assigned}</div>
             </button>
 
-
             <button
               style={{
                 ...styles.kpiCard,
+                ...(isMobile ? styles.kpiCardMobile : {}),
                 ...(activeKpi === 'CLOSED' ? styles.kpiCardActive : {}),
               }}
               onClick={() => setActiveKpi('CLOSED')}
@@ -933,7 +867,6 @@ export default function HomePage() {
             </button>
           </div>
 
-
           <div style={styles.projectSection}>
             <div style={styles.projectSectionHeader}>
               <div>
@@ -941,12 +874,10 @@ export default function HomePage() {
                 <div style={styles.projectSectionSubtitle}>Scroll horizontally to browse all projects</div>
               </div>
 
-
               <button onClick={() => setSelectedProjectCode('ALL')} style={styles.secondaryButtonSmall}>
                 Show All
               </button>
             </div>
-
 
             <div style={styles.projectScrollRow}>
               {projectCounts.map((project) => (
@@ -955,6 +886,7 @@ export default function HomePage() {
                   onClick={() => setSelectedProjectCode(project.project_code)}
                   style={{
                     ...styles.projectMiniCard,
+                    ...(isMobile ? styles.projectMiniCardMobile : {}),
                     ...(selectedProjectCode === project.project_code
                       ? styles.projectMiniCardActive
                       : {}),
@@ -967,7 +899,6 @@ export default function HomePage() {
             </div>
           </div>
 
-
           {showQrSection && (
             <div style={styles.qrSectionCard}>
               <div style={styles.qrSectionHeader}>
@@ -979,30 +910,25 @@ export default function HomePage() {
                 </div>
               </div>
 
-
               <div style={styles.qrGrid}>
                 {projects.map((project) => {
                   const startCode = `START_${project.project_code}`
                   const whatsappLink = buildWhatsappLink(project.project_code)
-
 
                   return (
                     <div key={project.id} style={styles.qrProjectCard}>
                       <div style={styles.qrProjectCode}>{project.project_code}</div>
                       <div style={styles.qrProjectName}>{project.name}</div>
 
-
                       <div style={styles.qrMetaBlock}>
                         <div style={styles.qrMetaLabel}>Start Code</div>
                         <div style={styles.qrMetaValue}>{startCode}</div>
                       </div>
 
-
                       <div style={styles.qrMetaBlock}>
                         <div style={styles.qrMetaLabel}>WhatsApp Link</div>
                         <div style={styles.qrLinkText}>{whatsappLink}</div>
                       </div>
-
 
                       <div style={styles.qrActions}>
                         <button
@@ -1012,14 +938,12 @@ export default function HomePage() {
                           Copy Code
                         </button>
 
-
                         <button
                           onClick={() => copyText(whatsappLink, 'Link copied')}
                           style={styles.secondaryButtonSmall}
                         >
                           Copy Link
                         </button>
-
 
                         <a
                           href={whatsappLink}
@@ -1037,7 +961,6 @@ export default function HomePage() {
             </div>
           )}
 
-
           <div style={styles.card}>
             <div style={styles.cardHeader}>
               <div>
@@ -1047,12 +970,10 @@ export default function HomePage() {
                 </div>
               </div>
 
-
               <button onClick={resetAllFilters} style={styles.secondaryButtonSmall}>
                 Reset Filters
               </button>
             </div>
-
 
             <div
               style={{
@@ -1066,7 +987,6 @@ export default function HomePage() {
                 placeholder="Search by phone, description or project..."
                 style={styles.searchInput}
               />
-
 
               <select
                 value={statusFilter}
@@ -1084,15 +1004,12 @@ export default function HomePage() {
               </select>
             </div>
 
-
             {loading && <p style={styles.infoText}>Loading tickets...</p>}
             {error && <p style={styles.errorText}>{error}</p>}
-
 
             {!loading && !error && filteredTickets.length === 0 && (
               <p style={styles.infoText}>No tickets found.</p>
             )}
-
 
             {!loading && !error && filteredTickets.length > 0 && (
               isMobile ? (
@@ -1127,7 +1044,6 @@ export default function HomePage() {
                       </tr>
                     </thead>
 
-
                     <tbody>
                       {filteredTickets.map((ticket) => (
                         <tr
@@ -1140,7 +1056,6 @@ export default function HomePage() {
                         >
                           <td style={styles.td}>{ticket.ticket_number}</td>
 
-
                           <td style={styles.td}>
                             <div style={styles.projectCell}>
                               <div style={styles.projectNameMain}>
@@ -1150,16 +1065,13 @@ export default function HomePage() {
                             </div>
                           </td>
 
-
                           <td style={styles.td}>{ticket.reporter_phone}</td>
-
 
                           <td style={styles.td}>
                             <div style={styles.descriptionCell}>
                               {ticket.description || '-'}
                             </div>
                           </td>
-
 
                           <td style={styles.td} onClick={(e) => e.stopPropagation()}>
                             <select
@@ -1174,7 +1086,6 @@ export default function HomePage() {
                               ))}
                             </select>
                           </td>
-
 
                           <td style={styles.td} onClick={(e) => e.stopPropagation()}>
                             <select
@@ -1191,18 +1102,15 @@ export default function HomePage() {
                             </select>
                           </td>
 
-
                           <td style={styles.td}>
                             {new Date(ticket.created_at).toLocaleString()}
                           </td>
-
 
                           <td style={styles.td}>
                             {ticket.closed_at
                               ? new Date(ticket.closed_at).toLocaleString()
                               : '-'}
                           </td>
-
 
                           <td style={styles.td}>
                             {ticket.status !== 'CLOSED' ? (
@@ -1230,15 +1138,14 @@ export default function HomePage() {
         </div>
       </div>
 
-
       {selectedTicket && (
         <>
           <div onClick={() => setSelectedTicket(null)} style={styles.drawerOverlay} />
 
-
           <div
             style={{
               ...styles.drawer,
+              ...(isMobile ? styles.drawerMobile : {}),
               width: isMobile ? '100%' : '440px',
             }}
           >
@@ -1248,12 +1155,10 @@ export default function HomePage() {
                   Ticket #{selectedTicket.ticket_number}
                 </div>
 
-
                 <div style={styles.drawerSubtitle}>
                   {selectedTicket.project_code} - {selectedTicket.project_name}
                 </div>
               </div>
-
 
               <button
                 onClick={() => setSelectedTicket(null)}
@@ -1263,19 +1168,20 @@ export default function HomePage() {
               </button>
             </div>
 
-
             <div style={styles.drawerSection}>
               <div style={styles.drawerLabel}>Phone</div>
               <div style={styles.drawerValue}>{selectedTicket.reporter_phone}</div>
             </div>
-
 
             <div style={styles.drawerSection}>
               <div style={styles.drawerLabel}>Status</div>
               <select
                 value={draftStatus}
                 onChange={(e) => setDraftStatus(e.target.value)}
-                style={styles.select}
+                style={{
+                  ...styles.select,
+                  ...(isMobile ? styles.mobileTouchSelect : {}),
+                }}
               >
                 {editableStatusOptions.map((status) => (
                   <option key={status} value={status}>
@@ -1284,7 +1190,6 @@ export default function HomePage() {
                 ))}
               </select>
             </div>
-
 
             <div style={styles.drawerSection}>
               <div style={styles.drawerLabel}>Description</div>
@@ -1295,13 +1200,15 @@ export default function HomePage() {
               />
             </div>
 
-
             <div style={styles.drawerSection}>
               <div style={styles.drawerLabel}>Worker</div>
               <select
                 value={draftWorkerId}
                 onChange={(e) => setDraftWorkerId(e.target.value)}
-                style={styles.select}
+                style={{
+                  ...styles.select,
+                  ...(isMobile ? styles.mobileTouchSelect : {}),
+                }}
               >
                 <option value="">Assign Worker</option>
                 {Object.entries(workersMap).map(([id, name]) => (
@@ -1312,14 +1219,12 @@ export default function HomePage() {
               </select>
             </div>
 
-
             <div style={styles.drawerSection}>
               <div style={styles.drawerLabel}>Created</div>
               <div style={styles.drawerValue}>
                 {new Date(selectedTicket.created_at).toLocaleString()}
               </div>
             </div>
-
 
             <div style={styles.drawerSection}>
               <div style={styles.drawerLabel}>Closed</div>
@@ -1330,7 +1235,6 @@ export default function HomePage() {
               </div>
             </div>
 
-
             <div style={styles.drawerQuickActions}>
               <button
                 onClick={() => copyText(selectedTicket.reporter_phone, 'Phone copied')}
@@ -1338,7 +1242,6 @@ export default function HomePage() {
               >
                 Copy Phone
               </button>
-
 
               {selectedTicket.project_code && (
                 <button
@@ -1350,12 +1253,10 @@ export default function HomePage() {
               )}
             </div>
 
-
             <div style={styles.drawerActions}>
               <button onClick={saveSelectedTicket} style={styles.primarySaveButton}>
                 {savingTicket ? 'Saving...' : 'Save Changes'}
               </button>
-
 
               {draftStatus !== 'CLOSED' && (
                 <button
@@ -1367,18 +1268,14 @@ export default function HomePage() {
               )}
             </div>
 
-
             <div style={styles.historySection}>
               <div style={styles.historyTitle}>History</div>
 
-
               {drawerLoading && <p style={styles.infoText}>Loading history...</p>}
-
 
               {!drawerLoading && ticketLogs.length === 0 && (
                 <p style={styles.infoText}>No history found.</p>
               )}
-
 
               {!drawerLoading &&
                 ticketLogs.map((log) => (
@@ -1388,17 +1285,14 @@ export default function HomePage() {
                         {formatLogTitle(log.action_type)}
                       </div>
 
-
                       <div style={styles.logTime}>
                         {new Date(log.created_at).toLocaleString()}
                       </div>
                     </div>
 
-
                     {log.new_value && (
                       <div style={styles.logContent}>{log.new_value}</div>
                     )}
-
 
                     {(log.performed_by || log.notes) && (
                       <div style={styles.logMeta}>
@@ -1417,7 +1311,6 @@ export default function HomePage() {
   )
 }
 
-
 const styles: Record<string, CSSProperties> = {
   page: {
     minHeight: '100vh',
@@ -1425,11 +1318,10 @@ const styles: Record<string, CSSProperties> = {
     color: '#2F2F33',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
   },
-  appShell: {
-    display: 'grid',
-    gridTemplateColumns: '260px 1fr',
-    minHeight: '100vh',
-  },
+ appShell: {
+  display: 'grid',
+  minHeight: '100vh',
+},
   sidebar: {
     background: '#FFFFFF',
     borderRight: '1px solid #E5E7EB',
@@ -1501,6 +1393,10 @@ const styles: Record<string, CSSProperties> = {
   mainArea: {
     padding: '24px',
   },
+  mainAreaMobile: {
+  padding: '14px',
+},
+
   brandWrap: {
     minWidth: 0,
   },
@@ -1537,16 +1433,23 @@ const styles: Record<string, CSSProperties> = {
     flexShrink: 0,
   },
   title: {
-    margin: 0,
-    fontSize: '36px',
-    fontWeight: 800,
-    color: '#111827',
-  },
+  margin: 0,
+  fontSize: '36px',
+  fontWeight: 800,
+  color: '#111827',
+},
+titleMobile: {
+  fontSize: '28px',
+  lineHeight: 1.1,
+},
   subtitle: {
-    margin: '6px 0 0 0',
-    color: '#6B7280',
-    fontSize: '14px',
-  },
+  margin: '6px 0 0 0',
+  color: '#6B7280',
+  fontSize: '14px',
+},
+subtitleMobile: {
+  fontSize: '13px',
+},
   copyToast: {
     position: 'fixed',
     top: 14,
@@ -1569,6 +1472,7 @@ const styles: Record<string, CSSProperties> = {
     border: '1px solid #D7D7DB',
     color: '#2F2F33',
     cursor: 'pointer',
+    flexShrink: 0,
   },
   secondaryButton: {
     padding: '10px 14px',
@@ -1646,12 +1550,11 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 600,
   },
   statsGrid: {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: '14px',
-  marginBottom: '18px',
-},
-
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '14px',
+    marginBottom: '18px',
+  },
   kpiCard: {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
@@ -1661,6 +1564,11 @@ const styles: Record<string, CSSProperties> = {
     textAlign: 'left',
     cursor: 'pointer',
   },
+  kpiCardMobile: {
+  padding: '18px 14px',
+  borderRadius: '18px',
+  minHeight: '118px',
+},
   kpiCardActive: {
     border: '1px solid #C1121F',
     boxShadow: '0 12px 28px rgba(193, 18, 31, 0.12)',
@@ -1707,7 +1615,9 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     gap: '12px',
     overflowX: 'auto',
-    paddingBottom: '4px',
+    paddingBottom: '8px',
+    scrollBehavior: 'smooth',
+    WebkitOverflowScrolling: 'touch',
   },
   projectMiniCard: {
     minWidth: '180px',
@@ -1719,15 +1629,21 @@ const styles: Record<string, CSSProperties> = {
     cursor: 'pointer',
     flexShrink: 0,
   },
+  projectMiniCardMobile: {
+  minWidth: '140px',
+  padding: '10px',
+},
+
   projectMiniCardActive: {
     border: '1px solid #C1121F',
     background: '#FEF2F2',
   },
   projectMiniName: {
-    fontSize: '15px',
+    fontSize: '14px',
     fontWeight: 800,
     color: '#111827',
-    marginBottom: '8px',
+    marginBottom: '6px',
+    lineHeight: 1.35,
   },
   projectMiniCode: {
     fontSize: '13px',
@@ -1914,6 +1830,7 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: '999px',
     fontSize: '11px',
     fontWeight: 700,
+    whiteSpace: 'nowrap',
   },
   select: {
     width: '100%',
@@ -1924,6 +1841,9 @@ const styles: Record<string, CSSProperties> = {
     border: '1px solid #D7D7DB',
     outline: 'none',
     minWidth: '150px',
+  },
+  mobileTouchSelect: {
+    minHeight: '44px',
   },
   closeButton: {
     background: '#C1121F',
@@ -1943,8 +1863,8 @@ const styles: Record<string, CSSProperties> = {
   mobileCard: {
     background: '#FFFFFF',
     border: '1px solid #D7D7DB',
-    borderRadius: '16px',
-    padding: '14px',
+    borderRadius: '18px',
+    padding: '16px',
     marginBottom: '12px',
     cursor: 'pointer',
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
@@ -1953,8 +1873,11 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: '10px',
-    marginBottom: '10px',
+    gap: '12px',
+    marginBottom: '12px',
+  },
+  mobileCardHeaderLeft: {
+    minWidth: 0,
   },
   mobileCardTicketNumber: {
     fontSize: '18px',
@@ -1964,8 +1887,9 @@ const styles: Record<string, CSSProperties> = {
   mobileProject: {
     marginTop: '6px',
     color: '#2F2F33',
-    fontSize: '13px',
+    fontSize: '14px',
     fontWeight: 700,
+    lineHeight: 1.35,
   },
   mobileProjectCode: {
     marginTop: '4px',
@@ -1974,17 +1898,22 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
   },
   mobileDescription: {
-    marginTop: '10px',
+    marginTop: '6px',
     color: '#2F2F33',
     lineHeight: 1.5,
   },
+  mobileMetaGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    marginTop: '12px',
+  },
   mobileMeta: {
-    marginTop: '10px',
     fontSize: '13px',
     color: '#55555C',
   },
   mobileField: {
-    marginTop: '12px',
+    marginTop: '14px',
   },
   mobileFieldLabel: {
     marginBottom: '6px',
@@ -1993,7 +1922,7 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
   },
   mobileActions: {
-    marginTop: '12px',
+    marginTop: '14px',
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
@@ -2018,10 +1947,15 @@ const styles: Record<string, CSSProperties> = {
     overflowY: 'auto',
     boxShadow: '-10px 0 30px rgba(0,0,0,0.12)',
   },
+  drawerMobile: {
+    borderRadius: '0',
+    padding: '16px',
+  },
   drawerHeader: {
     position: 'sticky',
     top: 0,
     background: '#FFFFFF',
+    paddingTop: '4px',
     paddingBottom: '12px',
     zIndex: 10,
     display: 'flex',
