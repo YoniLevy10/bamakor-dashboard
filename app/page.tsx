@@ -725,7 +725,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <nav style={styles.sidebarNav}>
+           <nav style={styles.sidebarNav}>
   <a href="/" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>
     Dashboard
   </a>
@@ -734,6 +734,9 @@ export default function HomePage() {
   </a>
   <a href="/workers" style={styles.sidebarNavLink}>
     Workers
+  </a>
+  <a href="/projects" style={styles.sidebarNavLink}>
+    Projects
   </a>
   <a href="/qr" style={styles.sidebarNavLink}>
     QR Codes
@@ -806,7 +809,7 @@ export default function HomePage() {
             <div style={styles.mobileMenuCard}>
               <div style={styles.mobileMenuTitle}>Navigation</div>
 
-              <div style={styles.mobileMenuList}>
+             <div style={styles.mobileMenuList}>
   <a href="/" style={{ ...styles.mobileMenuLink, ...styles.mobileMenuItemActive }}>
     Dashboard
   </a>
@@ -816,10 +819,14 @@ export default function HomePage() {
   <a href="/workers" style={styles.mobileMenuLink}>
     Workers
   </a>
+  <a href="/projects" style={styles.mobileMenuLink}>
+    Projects
+  </a>
   <a href="/qr" style={styles.mobileMenuLink}>
     QR Codes
   </a>
 </div>
+
 
             </div>
           )}
