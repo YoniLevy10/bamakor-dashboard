@@ -70,9 +70,7 @@ function MobileTicketCard({
       <div style={styles.mobileCardHeader}>
         <div style={styles.mobileCardHeaderLeft}>
           <div style={styles.mobileCardTicketNumber}>#{ticket.ticket_number}</div>
-          <div style={styles.mobileProject}>
-            {ticket.project_name || '-'}
-          </div>
+          <div style={styles.mobileProject}>{ticket.project_name || '-'}</div>
           <div style={styles.mobileProjectCode}>{ticket.project_code || '-'}</div>
         </div>
 
@@ -710,13 +708,13 @@ export default function HomePage() {
   }
 
   return (
-   <main style={styles.page}>
-  <div
-    style={{
-      ...styles.appShell,
-      gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
-    }}
-  >
+    <main style={styles.page}>
+      <div
+        style={{
+          ...styles.appShell,
+          gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
+        }}
+      >
         {!isMobile && (
           <aside style={styles.sidebar}>
             <div style={styles.sidebarBrand}>
@@ -741,11 +739,11 @@ export default function HomePage() {
         )}
 
         <div
-  style={{
-    ...styles.mainArea,
-    ...(isMobile ? styles.mainAreaMobile : {}),
-  }}
->
+          style={{
+            ...styles.mainArea,
+            ...(isMobile ? styles.mainAreaMobile : {}),
+          }}
+        >
           <div style={styles.topBar}>
             <div style={styles.brandWrap}>
               <div style={styles.brandRow}>
@@ -760,21 +758,21 @@ export default function HomePage() {
 
                 <div>
                   <h1
-  style={{
-    ...styles.title,
-    ...(isMobile ? styles.titleMobile : {}),
-  }}
->
-  Dashboard
-</h1>
+                    style={{
+                      ...styles.title,
+                      ...(isMobile ? styles.titleMobile : {}),
+                    }}
+                  >
+                    Dashboard
+                  </h1>
                   <p
-  style={{
-    ...styles.subtitle,
-    ...(isMobile ? styles.subtitleMobile : {}),
-  }}
->
-  Welcome back. Here's what's happening today.
-</p>
+                    style={{
+                      ...styles.subtitle,
+                      ...(isMobile ? styles.subtitleMobile : {}),
+                    }}
+                  >
+                    Welcome back. Here's what's happening today.
+                  </p>
                 </div>
               </div>
             </div>
@@ -784,7 +782,7 @@ export default function HomePage() {
                 onClick={() => setShowQrSection((prev) => !prev)}
                 style={styles.secondaryButton}
               >
-                {showQrSection ? 'Hide QR' : 'QR Management'}
+                QR Management
               </button>
 
               {!isMobile && (
@@ -827,7 +825,14 @@ export default function HomePage() {
               onClick={() => setActiveKpi('ALL')}
             >
               <div style={styles.kpiLabel}>Total Tickets</div>
-              <div style={styles.kpiValue}>{stats.total}</div>
+              <div
+                style={{
+                  ...styles.kpiValue,
+                  fontSize: isMobile ? '34px' : '42px',
+                }}
+              >
+                {stats.total}
+              </div>
             </button>
 
             <button
@@ -839,7 +844,14 @@ export default function HomePage() {
               onClick={() => setActiveKpi('NEW')}
             >
               <div style={styles.kpiLabel}>Open</div>
-              <div style={styles.kpiValue}>{stats.open}</div>
+              <div
+                style={{
+                  ...styles.kpiValue,
+                  fontSize: isMobile ? '34px' : '42px',
+                }}
+              >
+                {stats.open}
+              </div>
             </button>
 
             <button
@@ -851,7 +863,14 @@ export default function HomePage() {
               onClick={() => setActiveKpi('ASSIGNED')}
             >
               <div style={styles.kpiLabel}>Assigned</div>
-              <div style={styles.kpiValue}>{stats.assigned}</div>
+              <div
+                style={{
+                  ...styles.kpiValue,
+                  fontSize: isMobile ? '34px' : '42px',
+                }}
+              >
+                {stats.assigned}
+              </div>
             </button>
 
             <button
@@ -863,11 +882,23 @@ export default function HomePage() {
               onClick={() => setActiveKpi('CLOSED')}
             >
               <div style={styles.kpiLabel}>Closed</div>
-              <div style={styles.kpiValue}>{stats.closed}</div>
+              <div
+                style={{
+                  ...styles.kpiValue,
+                  fontSize: isMobile ? '34px' : '42px',
+                }}
+              >
+                {stats.closed}
+              </div>
             </button>
           </div>
 
-          <div style={styles.projectSection}>
+          <div
+            style={{
+              ...styles.projectSection,
+              padding: isMobile ? '14px' : '18px',
+            }}
+          >
             <div style={styles.projectSectionHeader}>
               <div>
                 <div style={styles.projectSectionTitle}>Projects</div>
@@ -1314,14 +1345,18 @@ export default function HomePage() {
 const styles: Record<string, CSSProperties> = {
   page: {
     minHeight: '100vh',
+    width: '100%',
+    maxWidth: '100%',
+    overflowX: 'hidden',
     background: '#F4F4F5',
     color: '#2F2F33',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
   },
- appShell: {
-  display: 'grid',
-  minHeight: '100vh',
-},
+  appShell: {
+    display: 'grid',
+    width: '100%',
+    minHeight: '100vh',
+  },
   sidebar: {
     background: '#FFFFFF',
     borderRight: '1px solid #E5E7EB',
@@ -1392,11 +1427,14 @@ const styles: Record<string, CSSProperties> = {
   },
   mainArea: {
     padding: '24px',
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: 0,
+    boxSizing: 'border-box',
   },
   mainAreaMobile: {
-  padding: '14px',
-},
-
+    padding: '14px',
+  },
   brandWrap: {
     minWidth: 0,
   },
@@ -1415,7 +1453,7 @@ const styles: Record<string, CSSProperties> = {
   },
   brandRow: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: '10px',
   },
   logoBox: {
@@ -1433,23 +1471,23 @@ const styles: Record<string, CSSProperties> = {
     flexShrink: 0,
   },
   title: {
-  margin: 0,
-  fontSize: '36px',
-  fontWeight: 800,
-  color: '#111827',
-},
-titleMobile: {
-  fontSize: '28px',
-  lineHeight: 1.1,
-},
+    margin: 0,
+    fontSize: '36px',
+    fontWeight: 800,
+    color: '#111827',
+  },
+  titleMobile: {
+    fontSize: '28px',
+    lineHeight: 1.1,
+  },
   subtitle: {
-  margin: '6px 0 0 0',
-  color: '#6B7280',
-  fontSize: '14px',
-},
-subtitleMobile: {
-  fontSize: '13px',
-},
+    margin: '6px 0 0 0',
+    color: '#6B7280',
+    fontSize: '14px',
+  },
+  subtitleMobile: {
+    fontSize: '13px',
+  },
   copyToast: {
     position: 'fixed',
     top: 14,
@@ -1551,9 +1589,10 @@ subtitleMobile: {
   },
   statsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
     gap: '14px',
     marginBottom: '18px',
+    width: '100%',
+    minWidth: 0,
   },
   kpiCard: {
     background: '#FFFFFF',
@@ -1563,12 +1602,13 @@ subtitleMobile: {
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
     textAlign: 'left',
     cursor: 'pointer',
+    minWidth: 0,
   },
   kpiCardMobile: {
-  padding: '18px 14px',
-  borderRadius: '18px',
-  minHeight: '118px',
-},
+    padding: '18px 14px',
+    borderRadius: '18px',
+    minHeight: '118px',
+  },
   kpiCardActive: {
     border: '1px solid #C1121F',
     boxShadow: '0 12px 28px rgba(193, 18, 31, 0.12)',
@@ -1592,6 +1632,9 @@ subtitleMobile: {
     padding: '18px',
     marginBottom: '18px',
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
+    width: '100%',
+    minWidth: 0,
+    boxSizing: 'border-box',
   },
   projectSectionHeader: {
     display: 'flex',
@@ -1616,6 +1659,8 @@ subtitleMobile: {
     gap: '12px',
     overflowX: 'auto',
     paddingBottom: '8px',
+    width: '100%',
+    minWidth: 0,
     scrollBehavior: 'smooth',
     WebkitOverflowScrolling: 'touch',
   },
@@ -1630,10 +1675,9 @@ subtitleMobile: {
     flexShrink: 0,
   },
   projectMiniCardMobile: {
-  minWidth: '140px',
-  padding: '10px',
-},
-
+    minWidth: '140px',
+    padding: '10px',
+  },
   projectMiniCardActive: {
     border: '1px solid #C1121F',
     background: '#FEF2F2',
@@ -1728,6 +1772,9 @@ subtitleMobile: {
     borderRadius: '20px',
     padding: '18px',
     boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
+    width: '100%',
+    minWidth: 0,
+    boxSizing: 'border-box',
   },
   cardHeader: {
     display: 'flex',
@@ -1751,6 +1798,8 @@ subtitleMobile: {
     display: 'flex',
     gap: '10px',
     marginBottom: '16px',
+    width: '100%',
+    minWidth: 0,
   },
   searchInput: {
     width: '100%',
@@ -1761,6 +1810,7 @@ subtitleMobile: {
     color: '#2F2F33',
     outline: 'none',
     fontSize: '14px',
+    boxSizing: 'border-box',
   },
   filterSelect: {
     width: '180px',
@@ -1771,6 +1821,7 @@ subtitleMobile: {
     color: '#2F2F33',
     outline: 'none',
     fontSize: '14px',
+    boxSizing: 'border-box',
   },
   tableWrapper: {
     overflowX: 'auto',
@@ -1841,6 +1892,7 @@ subtitleMobile: {
     border: '1px solid #D7D7DB',
     outline: 'none',
     minWidth: '150px',
+    boxSizing: 'border-box',
   },
   mobileTouchSelect: {
     minHeight: '44px',
@@ -1946,6 +1998,7 @@ subtitleMobile: {
     padding: '18px',
     overflowY: 'auto',
     boxShadow: '-10px 0 30px rgba(0,0,0,0.12)',
+    boxSizing: 'border-box',
   },
   drawerMobile: {
     borderRadius: '0',
@@ -2015,6 +2068,7 @@ subtitleMobile: {
     fontSize: '14px',
     outline: 'none',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
+    boxSizing: 'border-box',
   },
   drawerQuickActions: {
     display: 'flex',
