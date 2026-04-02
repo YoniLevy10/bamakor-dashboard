@@ -1646,10 +1646,12 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 600,
   },
   statsGrid: {
-    display: 'grid',
-    gap: '14px',
-    marginBottom: '18px',
-  },
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+  gap: '14px',
+  marginBottom: '18px',
+},
+
   kpiCard: {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
