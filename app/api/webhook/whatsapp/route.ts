@@ -28,16 +28,24 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get('hub.verify_token')
   const challenge = searchParams.get('hub.challenge')
 
+  console.log('🔐 Webhook GET verification request received')
+  console.log('🔎 Mode:', mode)
+  console.log('🔎 Token received:', token)
+
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('✅ Webhook verification success')
     return new NextResponse(challenge || 'OK', { status: 200 })
   }
 
+  console.log('❌ Webhook verification failed')
   return new NextResponse('Verification failed', { status: 403 })
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+
+    console.log('✅ WEBHOOK VERSION 2 ACTIVE')
     console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
 
     const value = body?.entry?.[0]?.changes?.[0]?.value
@@ -53,6 +61,7 @@ export async function POST(req: NextRequest) {
     const phoneNumberId = value?.metadata?.phone_number_id || ''
     const displayPhoneNumber = value?.metadata?.display_phone_number || ''
 
+    console.log('🔍 Entering message type handler')
     console.log('📞 From:', from)
     console.log('📱 Business Number:', displayPhoneNumber)
     console.log('🏢 Phone Number ID:', phoneNumberId)
@@ -60,6 +69,7 @@ export async function POST(req: NextRequest) {
 
     if (messageType === 'text') {
       const textBody = message.text?.body?.trim() || ''
+
       console.log('💬 Message body:', textBody)
 
       if (!textBody) {
