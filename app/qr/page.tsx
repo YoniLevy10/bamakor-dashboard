@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { QRCodeCanvas } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
 
 type ProjectRow = {
@@ -22,6 +23,8 @@ export default function QrPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [copyMessage, setCopyMessage] = useState('')
   const [isMobile, setIsMobile] = useState(false)
+
+  const qrRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
@@ -75,11 +78,26 @@ export default function QrPage() {
 
   function buildReportLink(project: ProjectRow) {
     const baseUrl =
-      (typeof window !== 'undefined' && window.location.origin) ||
       process.env.NEXT_PUBLIC_BASE_URL ||
-      ''
+      (typeof window !== 'undefined' ? window.location.origin : '')
 
     return `${baseUrl}/report?project=${encodeURIComponent(project.project_code)}`
+  }
+
+  function downloadQr(projectCode: string) {
+    const container = qrRefs.current[projectCode]
+    if (!container) return
+
+    const canvas = container.querySelector('canvas')
+    if (!canvas) return
+
+    const pngUrl = canvas.toDataURL('image/png')
+    const link = document.createElement('a')
+    link.href = pngUrl
+    link.download = `${projectCode}-qr.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const filteredProjects = useMemo(() => {
@@ -152,7 +170,7 @@ export default function QrPage() {
             <div>
               <h1 style={styles.title}>QR Codes</h1>
               <p style={styles.subtitle}>
-                Manage project report links and generate QR access points for each building
+                Manage project report links and generate printable QR codes for each building
               </p>
             </div>
 
@@ -194,7 +212,7 @@ export default function QrPage() {
             <div style={styles.infoBannerTitle}>How it works</div>
             <div style={styles.infoBannerText}>
               Each project gets a dedicated report link. You can copy the link, open the report
-              page, and later generate a printable QR that points directly to the issue form.
+              page, and download a printable QR image for the building.
             </div>
           </div>
 
@@ -269,9 +287,23 @@ export default function QrPage() {
                       <div style={styles.qrPreviewInner}>
                         <div style={styles.qrPreviewTitle}>QR Preview</div>
                         <div style={styles.qrPreviewText}>
-                          This QR should point to the report form for {project.project_code}.
+                          Scan to open the issue report form for {project.project_code}.
                         </div>
-                        <div style={styles.qrCodePlaceholder}>{project.project_code}</div>
+
+                        <div
+                          ref={(el) => {
+                            qrRefs.current[project.project_code] = el
+                          }}
+                          style={styles.qrCanvasWrap}
+                        >
+                          <QRCodeCanvas
+                            value={reportLink}
+                            size={140}
+                            bgColor="#FFFFFF"
+                            fgColor="#111827"
+                            includeMargin
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -288,6 +320,13 @@ export default function QrPage() {
                         style={styles.secondaryButtonSmall}
                       >
                         Copy Link
+                      </button>
+
+                      <button
+                        onClick={() => downloadQr(project.project_code)}
+                        style={styles.secondaryButtonSmall}
+                      >
+                        Download QR
                       </button>
 
                       <a
@@ -378,17 +417,6 @@ const styles: Record<string, CSSProperties> = {
     background: '#111827',
     color: '#FFFFFF',
     boxShadow: '0 12px 24px rgba(17, 24, 39, 0.16)',
-  },
-  navItemDisabled: {
-    display: 'block',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    textDecoration: 'none',
-    color: '#9CA3AF',
-    fontWeight: 700,
-    background: '#F9FAFB',
-    border: '1px solid #F3F4F6',
-    pointerEvents: 'none',
   },
   content: {
     padding: '28px',
@@ -619,18 +647,14 @@ const styles: Record<string, CSSProperties> = {
     lineHeight: 1.45,
     maxWidth: '280px',
   },
-  qrCodePlaceholder: {
-    width: '140px',
-    height: '140px',
+  qrCanvasWrap: {
+    background: '#FFFFFF',
     borderRadius: '18px',
-    border: '2px dashed #D1D5DB',
-    display: 'flex',
+    padding: '12px',
+    border: '1px solid #E5E7EB',
+    display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#B91C1C',
-    fontWeight: 800,
-    background: '#FFFFFF',
-    letterSpacing: '0.04em',
   },
   cardActions: {
     display: 'flex',
@@ -689,3 +713,4 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 600,
   },
 }
+
