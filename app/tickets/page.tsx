@@ -120,7 +120,7 @@ export default function TicketsPage() {
     }
   }
 
-  async function assignWorker(ticketId: string, workerId: string) {
+ async function assignWorker(ticketId: string, workerId: string) {
   if (!workerId) return
 
   setActionLoadingId(ticketId)
@@ -133,6 +133,20 @@ export default function TicketsPage() {
         worker_id: workerId,
       }),
     })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to assign worker')
+    }
+
+    await fetchData()
+  } catch (err: any) {
+    alert(err.message || 'Failed to assign worker')
+  } finally {
+    setActionLoadingId(null)
+  }
+}
 
     const result = await response.json()
 

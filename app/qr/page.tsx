@@ -15,7 +15,7 @@ type ProjectRow = {
   created_at?: string
 }
 
-const WHATSAPP_NUMBER = '972500000000'
+const WHATSAPP_NUMBER = '972559740732'
 
 export default function QrPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([])
