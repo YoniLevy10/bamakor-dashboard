@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
       try {
   await sendWhatsAppTextMessage(
     from,
-    `ברוכים הבאים למערכת התקלות של ${project.name}.\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+    `ברוכים הבאים למערכת התקלות של Bamakor.\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
   )
 } catch (sendError) {
   console.error('⚠️ Failed to send start-flow reply:', sendError)
@@ -225,12 +225,11 @@ export async function POST(req: NextRequest) {
     try {
   await sendWhatsAppTextMessage(
     from,
-    `התקלה התקבלה בהצלחה.\nמספר הפנייה שלך: ${createdTicket.ticket_number}\nנעדכן כשיהיה טיפול.`
+    `התקלה התקבלה בהצלחה.\nמספר הפנייה שלך: ${createdTicket.ticket_number}\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה חדשה נוספת, סרקו שוב את קוד ה-QR.`
   )
 } catch (sendError) {
   console.error('⚠️ Failed to send ticket-created reply:', sendError)
 }
-
 
     return NextResponse.json(
       {
