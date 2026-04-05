@@ -1,30 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { parseIncomingWhatsAppMessage } from '@/lib/whatsapp-parser'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
 
-type WhatsAppMessage = {
-  from?: string
-  id?: string
-  timestamp?: string
-  type?: string
-  text?: {
-    body?: string
-  }
-  image?: {
-    id?: string
-    mime_type?: string
-    caption?: string
-  }
-  audio?: {
-    id?: string
-    mime_type?: string
-    voice?: boolean
-  }
-}
-
 function generateTicketNumber() {
-  return `BMK-${Math.floor(100000 + Math.random() * 900000)}`
+  return Math.floor(100000 + Math.random() * 900000)
 }
 
 export async function GET(req: NextRequest) {
@@ -47,27 +28,23 @@ export async function POST(req: NextRequest) {
     console.log('✅ WEBHOOK DB VERSION ACTIVE')
     console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
 
-    const value = body?.entry?.[0]?.changes?.[0]?.value
-    const message: WhatsAppMessage | undefined = value?.messages?.[0]
+    const parsedMessage = parseIncomingWhatsAppMessage(body)
 
-    if (!message) {
+    if (!parsedMessage) {
       console.log('ℹ️ No incoming user message in payload')
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
-    const from = message.from || ''
-    const messageType = message.type || ''
+    const { from, messageType, textBody } = parsedMessage
 
     console.log('📞 From:', from)
     console.log('🧩 Message Type:', messageType)
+    console.log('💬 Message body:', textBody)
 
     if (messageType !== 'text') {
       console.log('ℹ️ Non-text message received. Ignoring for MVP.')
       return NextResponse.json({ received: true }, { status: 200 })
     }
-
-    const textBody = message.text?.body?.trim() || ''
-    console.log('💬 Message body:', textBody)
 
     if (!textBody) {
       return NextResponse.json({ received: true }, { status: 200 })
@@ -234,3 +211,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 500 })
   }
 }
+
+
+    
