@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { parseIncomingWhatsAppMessage } from '@/lib/whatsapp-parser'
+import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
+
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
 
@@ -64,17 +66,28 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Project lookup failed' }, { status: 500 })
       }
 
-      if (!project) {
-        console.log('⚠️ No project found for code:', projectCode)
-        return NextResponse.json(
-          {
-            received: true,
-            projectFound: false,
-            projectCode,
-          },
-          { status: 200 }
-        )
-      }
+     if (!project) {
+  console.log('⚠️ No project found for code:', projectCode)
+
+  try {
+    await sendWhatsAppTextMessage(
+      from,
+      'לא הצלחנו לזהות את קוד הפרויקט. אנא סרקו שוב את ה-QR או פנו למנהלת הבניין.'
+    )
+  } catch (sendError) {
+    console.error('⚠️ Failed to send project-not-found reply:', sendError)
+  }
+
+  return NextResponse.json(
+    {
+      received: true,
+      projectFound: false,
+      projectCode,
+    },
+    { status: 200 }
+  )
+}
+
 
       const { error: deactivateError } = await supabaseAdmin
         .from('sessions')
@@ -109,6 +122,14 @@ export async function POST(req: NextRequest) {
 
       console.log('✅ Session created:', createdSession.id)
       console.log('🏗️ Project linked:', project.name)
+      try {
+  await sendWhatsAppTextMessage(
+    from,
+    `ברוכים הבאים למערכת התקלות של ${project.name}.\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+  )
+} catch (sendError) {
+  console.error('⚠️ Failed to send start-flow reply:', sendError)
+}
 
       return NextResponse.json(
         {
@@ -201,6 +222,15 @@ export async function POST(req: NextRequest) {
     }
 
     console.log('✅ Ticket created:', createdTicket.ticket_number)
+    try {
+  await sendWhatsAppTextMessage(
+    from,
+    `התקלה התקבלה בהצלחה.\nמספר הפנייה שלך: ${createdTicket.ticket_number}\nנעדכן כשיהיה טיפול.`
+  )
+} catch (sendError) {
+  console.error('⚠️ Failed to send ticket-created reply:', sendError)
+}
+
 
     return NextResponse.json(
       {
