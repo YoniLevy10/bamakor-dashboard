@@ -155,6 +155,8 @@ export async function POST(req: NextRequest) {
         reporter_phone: from,
         description: textBody,
         status: 'NEW',
+        priority: 'NORMAL',
+        language: 'he',
         source: 'whatsapp',
       })
       .select('id, ticket_number, project_id')
