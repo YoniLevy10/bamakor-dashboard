@@ -1,11 +1,110 @@
-import { supabase } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
 export async function POST(req: Request) {
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     const body = await req.json()
-    const { message, phone, description } = body
 
+    const message = body?.message ? String(body.message).trim() : ''
+    const phone = body?.phone ? String(body.phone).trim() : ''
+    const description = body?.description ? String(body.description).trim() : ''
+    const reporterName = body?.reporter_name ? String(body.reporter_name).trim() : null
+    const source = body?.source ? String(body.source).trim() : 'web_form'
+    const projectCodeFromBody = body?.project_code
+      ? String(body.project_code).trim().toUpperCase()
+      : ''
+
+    // --------------------------------------------------
+    // MODE 1: WEB FORM
+    // expects: project_code + description
+    // --------------------------------------------------
+    if (projectCodeFromBody) {
+      if (description.length < 3) {
+        return NextResponse.json(
+          { error: 'description must be at least 3 characters' },
+          { status: 400 }
+        )
+      }
+
+      const { data: project, error: projectError } = await supabaseAdmin
+        .from('projects')
+        .select('id, name, project_code, client_id')
+        .eq('project_code', projectCodeFromBody)
+        .maybeSingle()
+
+      if (projectError) {
+        console.error('❌ Failed to fetch project:', projectError)
+        return NextResponse.json(
+          { error: 'Failed to fetch project' },
+          { status: 500 }
+        )
+      }
+
+      if (!project) {
+        return NextResponse.json(
+          { error: `Project not found for code ${projectCodeFromBody}` },
+          { status: 404 }
+        )
+      }
+
+      const { data: createdTicket, error: ticketError } = await supabaseAdmin
+        .from('tickets')
+        .insert({
+          project_id: project.id,
+          client_id: project.client_id,
+          reporter_name: reporterName,
+          reporter_phone: null,
+          description,
+          status: 'NEW',
+          priority: 'NORMAL',
+          source,
+          language: 'he',
+        })
+        .select('id, ticket_number, project_id, status')
+        .single()
+
+      if (ticketError) {
+        console.error('❌ Failed to create ticket from web form:', ticketError)
+        return NextResponse.json(
+          { error: ticketError.message || 'Failed to create ticket' },
+          { status: 500 }
+        )
+      }
+
+      const { error: logError } = await supabaseAdmin
+        .from('ticket_logs')
+        .insert({
+          ticket_id: createdTicket.id,
+          action_type: 'CREATED_FROM_WEB_FORM',
+          notes: `Ticket created from web form for project ${project.project_code}`,
+          created_by: 'system',
+          meta: {
+            source: 'web_form',
+            project_code: project.project_code,
+            reporter_name: reporterName,
+          },
+        })
+
+      if (logError) {
+        console.error('⚠️ Ticket log insert failed (non-blocking):', logError)
+      }
+
+      return NextResponse.json({
+        success: true,
+        mode: 'created_from_web_form',
+        ticketId: createdTicket.id,
+        ticketNumber: createdTicket.ticket_number,
+        projectCode: project.project_code,
+      })
+    }
+
+    // --------------------------------------------------
+    // MODE 2: WHATSAPP / LEGACY FLOW
+    // expects: phone
+    // can either update active session ticket
+    // or create from START_BMKx message
+    // --------------------------------------------------
     if (!phone) {
       return NextResponse.json(
         { error: 'phone is required' },
@@ -13,10 +112,9 @@ export async function POST(req: Request) {
       )
     }
 
-    // 1. בדיקה אם יש session פעיל למספר הזה
-    const { data: existingSession, error: sessionLookupError } = await supabase
+    const { data: existingSession, error: sessionLookupError } = await supabaseAdmin
       .from('sessions')
-      .select('*')
+      .select('id, phone_number, project_id, active_ticket_id, is_active')
       .eq('phone_number', phone)
       .eq('is_active', true)
       .maybeSingle()
@@ -28,16 +126,18 @@ export async function POST(req: Request) {
       )
     }
 
-    // 2. אם יש session פעיל -> לא יוצרים ticket חדש
-    // אלא מוסיפים log ומעדכנים זמן פעילות
+    // If user already has active ticket in session -> treat as follow-up
     if (existingSession?.active_ticket_id) {
-      const { data: updatedTicket, error: updateError } = await supabase
+      const followUpText = description || message || 'ללא תוכן'
+
+      const { data: updatedTicket, error: updateError } = await supabaseAdmin
         .from('tickets')
         .update({
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingSession.active_ticket_id)
-        .select()
+        .select('id, ticket_number, updated_at, status')
+        .single()
 
       if (updateError) {
         return NextResponse.json(
@@ -46,17 +146,20 @@ export async function POST(req: Request) {
         )
       }
 
-      const { error: logError } = await supabase
+      const { error: logError } = await supabaseAdmin
         .from('ticket_logs')
-        .insert([
-          {
-            ticket_id: existingSession.active_ticket_id,
-            action_type: 'USER_MESSAGE',
-            new_value: description || message || 'ללא תוכן',
-            performed_by: phone,
-            notes: 'Incoming follow-up message from user',
+        .insert({
+          ticket_id: existingSession.active_ticket_id,
+          action_type: 'USER_MESSAGE',
+          new_value: followUpText,
+          performed_by: phone,
+          notes: 'Incoming follow-up message from user',
+          created_by: 'system',
+          meta: {
+            source: 'whatsapp_followup',
+            phone,
           },
-        ])
+        })
 
       if (logError) {
         return NextResponse.json(
@@ -65,7 +168,7 @@ export async function POST(req: Request) {
         )
       }
 
-      const { error: sessionUpdateError } = await supabase
+      const { error: sessionUpdateError } = await supabaseAdmin
         .from('sessions')
         .update({
           last_activity_at: new Date().toISOString(),
@@ -87,7 +190,7 @@ export async function POST(req: Request) {
       })
     }
 
-    // 3. אם אין session פעיל -> חייבים START_BMK תקין
+    // No active session -> must receive START_BMKx
     if (!message) {
       return NextResponse.json(
         { error: 'message is required when no active session exists' },
@@ -95,7 +198,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const match = message.match(/START_(BMK\d+)/)
+    const match = message.match(/START_(BMK\d+)/i)
 
     if (!match) {
       return NextResponse.json(
@@ -104,14 +207,13 @@ export async function POST(req: Request) {
       )
     }
 
-    const projectCode = match[1]
+    const projectCode = match[1].toUpperCase()
 
-    // 4. שליפת פרויקט
-    const { data: project, error: projectError } = await supabase
+    const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
-      .select('*')
+      .select('id, name, project_code, client_id')
       .eq('project_code', projectCode)
-      .single()
+      .maybeSingle()
 
     if (projectError || !project) {
       return NextResponse.json(
@@ -120,41 +222,42 @@ export async function POST(req: Request) {
       )
     }
 
-    // 5. יצירת ticket חדש
-    const { data: createdTickets, error: ticketError } = await supabase
-      .from('tickets')
-      .insert([
-        {
-          project_id: project.id,
-          reporter_phone: phone,
-          description: description || 'ללא תיאור',
-          status: 'NEW',
-        },
-      ])
-      .select()
+    const initialDescription = description || 'ללא תיאור'
 
-    if (ticketError || !createdTickets || createdTickets.length === 0) {
+    const { data: createdTicket, error: ticketError } = await supabaseAdmin
+      .from('tickets')
+      .insert({
+        project_id: project.id,
+        client_id: project.client_id,
+        reporter_phone: phone,
+        reporter_name: reporterName,
+        description: initialDescription,
+        status: 'NEW',
+        priority: 'NORMAL',
+        source: 'whatsapp',
+        language: 'he',
+      })
+      .select('id, ticket_number, project_id, status')
+      .single()
+
+    if (ticketError) {
       return NextResponse.json(
-        { error: ticketError?.message || 'Failed to create ticket' },
+        { error: ticketError.message || 'Failed to create ticket' },
         { status: 500 }
       )
     }
 
-    const createdTicket = createdTickets[0]
-
-    // 6. יצירת session חדש
-    const { data: createdSession, error: createSessionError } = await supabase
+    const { data: createdSession, error: createSessionError } = await supabaseAdmin
       .from('sessions')
-      .insert([
-        {
-          phone_number: phone,
-          project_id: project.id,
-          active_ticket_id: createdTicket.id,
-          is_active: true,
-          last_activity_at: new Date().toISOString(),
-        },
-      ])
-      .select()
+      .insert({
+        phone_number: phone,
+        project_id: project.id,
+        active_ticket_id: createdTicket.id,
+        is_active: true,
+        last_activity_at: new Date().toISOString(),
+      })
+      .select('id, phone_number, project_id, active_ticket_id, is_active')
+      .single()
 
     if (createSessionError) {
       return NextResponse.json(
@@ -166,18 +269,21 @@ export async function POST(req: Request) {
       )
     }
 
-    // 7. יצירת log ראשון
-    const { error: firstLogError } = await supabase
+    const { error: firstLogError } = await supabaseAdmin
       .from('ticket_logs')
-      .insert([
-        {
-          ticket_id: createdTicket.id,
-          action_type: 'TICKET_CREATED',
-          new_value: description || message || 'ללא תוכן',
-          performed_by: phone,
-          notes: 'Initial ticket creation from user',
+      .insert({
+        ticket_id: createdTicket.id,
+        action_type: 'TICKET_CREATED',
+        new_value: initialDescription,
+        performed_by: phone,
+        notes: 'Initial ticket creation from user',
+        created_by: 'system',
+        meta: {
+          source: 'whatsapp',
+          phone,
+          project_code: project.project_code,
         },
-      ])
+      })
 
     if (firstLogError) {
       return NextResponse.json(
@@ -197,6 +303,7 @@ export async function POST(req: Request) {
       session: createdSession,
     })
   } catch (err) {
+    console.error('❌ create-ticket route error:', err)
     return NextResponse.json(
       { error: 'Server error' },
       { status: 500 }
