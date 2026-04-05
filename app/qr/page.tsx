@@ -16,6 +16,8 @@ type ProjectRow = {
   created_at?: string
 }
 
+const WHATSAPP_NUMBER = '972559740732'
+
 export default function QrPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,8 +74,13 @@ export default function QrPage() {
     }
   }
 
-  function buildQrIdentifier(project: ProjectRow) {
-    return project.qr_identifier || `QR_${project.project_code}`
+  function buildStartCode(project: ProjectRow) {
+    return project.qr_identifier || `START_${project.project_code}`
+  }
+
+  function buildWhatsAppLink(project: ProjectRow) {
+    const startCode = buildStartCode(project)
+    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(startCode)}`
   }
 
   function buildReportLink(project: ProjectRow) {
@@ -94,7 +101,7 @@ export default function QrPage() {
     const pngUrl = canvas.toDataURL('image/png')
     const link = document.createElement('a')
     link.href = pngUrl
-    link.download = `${projectCode}-qr.png`
+    link.download = `${projectCode}-whatsapp-qr.png`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -118,7 +125,7 @@ export default function QrPage() {
     const total = projects.length
     const active = projects.filter((p) => p.is_active !== false).length
     const inactive = projects.filter((p) => p.is_active === false).length
-    const ready = projects.filter((p) => Boolean(buildReportLink(p))).length
+    const ready = projects.filter((p) => Boolean(buildWhatsAppLink(p))).length
 
     return { total, active, inactive, ready }
   }, [projects])
@@ -170,7 +177,7 @@ export default function QrPage() {
             <div>
               <h1 style={styles.title}>QR Codes</h1>
               <p style={styles.subtitle}>
-                Manage project report links and generate printable QR codes for each building
+                WhatsApp QR for fast reporting, plus a direct web form link for structured reporting
               </p>
             </div>
 
@@ -211,8 +218,8 @@ export default function QrPage() {
           <div style={styles.infoBanner}>
             <div style={styles.infoBannerTitle}>How it works</div>
             <div style={styles.infoBannerText}>
-              Each project gets a dedicated report link. You can copy the link, open the report
-              page, and download a printable QR image for the building.
+              The main QR opens WhatsApp with the correct START code. Each project also has a direct
+              web form link for cases where a structured report page is preferred.
             </div>
           </div>
 
@@ -245,7 +252,8 @@ export default function QrPage() {
           {!loading && !error && filteredProjects.length > 0 && (
             <div style={styles.cardsGrid}>
               {filteredProjects.map((project) => {
-                const qrIdentifier = buildQrIdentifier(project)
+                const qrIdentifier = buildStartCode(project)
+                const whatsappLink = buildWhatsAppLink(project)
                 const reportLink = buildReportLink(project)
 
                 return (
@@ -274,20 +282,25 @@ export default function QrPage() {
                     </div>
 
                     <div style={styles.metaRow}>
-                      <span style={styles.metaLabel}>QR Identifier</span>
+                      <span style={styles.metaLabel}>Start Code</span>
                       <span style={styles.metaCode}>{qrIdentifier}</span>
                     </div>
 
                     <div style={styles.metaRow}>
-                      <span style={styles.metaLabel}>Report Link</span>
+                      <span style={styles.metaLabel}>WhatsApp Link</span>
+                      <span style={styles.metaLink}>{whatsappLink}</span>
+                    </div>
+
+                    <div style={styles.metaRow}>
+                      <span style={styles.metaLabel}>Report Form</span>
                       <span style={styles.metaLink}>{reportLink}</span>
                     </div>
 
                     <div style={styles.qrPreviewBox}>
                       <div style={styles.qrPreviewInner}>
-                        <div style={styles.qrPreviewTitle}>QR Preview</div>
+                        <div style={styles.qrPreviewTitle}>WhatsApp QR</div>
                         <div style={styles.qrPreviewText}>
-                          Scan to open the issue report form for {project.project_code}.
+                          Scan to open WhatsApp with the correct START code for {project.project_code}.
                         </div>
 
                         <div
@@ -297,7 +310,7 @@ export default function QrPage() {
                           style={styles.qrCanvasWrap}
                         >
                           <QRCodeCanvas
-                            value={reportLink}
+                            value={whatsappLink}
                             size={140}
                             bgColor="#FFFFFF"
                             fgColor="#111827"
@@ -309,17 +322,24 @@ export default function QrPage() {
 
                     <div style={styles.cardActions}>
                       <button
-                        onClick={() => copyText(qrIdentifier, 'QR identifier copied')}
+                        onClick={() => copyText(qrIdentifier, 'START code copied')}
                         style={styles.secondaryButtonSmall}
                       >
-                        Copy QR ID
+                        Copy START Code
                       </button>
 
                       <button
-                        onClick={() => copyText(reportLink, 'Report link copied')}
+                        onClick={() => copyText(whatsappLink, 'WhatsApp link copied')}
                         style={styles.secondaryButtonSmall}
                       >
-                        Copy Link
+                        Copy WhatsApp Link
+                      </button>
+
+                      <button
+                        onClick={() => copyText(reportLink, 'Report form link copied')}
+                        style={styles.secondaryButtonSmall}
+                      >
+                        Copy Report Link
                       </button>
 
                       <button
@@ -330,12 +350,21 @@ export default function QrPage() {
                       </button>
 
                       <a
-                        href={reportLink}
+                        href={whatsappLink}
                         target="_blank"
                         rel="noreferrer"
                         style={styles.primaryActionButton}
                       >
-                        Open Report
+                        Open WhatsApp
+                      </a>
+
+                      <a
+                        href={reportLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={styles.secondaryLinkActionButton}
+                      >
+                        Open Report Form
                       </a>
                     </div>
                   </div>
@@ -541,7 +570,7 @@ const styles: Record<string, CSSProperties> = {
   },
   cardsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
     gap: '16px',
   },
   projectCard: {
@@ -684,6 +713,18 @@ const styles: Record<string, CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
   },
+  secondaryLinkActionButton: {
+    background: '#FFFFFF',
+    color: '#111827',
+    border: '1px solid #D1D5DB',
+    borderRadius: '10px',
+    padding: '10px 12px',
+    textDecoration: 'none',
+    fontWeight: 700,
+    fontSize: '13px',
+    display: 'inline-flex',
+    alignItems: 'center',
+  },
   emptyState: {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
@@ -713,4 +754,3 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 600,
   },
 }
-
