@@ -18,13 +18,16 @@ type TicketRow = {
   assigned_worker_id?: string | null
   created_at?: string
   closed_at?: string | null
-  projects?: {
-    name?: string | null
-    project_code?: string | null
-  }[] | {
-    name?: string | null
-    project_code?: string | null
-  } | null
+  projects?:
+    | {
+        name?: string | null
+        project_code?: string | null
+      }[]
+    | {
+        name?: string | null
+        project_code?: string | null
+      }
+    | null
 }
 
 type WorkerRow = {
@@ -120,48 +123,33 @@ export default function TicketsPage() {
     }
   }
 
- async function assignWorker(ticketId: string, workerId: string) {
-  if (!workerId) return
+  async function assignWorker(ticketId: string, workerId: string) {
+    if (!workerId) return
 
-  setActionLoadingId(ticketId)
-  try {
-    const response = await fetch('/api/assign-ticket', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ticket_id: ticketId,
-        worker_id: workerId,
-      }),
-    })
+    setActionLoadingId(ticketId)
+    try {
+      const response = await fetch('/api/assign-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticket_id: ticketId,
+          worker_id: workerId,
+        }),
+      })
 
-    const result = await response.json()
+      const result = await response.json()
 
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to assign worker')
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to assign worker')
+      }
+
+      await fetchData()
+    } catch (err: any) {
+      alert(err.message || 'Failed to assign worker')
+    } finally {
+      setActionLoadingId(null)
     }
-
-    await fetchData()
-  } catch (err: any) {
-    alert(err.message || 'Failed to assign worker')
-  } finally {
-    setActionLoadingId(null)
   }
-}
-
-    const result = await response.json()
-
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to assign worker')
-    }
-
-    await fetchData()
-  } catch (err: any) {
-    alert(err.message || 'Failed to assign worker')
-  } finally {
-    setActionLoadingId(null)
-  }
-}
-
 
   async function closeTicket(ticketId: string) {
     setActionLoadingId(ticketId)
@@ -280,28 +268,27 @@ export default function TicketsPage() {
               </div>
             </div>
 
-       <nav style={styles.nav}>
-  <Link href="/" style={styles.navItem}>
-    Dashboard
-  </Link>
+            <nav style={styles.nav}>
+              <Link href="/" style={styles.navItem}>
+                Dashboard
+              </Link>
 
-  <Link href="/tickets" style={{ ...styles.navItem, ...styles.navItemActive }}>
-    Tickets
-  </Link>
+              <Link href="/tickets" style={{ ...styles.navItem, ...styles.navItemActive }}>
+                Tickets
+              </Link>
 
-  <Link href="/workers" style={styles.navItem}>
-    Workers
-  </Link>
+              <Link href="/workers" style={styles.navItem}>
+                Workers
+              </Link>
 
-  <Link href="/projects" style={styles.navItem}>
-    Projects
-  </Link>
+              <Link href="/projects" style={styles.navItem}>
+                Projects
+              </Link>
 
-  <Link href="/qr" style={styles.navItem}>
-    QR Codes
-  </Link>
-</nav>
-
+              <Link href="/qr" style={styles.navItem}>
+                QR Codes
+              </Link>
+            </nav>
 
             <div style={styles.sidebarFooter}>
               Maintenance Management System
@@ -437,7 +424,7 @@ export default function TicketsPage() {
                       <td style={styles.td}>
                         <div style={styles.ticketTitle}>{ticket.description || 'No description'}</div>
                         <div style={styles.ticketSubtitle}>
-                          {(ticket.reporter_name || ticket.reporter_phone || 'No reporter info')}
+                          {ticket.reporter_name || ticket.reporter_phone || 'No reporter info'}
                         </div>
                       </td>
 
@@ -625,29 +612,26 @@ const styles: Record<string, CSSProperties> = {
     color: '#6B7280',
   },
   nav: {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '12px',
-},
-
-navItem: {
-  textDecoration: 'none',
-  color: '#111827',
-  fontWeight: 700,
-  fontSize: '18px',
-  padding: '16px 18px',
-  borderRadius: '20px',
-  display: 'block',
-  width: '100%',
-  boxSizing: 'border-box',
-},
-
-navItemActive: {
-  background: '#111827',
-  color: '#FFFFFF',
-  boxShadow: '0 12px 24px rgba(17, 24, 39, 0.16)',
-},
-
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  navItem: {
+    textDecoration: 'none',
+    color: '#111827',
+    fontWeight: 700,
+    fontSize: '18px',
+    padding: '16px 18px',
+    borderRadius: '20px',
+    display: 'block',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+  navItemActive: {
+    background: '#111827',
+    color: '#FFFFFF',
+    boxShadow: '0 12px 24px rgba(17, 24, 39, 0.16)',
+  },
   navItemDisabled: {
     textDecoration: 'none',
     color: '#9CA3AF',
