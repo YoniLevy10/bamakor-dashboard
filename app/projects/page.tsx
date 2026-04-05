@@ -35,7 +35,7 @@ const emptyForm: ProjectForm = {
   is_active: true,
 }
 
-const WHATSAPP_NUMBER = '972500000000'
+const WHATSAPP_NUMBER = '972559740732'
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([])
@@ -73,8 +73,8 @@ export default function ProjectsPage() {
     setLoading(true)
     setError('')
     try {
-      const fetchedClientId = await loadClientId()
-      await loadProjects(fetchedClientId)
+      await loadClientId()
+      await loadProjects()
     } catch (err: any) {
       setError(err.message || 'Failed to load projects')
     } finally {
@@ -100,14 +100,10 @@ export default function ProjectsPage() {
     return firstClient.id
   }
 
-  async function loadProjects(nextClientId?: string) {
-    const activeClientId = nextClientId || clientId
-    if (!activeClientId) return
-
+  async function loadProjects() {
     const { data, error } = await supabase
       .from('projects')
       .select('*')
-      .eq('client_id', activeClientId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -171,7 +167,7 @@ export default function ProjectsPage() {
         address: form.address.trim() || null,
         qr_identifier: form.qr_identifier.trim() || null,
         is_active: form.is_active,
-        client_id: clientId,
+        client_id: editingProject?.client_id || clientId,
       }
 
       if (editingProject) {
@@ -309,13 +305,13 @@ export default function ProjectsPage() {
               </div>
             </div>
 
-<nav style={styles.sidebarNav}>
-  <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
-  <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
-  <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
-  <a href="/projects" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Projects</a>
-  <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
-</nav>
+            <nav style={styles.sidebarNav}>
+              <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
+              <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
+              <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
+              <a href="/projects" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Projects</a>
+              <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
+            </nav>
 
             <div style={styles.sidebarFooter}>Project setup & QR source</div>
           </aside>
@@ -1082,3 +1078,4 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 600,
   },
 }
+
