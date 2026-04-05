@@ -226,6 +226,25 @@ if (logError) {
 console.log('✅ Ticket created:', createdTicket.ticket_number)
 
 try {
+  const { data: projectForNotification, error: projectNotificationError } = await supabaseAdmin
+    .from('projects')
+    .select('name, manager_phone')
+    .eq('id', session.project_id)
+    .single()
+
+  if (projectNotificationError) {
+    console.error('⚠️ Failed to fetch project manager phone:', projectNotificationError)
+  } else if (projectForNotification?.manager_phone) {
+    await sendWhatsAppTextMessage(
+      projectForNotification.manager_phone,
+      `נכנסה תקלה חדשה במערכת.\n\nפרויקט: ${projectForNotification.name}\nפנייה: ${createdTicket.ticket_number}\nתיאור: ${textBody}\nמדווח: ${from}`
+    )
+  }
+} catch (notifyManagerError) {
+  console.error('⚠️ Failed to notify manager:', notifyManagerError)
+}
+
+try {
   await sendWhatsAppTextMessage(
     from,
     `התקלה התקבלה בהצלחה.\nמספר הפנייה שלך: ${createdTicket.ticket_number}\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה חדשה נוספת, סרקו שוב את קוד ה-QR.`
