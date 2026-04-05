@@ -4,10 +4,6 @@ import { parseIncomingWhatsAppMessage } from '@/lib/whatsapp-parser'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
 
-function generateTicketNumber() {
-  return Math.floor(100000 + Math.random() * 900000)
-}
-
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
   const mode = searchParams.get('hub.mode')
@@ -69,7 +65,14 @@ export async function POST(req: NextRequest) {
 
       if (!project) {
         console.log('⚠️ No project found for code:', projectCode)
-        return NextResponse.json({ received: true, projectFound: false }, { status: 200 })
+        return NextResponse.json(
+          {
+            received: true,
+            projectFound: false,
+            projectCode,
+          },
+          { status: 200 }
+        )
       }
 
       const { error: deactivateError } = await supabaseAdmin
@@ -145,12 +148,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const ticketNumber = generateTicketNumber()
-
     const { data: createdTicket, error: ticketError } = await supabaseAdmin
       .from('tickets')
       .insert({
-        ticket_number: ticketNumber,
         project_id: session.project_id,
         reporter_phone: from,
         description: textBody,
@@ -212,5 +212,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 500 })
   }
 }
-
-
