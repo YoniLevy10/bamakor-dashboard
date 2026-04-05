@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
+    // STEP 1: START_<PROJECT_CODE>
     if (textBody.toUpperCase().startsWith('START_')) {
       const projectCode = textBody.replace(/^START_/i, '').trim().toUpperCase()
 
@@ -122,6 +123,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // STEP 2: create ticket from active session
     const { data: session, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .select('id, phone_number, project_id, active_ticket_id, is_active')
@@ -180,11 +182,12 @@ export async function POST(req: NextRequest) {
       console.error('❌ Error updating session after ticket creation:', sessionUpdateError)
     }
 
+    // best-effort logging only - do not fail the request if this breaks
     const { error: logError } = await supabaseAdmin
       .from('ticket_logs')
       .insert({
         ticket_id: createdTicket.id,
-        action: 'CREATED_FROM_WHATSAPP',
+        action_type: 'CREATED_FROM_WHATSAPP',
         notes: `Ticket opened from WhatsApp by ${from}`,
         created_by: 'system',
         meta: {
@@ -194,7 +197,7 @@ export async function POST(req: NextRequest) {
       })
 
     if (logError) {
-      console.error('❌ Error creating ticket log:', logError)
+      console.error('⚠️ Ticket log insert failed (non-blocking):', logError)
     }
 
     console.log('✅ Ticket created:', createdTicket.ticket_number)
