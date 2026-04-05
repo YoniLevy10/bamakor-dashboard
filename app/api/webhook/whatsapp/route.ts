@@ -122,14 +122,16 @@ export async function POST(req: NextRequest) {
 
       console.log('✅ Session created:', createdSession.id)
       console.log('🏗️ Project linked:', project.name)
+      
       try {
   await sendWhatsAppTextMessage(
     from,
-    `ברוכים הבאים למערכת התקלות של Bamakor.\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+    `ברוכים הבאים למערכת דיווח התקלות של Bamakor.\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
   )
 } catch (sendError) {
   console.error('⚠️ Failed to send start-flow reply:', sendError)
 }
+
 
       return NextResponse.json(
         {
@@ -204,25 +206,26 @@ export async function POST(req: NextRequest) {
     }
 
     // best-effort logging only - do not fail the request if this breaks
-    const { error: logError } = await supabaseAdmin
-      .from('ticket_logs')
-      .insert({
-        ticket_id: createdTicket.id,
-        action_type: 'CREATED_FROM_WHATSAPP',
-        notes: `Ticket opened from WhatsApp by ${from}`,
-        created_by: 'system',
-        meta: {
-          phone: from,
-          source: 'whatsapp',
-        },
-      })
+const { error: logError } = await supabaseAdmin
+  .from('ticket_logs')
+  .insert({
+    ticket_id: createdTicket.id,
+    action_type: 'CREATED_FROM_WHATSAPP',
+    notes: `Ticket opened from WhatsApp by ${from}`,
+    created_by: 'system',
+    meta: {
+      phone: from,
+      source: 'whatsapp',
+    },
+  })
 
-    if (logError) {
-      console.error('⚠️ Ticket log insert failed (non-blocking):', logError)
-    }
+if (logError) {
+  console.error('⚠️ Ticket log insert failed (non-blocking):', logError)
+}
 
-    console.log('✅ Ticket created:', createdTicket.ticket_number)
-    try {
+console.log('✅ Ticket created:', createdTicket.ticket_number)
+
+try {
   await sendWhatsAppTextMessage(
     from,
     `התקלה התקבלה בהצלחה.\nמספר הפנייה שלך: ${createdTicket.ticket_number}\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה חדשה נוספת, סרקו שוב את קוד ה-QR.`
@@ -231,16 +234,17 @@ export async function POST(req: NextRequest) {
   console.error('⚠️ Failed to send ticket-created reply:', sendError)
 }
 
-    return NextResponse.json(
-      {
-        received: true,
-        type: 'ticket_created',
-        from,
-        ticketId: createdTicket.id,
-        ticketNumber: createdTicket.ticket_number,
-      },
-      { status: 200 }
-    )
+return NextResponse.json(
+  {
+    received: true,
+    type: 'ticket_created',
+    from,
+    ticketId: createdTicket.id,
+    ticketNumber: createdTicket.ticket_number,
+  },
+  { status: 200 }
+)
+
   } catch (error) {
     console.error('❌ Webhook error:', error)
     return NextResponse.json({ error: 'Invalid payload' }, { status: 500 })
