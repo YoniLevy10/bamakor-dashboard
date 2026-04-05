@@ -1,8 +1,10 @@
-import { supabase } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
 
 export async function POST(req: Request) {
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     const body = await req.json()
     const { ticket_id, worker_id } = body
 
@@ -13,33 +15,43 @@ export async function POST(req: Request) {
       )
     }
 
-    const { data: worker } = await supabase
+    const { data: worker, error: workerError } = await supabaseAdmin
       .from('workers')
-      .select('*')
+      .select('id, full_name, phone, role, is_active')
       .eq('id', worker_id)
       .single()
 
-    if (!worker) {
+    if (workerError || !worker) {
       return NextResponse.json(
         { error: 'Worker not found' },
         { status: 404 }
       )
     }
 
-    const { data: ticket } = await supabase
+    const { data: ticket, error: ticketError } = await supabaseAdmin
       .from('tickets')
-      .select('*')
+      .select(`
+        id,
+        ticket_number,
+        description,
+        project_id,
+        status,
+        projects (
+          name,
+          project_code
+        )
+      `)
       .eq('id', ticket_id)
       .single()
 
-    if (!ticket) {
+    if (ticketError || !ticket) {
       return NextResponse.json(
         { error: 'Ticket not found' },
         { status: 404 }
       )
     }
 
-    const { data: updatedTicket, error } = await supabase
+    const { data: updatedTicket, error: updateError } = await supabaseAdmin
       .from('tickets')
       .update({
         assigned_worker_id: worker_id,
@@ -48,28 +60,52 @@ export async function POST(req: Request) {
       })
       .eq('id', ticket_id)
       .select()
+      .single()
 
-    if (error) {
+    if (updateError) {
       return NextResponse.json(
-        { error: error.message },
+        { error: updateError.message },
         { status: 500 }
       )
     }
 
-    await supabase.from('ticket_logs').insert([
-      {
+    const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
+    const projectName = project?.name || 'ללא שם פרויקט'
+
+    const { error: logError } = await supabaseAdmin
+      .from('ticket_logs')
+      .insert({
         ticket_id,
         action_type: 'ASSIGNED_TO_WORKER',
-        new_value: worker_id,
-        performed_by: 'system',
-      },
-    ])
+        notes: `Ticket assigned to worker ${worker.full_name}`,
+        created_by: 'system',
+        meta: {
+          worker_id: worker.id,
+          worker_name: worker.full_name,
+        },
+      })
+
+    if (logError) {
+      console.error('⚠️ Failed to insert assign log:', logError)
+    }
+
+    if (worker.phone) {
+      try {
+        await sendWhatsAppTextMessage(
+          worker.phone,
+          `הוקצתה לך תקלה חדשה.\n\nפרויקט: ${projectName}\nפנייה: ${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא תיאור'}`
+        )
+      } catch (sendError) {
+        console.error('⚠️ Failed to notify worker:', sendError)
+      }
+    }
 
     return NextResponse.json({
       success: true,
       ticket: updatedTicket,
     })
-  } catch {
+  } catch (error) {
+    console.error('❌ assign-ticket route error:', error)
     return NextResponse.json(
       { error: 'Server error' },
       { status: 500 }

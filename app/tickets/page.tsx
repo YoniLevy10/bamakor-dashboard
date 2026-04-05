@@ -121,29 +121,33 @@ export default function TicketsPage() {
   }
 
   async function assignWorker(ticketId: string, workerId: string) {
-    if (!workerId) return
+  if (!workerId) return
 
-    setActionLoadingId(ticketId)
-    try {
-      const nextStatus = 'ASSIGNED'
+  setActionLoadingId(ticketId)
+  try {
+    const response = await fetch('/api/assign-ticket', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticket_id: ticketId,
+        worker_id: workerId,
+      }),
+    })
 
-      const { error } = await supabase
-        .from('tickets')
-        .update({
-          assigned_worker_id: workerId,
-          status: nextStatus,
-        })
-        .eq('id', ticketId)
+    const result = await response.json()
 
-      if (error) throw error
-
-      await fetchData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to assign worker')
-    } finally {
-      setActionLoadingId(null)
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to assign worker')
     }
+
+    await fetchData()
+  } catch (err: any) {
+    alert(err.message || 'Failed to assign worker')
+  } finally {
+    setActionLoadingId(null)
   }
+}
+
 
   async function closeTicket(ticketId: string) {
     setActionLoadingId(ticketId)
