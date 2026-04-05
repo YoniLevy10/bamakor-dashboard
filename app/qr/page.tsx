@@ -15,8 +15,6 @@ type ProjectRow = {
   created_at?: string
 }
 
-const WHATSAPP_NUMBER = '972559740732'
-
 export default function QrPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,13 +69,17 @@ export default function QrPage() {
     }
   }
 
-  function buildStartCode(project: ProjectRow) {
-    return project.qr_identifier || `START_${project.project_code}`
+  function buildQrIdentifier(project: ProjectRow) {
+    return project.qr_identifier || `QR_${project.project_code}`
   }
 
-  function buildWhatsappLink(project: ProjectRow) {
-    const startCode = buildStartCode(project)
-    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(startCode)}`
+  function buildReportLink(project: ProjectRow) {
+    const baseUrl =
+      (typeof window !== 'undefined' && window.location.origin) ||
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      ''
+
+    return `${baseUrl}/report?project=${encodeURIComponent(project.project_code)}`
   }
 
   const filteredProjects = useMemo(() => {
@@ -98,7 +100,7 @@ export default function QrPage() {
     const total = projects.length
     const active = projects.filter((p) => p.is_active !== false).length
     const inactive = projects.filter((p) => p.is_active === false).length
-    const ready = projects.filter((p) => Boolean(buildStartCode(p))).length
+    const ready = projects.filter((p) => Boolean(buildReportLink(p))).length
 
     return { total, active, inactive, ready }
   }, [projects])
@@ -122,27 +124,26 @@ export default function QrPage() {
             </div>
 
             <nav style={styles.nav}>
-  <Link href="/" style={styles.navItem}>
-    Dashboard
-  </Link>
+              <Link href="/" style={styles.navItem}>
+                Dashboard
+              </Link>
 
-  <Link href="/tickets" style={styles.navItem}>
-    Tickets
-  </Link>
+              <Link href="/tickets" style={styles.navItem}>
+                Tickets
+              </Link>
 
-  <Link href="/workers" style={styles.navItem}>
-    Workers
-  </Link>
+              <Link href="/workers" style={styles.navItem}>
+                Workers
+              </Link>
 
-  <Link href="/projects" style={styles.navItem}>
-    Projects
-  </Link>
+              <Link href="/projects" style={styles.navItem}>
+                Projects
+              </Link>
 
-  <Link href="/qr" style={{ ...styles.navItem, ...styles.navItemActive }}>
-    QR Codes
-  </Link>
-</nav>
-
+              <Link href="/qr" style={{ ...styles.navItem, ...styles.navItemActive }}>
+                QR Codes
+              </Link>
+            </nav>
           </aside>
         )}
 
@@ -151,7 +152,7 @@ export default function QrPage() {
             <div>
               <h1 style={styles.title}>QR Codes</h1>
               <p style={styles.subtitle}>
-                Manage building QR access points and WhatsApp start links
+                Manage project report links and generate QR access points for each building
               </p>
             </div>
 
@@ -165,9 +166,7 @@ export default function QrPage() {
             </div>
           </div>
 
-          {copyMessage && (
-            <div style={styles.copyToast}>{copyMessage}</div>
-          )}
+          {copyMessage && <div style={styles.copyToast}>{copyMessage}</div>}
 
           <div style={styles.statsGrid}>
             <div style={styles.statCard}>
@@ -194,8 +193,8 @@ export default function QrPage() {
           <div style={styles.infoBanner}>
             <div style={styles.infoBannerTitle}>How it works</div>
             <div style={styles.infoBannerText}>
-              Each project gets a dedicated start code and WhatsApp link. You can copy the code,
-              open the WhatsApp link, or generate a printable QR from that link in your next step.
+              Each project gets a dedicated report link. You can copy the link, open the report
+              page, and later generate a printable QR that points directly to the issue form.
             </div>
           </div>
 
@@ -228,8 +227,8 @@ export default function QrPage() {
           {!loading && !error && filteredProjects.length > 0 && (
             <div style={styles.cardsGrid}>
               {filteredProjects.map((project) => {
-                const startCode = buildStartCode(project)
-                const whatsappLink = buildWhatsappLink(project)
+                const qrIdentifier = buildQrIdentifier(project)
+                const reportLink = buildReportLink(project)
 
                 return (
                   <div key={project.id} style={styles.projectCard}>
@@ -257,49 +256,47 @@ export default function QrPage() {
                     </div>
 
                     <div style={styles.metaRow}>
-                      <span style={styles.metaLabel}>Start Code</span>
-                      <span style={styles.metaCode}>{startCode}</span>
+                      <span style={styles.metaLabel}>QR Identifier</span>
+                      <span style={styles.metaCode}>{qrIdentifier}</span>
                     </div>
 
                     <div style={styles.metaRow}>
-                      <span style={styles.metaLabel}>WhatsApp Link</span>
-                      <span style={styles.metaLink}>{whatsappLink}</span>
+                      <span style={styles.metaLabel}>Report Link</span>
+                      <span style={styles.metaLink}>{reportLink}</span>
                     </div>
 
                     <div style={styles.qrPreviewBox}>
                       <div style={styles.qrPreviewInner}>
                         <div style={styles.qrPreviewTitle}>QR Preview</div>
                         <div style={styles.qrPreviewText}>
-                          Use the WhatsApp link below to generate the final QR image.
+                          This QR should point to the report form for {project.project_code}.
                         </div>
-                        <div style={styles.qrCodePlaceholder}>
-                          {project.project_code}
-                        </div>
+                        <div style={styles.qrCodePlaceholder}>{project.project_code}</div>
                       </div>
                     </div>
 
                     <div style={styles.cardActions}>
                       <button
-                        onClick={() => copyText(startCode, 'START code copied')}
+                        onClick={() => copyText(qrIdentifier, 'QR identifier copied')}
                         style={styles.secondaryButtonSmall}
                       >
-                        Copy START Code
+                        Copy QR ID
                       </button>
 
                       <button
-                        onClick={() => copyText(whatsappLink, 'WhatsApp link copied')}
+                        onClick={() => copyText(reportLink, 'Report link copied')}
                         style={styles.secondaryButtonSmall}
                       >
                         Copy Link
                       </button>
 
                       <a
-                        href={whatsappLink}
+                        href={reportLink}
                         target="_blank"
                         rel="noreferrer"
                         style={styles.primaryActionButton}
                       >
-                        Open WhatsApp
+                        Open Report
                       </a>
                     </div>
                   </div>
@@ -362,29 +359,26 @@ const styles: Record<string, CSSProperties> = {
     color: '#6B7280',
   },
   nav: {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '12px',
-},
-
-navItem: {
-  textDecoration: 'none',
-  color: '#111827',
-  fontWeight: 700,
-  fontSize: '18px',
-  padding: '16px 18px',
-  borderRadius: '20px',
-  display: 'block',
-  width: '100%',
-  boxSizing: 'border-box',
-},
-
-navItemActive: {
-  background: '#111827',
-  color: '#FFFFFF',
-  boxShadow: '0 12px 24px rgba(17, 24, 39, 0.16)',
-},
-
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  navItem: {
+    textDecoration: 'none',
+    color: '#111827',
+    fontWeight: 700,
+    fontSize: '18px',
+    padding: '16px 18px',
+    borderRadius: '20px',
+    display: 'block',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+  navItemActive: {
+    background: '#111827',
+    color: '#FFFFFF',
+    boxShadow: '0 12px 24px rgba(17, 24, 39, 0.16)',
+  },
   navItemDisabled: {
     display: 'block',
     padding: '12px 14px',
