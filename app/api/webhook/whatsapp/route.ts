@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { parseIncomingWhatsAppMessage } from '@/lib/whatsapp-parser'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    const supabaseAdmin = getSupabaseAdmin()
 
     console.log('✅ WEBHOOK DB VERSION ACTIVE')
     console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
@@ -213,4 +214,3 @@ export async function POST(req: NextRequest) {
 }
 
 
-    
