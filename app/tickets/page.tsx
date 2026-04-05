@@ -101,9 +101,7 @@ export default function TicketsPage() {
       if (workersError) throw workersError
 
       const normalizedTickets: TicketRow[] = ((ticketsData as TicketRow[]) || []).map((ticket) => {
-        const project = Array.isArray(ticket.projects)
-          ? ticket.projects[0]
-          : ticket.projects
+        const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
 
         return {
           ...ticket,
