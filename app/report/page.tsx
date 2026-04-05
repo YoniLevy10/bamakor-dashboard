@@ -1,10 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import { Suspense, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
 
-export default function ReportPage() {
+function ReportPageContent() {
   const searchParams = useSearchParams()
   const projectCode = (searchParams.get('project') || '').toUpperCase()
 
@@ -158,11 +158,18 @@ export default function ReportPage() {
   )
 }
 
+export default function ReportPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24 }}>Loading...</div>}>
+      <ReportPageContent />
+    </Suspense>
+  )
+}
+
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: '100vh',
-    background:
-      'linear-gradient(180deg, #F5F6F8 0%, #EEF1F4 100%)',
+    background: 'linear-gradient(180deg, #F5F6F8 0%, #EEF1F4 100%)',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
     padding: '32px 16px',
     color: '#111827',
