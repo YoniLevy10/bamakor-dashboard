@@ -154,28 +154,28 @@ export default function QrPage() {
               </div>
             </div>
 
-            <nav style={styles.nav}>
-              <Link href="/" style={styles.navItem}>
+            <nav style={styles.sidebarNav}>
+              <Link href="/" style={styles.sidebarNavLink}>
                 Dashboard
               </Link>
 
-              <Link href="/tickets" style={styles.navItem}>
+              <Link href="/tickets" style={styles.sidebarNavLink}>
                 Tickets
               </Link>
 
-              <Link href="/projects" style={styles.navItem}>
+              <Link href="/projects" style={styles.sidebarNavLink}>
                 Projects
               </Link>
 
-              <Link href="/workers" style={styles.navItem}>
+              <Link href="/workers" style={styles.sidebarNavLink}>
                 Workers
               </Link>
 
-              <Link href="/qr" style={{ ...styles.navItem, ...styles.navItemActive }}>
+              <Link href="/qr" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>
                 QR Codes
               </Link>
 
-              <Link href="/summary" style={styles.navItem}>
+              <Link href="/summary" style={styles.sidebarNavLink}>
                 Summary
               </Link>
             </nav>
@@ -456,26 +456,22 @@ const styles: Record<string, CSSProperties> = {
     color: '#6B7280',
     padding: '12px 14px',
   },
-  nav: {
+  sidebarNav: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '8px',
   },
-  navItem: {
-    textDecoration: 'none',
-    color: '#111827',
-    fontWeight: 700,
-    fontSize: '18px',
-    padding: '16px 18px',
-    borderRadius: '20px',
-    display: 'block',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  navItemActive: {
+  sidebarNavItemActive: {
     background: '#111827',
     color: '#FFFFFF',
-    boxShadow: '0 12px 24px rgba(17, 24, 39, 0.16)',
+  },
+  sidebarNavLink: {
+    textDecoration: 'none',
+    color: '#374151',
+    fontWeight: 700,
+    padding: '12px 14px',
+    borderRadius: '12px',
+    background: '#FFFFFF',
   },
   content: {
     padding: '28px',
