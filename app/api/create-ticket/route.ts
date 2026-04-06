@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
+function parseStartCode(message: string) {
+  const match = message.trim().toUpperCase().match(/^START_(BMK\d+)(?:_(.+))?$/i)
+
+  if (!match) return null
+
+  return {
+    projectCode: match[1],
+    buildingNumber: match[2] ? match[2].trim() : null,
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getSupabaseAdmin()
@@ -14,11 +25,11 @@ export async function POST(req: Request) {
     const projectCodeFromBody = body?.project_code
       ? String(body.project_code).trim().toUpperCase()
       : ''
+    const buildingNumberFromBody = body?.building_number
+      ? String(body.building_number).trim()
+      : null
 
-    // --------------------------------------------------
     // MODE 1: WEB FORM
-    // expects: project_code + description
-    // --------------------------------------------------
     if (projectCodeFromBody) {
       if (description.length < 3) {
         return NextResponse.json(
@@ -60,8 +71,9 @@ export async function POST(req: Request) {
           priority: 'NORMAL',
           source,
           language: 'he',
+          building_number: buildingNumberFromBody,
         })
-        .select('id, ticket_number, project_id, status')
+        .select('id, ticket_number, project_id, status, building_number')
         .single()
 
       if (ticketError) {
@@ -83,6 +95,7 @@ export async function POST(req: Request) {
             source: 'web_form',
             project_code: project.project_code,
             reporter_name: reporterName,
+            building_number: buildingNumberFromBody,
           },
         })
 
@@ -96,15 +109,11 @@ export async function POST(req: Request) {
         ticketId: createdTicket.id,
         ticketNumber: createdTicket.ticket_number,
         projectCode: project.project_code,
+        buildingNumber: createdTicket.building_number,
       })
     }
 
-    // --------------------------------------------------
     // MODE 2: WHATSAPP / LEGACY FLOW
-    // expects: phone
-    // can either update active session ticket
-    // or create from START_BMKx message
-    // --------------------------------------------------
     if (!phone) {
       return NextResponse.json(
         { error: 'phone is required' },
@@ -126,7 +135,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // If user already has active ticket in session -> treat as follow-up
     if (existingSession?.active_ticket_id) {
       const followUpText = description || message || 'ללא תוכן'
 
@@ -190,7 +198,6 @@ export async function POST(req: Request) {
       })
     }
 
-    // No active session -> must receive START_BMKx
     if (!message) {
       return NextResponse.json(
         { error: 'message is required when no active session exists' },
@@ -198,16 +205,16 @@ export async function POST(req: Request) {
       )
     }
 
-    const match = message.match(/START_(BMK\d+)/i)
+    const parsedStart = parseStartCode(message)
 
-    if (!match) {
+    if (!parsedStart) {
       return NextResponse.json(
         { error: 'Invalid project code and no active session found' },
         { status: 400 }
       )
     }
 
-    const projectCode = match[1].toUpperCase()
+    const { projectCode, buildingNumber } = parsedStart
 
     const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
@@ -236,8 +243,9 @@ export async function POST(req: Request) {
         priority: 'NORMAL',
         source: 'whatsapp',
         language: 'he',
+        building_number: buildingNumber,
       })
-      .select('id, ticket_number, project_id, status')
+      .select('id, ticket_number, project_id, status, building_number')
       .single()
 
     if (ticketError) {
@@ -282,6 +290,7 @@ export async function POST(req: Request) {
           source: 'whatsapp',
           phone,
           project_code: project.project_code,
+          building_number: buildingNumber,
         },
       })
 
@@ -301,6 +310,7 @@ export async function POST(req: Request) {
       mode: 'created_new_ticket_and_session',
       ticket: createdTicket,
       session: createdSession,
+      buildingNumber,
     })
   } catch (err) {
     console.error('❌ create-ticket route error:', err)
@@ -310,3 +320,4 @@ export async function POST(req: Request) {
     )
   }
 }
+

@@ -3,8 +3,18 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { parseIncomingWhatsAppMessage } from '@/lib/whatsapp-parser'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
 
-
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
+
+function parseStartCode(text: string) {
+  const match = text.trim().toUpperCase().match(/^START_(BMK\d+)(?:_(.+))?$/i)
+
+  if (!match) return null
+
+  return {
+    projectCode: match[1],
+    buildingNumber: match[2] ? match[2].trim() : null,
+  }
+}
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
@@ -49,11 +59,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
-    // STEP 1: START_<PROJECT_CODE>
+    // STEP 1: START_<PROJECT_CODE> or START_<PROJECT_CODE>_<BUILDING>
     if (textBody.toUpperCase().startsWith('START_')) {
-      const projectCode = textBody.replace(/^START_/i, '').trim().toUpperCase()
+      const parsedStart = parseStartCode(textBody)
+
+      if (!parsedStart) {
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'פורמט קוד ה-QR לא תקין. אנא סרקו שוב את הקוד או פנו למנהלת הבניין.'
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send invalid-start-code reply:', sendError)
+        }
+
+        return NextResponse.json(
+          {
+            received: true,
+            type: 'invalid_start_code',
+            from,
+          },
+          { status: 200 }
+        )
+      }
+
+      const { projectCode, buildingNumber } = parsedStart
 
       console.log('🚀 Start flow detected for project code:', projectCode)
+      console.log('🏢 Building number:', buildingNumber || 'none')
 
       const { data: project, error: projectError } = await supabaseAdmin
         .from('projects')
@@ -66,28 +99,27 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Project lookup failed' }, { status: 500 })
       }
 
-     if (!project) {
-  console.log('⚠️ No project found for code:', projectCode)
+      if (!project) {
+        console.log('⚠️ No project found for code:', projectCode)
 
-  try {
-    await sendWhatsAppTextMessage(
-      from,
-      'לא הצלחנו לזהות את קוד הפרויקט. אנא סרקו שוב את ה-QR או פנו למנהלת הבניין.'
-    )
-  } catch (sendError) {
-    console.error('⚠️ Failed to send project-not-found reply:', sendError)
-  }
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'לא הצלחנו לזהות את קוד הפרויקט. אנא סרקו שוב את ה-QR או פנו למנהלת הבניין.'
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send project-not-found reply:', sendError)
+        }
 
-  return NextResponse.json(
-    {
-      received: true,
-      projectFound: false,
-      projectCode,
-    },
-    { status: 200 }
-  )
-}
-
+        return NextResponse.json(
+          {
+            received: true,
+            projectFound: false,
+            projectCode,
+          },
+          { status: 200 }
+        )
+      }
 
       const { error: deactivateError } = await supabaseAdmin
         .from('sessions')
@@ -122,16 +154,17 @@ export async function POST(req: NextRequest) {
 
       console.log('✅ Session created:', createdSession.id)
       console.log('🏗️ Project linked:', project.name)
-      
-      try {
-  await sendWhatsAppTextMessage(
-    from,
-    `ברוכים הבאים למערכת דיווח התקלות של Bamakor.\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
-  )
-} catch (sendError) {
-  console.error('⚠️ Failed to send start-flow reply:', sendError)
-}
 
+      try {
+        const buildingText = buildingNumber ? ` (בניין ${buildingNumber})` : ''
+
+        await sendWhatsAppTextMessage(
+          from,
+          `ברוכים הבאים למערכת דיווח התקלות של Bamakor${buildingText}.\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+        )
+      } catch (sendError) {
+        console.error('⚠️ Failed to send start-flow reply:', sendError)
+      }
 
       return NextResponse.json(
         {
@@ -139,6 +172,7 @@ export async function POST(req: NextRequest) {
           type: 'start_flow',
           from,
           projectCode,
+          buildingNumber,
           projectId: project.id,
           sessionId: createdSession.id,
         },
@@ -173,6 +207,23 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const { data: existingProject, error: existingProjectError } = await supabaseAdmin
+      .from('projects')
+      .select('project_code, qr_identifier')
+      .eq('id', session.project_id)
+      .maybeSingle()
+
+    if (existingProjectError) {
+      console.error('⚠️ Failed to fetch project for building extraction:', existingProjectError)
+    }
+
+    let buildingNumber: string | null = null
+
+    if (existingProject?.qr_identifier) {
+      const parsedStart = parseStartCode(existingProject.qr_identifier)
+      buildingNumber = parsedStart?.buildingNumber || null
+    }
+
     const { data: createdTicket, error: ticketError } = await supabaseAdmin
       .from('tickets')
       .insert({
@@ -183,8 +234,9 @@ export async function POST(req: NextRequest) {
         priority: 'NORMAL',
         language: 'he',
         source: 'whatsapp',
+        building_number: buildingNumber,
       })
-      .select('id, ticket_number, project_id')
+      .select('id, ticket_number, project_id, building_number')
       .single()
 
     if (ticketError) {
@@ -205,67 +257,72 @@ export async function POST(req: NextRequest) {
       console.error('❌ Error updating session after ticket creation:', sessionUpdateError)
     }
 
-    // best-effort logging only - do not fail the request if this breaks
-const { error: logError } = await supabaseAdmin
-  .from('ticket_logs')
-  .insert({
-    ticket_id: createdTicket.id,
-    action_type: 'CREATED_FROM_WHATSAPP',
-    notes: `Ticket opened from WhatsApp by ${from}`,
-    created_by: 'system',
-    meta: {
-      phone: from,
-      source: 'whatsapp',
-    },
-  })
+    const { error: logError } = await supabaseAdmin
+      .from('ticket_logs')
+      .insert({
+        ticket_id: createdTicket.id,
+        action_type: 'CREATED_FROM_WHATSAPP',
+        notes: `Ticket opened from WhatsApp by ${from}`,
+        created_by: 'system',
+        meta: {
+          phone: from,
+          source: 'whatsapp',
+          building_number: buildingNumber,
+        },
+      })
 
-if (logError) {
-  console.error('⚠️ Ticket log insert failed (non-blocking):', logError)
-}
+    if (logError) {
+      console.error('⚠️ Ticket log insert failed (non-blocking):', logError)
+    }
 
-console.log('✅ Ticket created:', createdTicket.ticket_number)
+    console.log('✅ Ticket created:', createdTicket.ticket_number)
 
-try {
-  const { data: projectForNotification, error: projectNotificationError } = await supabaseAdmin
-    .from('projects')
-    .select('name, manager_phone')
-    .eq('id', session.project_id)
-    .single()
+    try {
+      const { data: projectForNotification, error: projectNotificationError } = await supabaseAdmin
+        .from('projects')
+        .select('name, manager_phone')
+        .eq('id', session.project_id)
+        .single()
 
-  if (projectNotificationError) {
-    console.error('⚠️ Failed to fetch project manager phone:', projectNotificationError)
-  } else if (projectForNotification?.manager_phone) {
-    await sendWhatsAppTextMessage(
-      projectForNotification.manager_phone,
-      `נכנסה תקלה חדשה במערכת.\n\nפרויקט: ${projectForNotification.name}\nפנייה: ${createdTicket.ticket_number}\nתיאור: ${textBody}\nמדווח: ${from}`
+      if (projectNotificationError) {
+        console.error('⚠️ Failed to fetch project manager phone:', projectNotificationError)
+      } else if (projectForNotification?.manager_phone) {
+        const buildingText = buildingNumber ? `\nבניין: ${buildingNumber}` : ''
+
+        await sendWhatsAppTextMessage(
+          projectForNotification.manager_phone,
+          `נכנסה תקלה חדשה במערכת.\n\nפרויקט: ${projectForNotification.name}${buildingText}\nפנייה: ${createdTicket.ticket_number}\nתיאור: ${textBody}\nמדווח: ${from}`
+        )
+      }
+    } catch (notifyManagerError) {
+      console.error('⚠️ Failed to notify manager:', notifyManagerError)
+    }
+
+    try {
+      const buildingText = buildingNumber ? `\nבניין: ${buildingNumber}` : ''
+
+      await sendWhatsAppTextMessage(
+        from,
+        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה חדשה נוספת, סרקו שוב את קוד ה-QR.`
+      )
+    } catch (sendError) {
+      console.error('⚠️ Failed to send ticket-created reply:', sendError)
+    }
+
+    return NextResponse.json(
+      {
+        received: true,
+        type: 'ticket_created',
+        from,
+        ticketId: createdTicket.id,
+        ticketNumber: createdTicket.ticket_number,
+        buildingNumber,
+      },
+      { status: 200 }
     )
-  }
-} catch (notifyManagerError) {
-  console.error('⚠️ Failed to notify manager:', notifyManagerError)
-}
-
-try {
-  await sendWhatsAppTextMessage(
-    from,
-    `התקלה התקבלה בהצלחה.\nמספר הפנייה שלך: ${createdTicket.ticket_number}\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה חדשה נוספת, סרקו שוב את קוד ה-QR.`
-  )
-} catch (sendError) {
-  console.error('⚠️ Failed to send ticket-created reply:', sendError)
-}
-
-return NextResponse.json(
-  {
-    received: true,
-    type: 'ticket_created',
-    from,
-    ticketId: createdTicket.id,
-    ticketNumber: createdTicket.ticket_number,
-  },
-  { status: 200 }
-)
-
   } catch (error) {
     console.error('❌ Webhook error:', error)
     return NextResponse.json({ error: 'Invalid payload' }, { status: 500 })
   }
 }
+
