@@ -1,6 +1,12 @@
+type WhatsAppTemplateComponent = {
+  type: string
+  parameters?: Array<{
+    type: 'text'
+    text: string
+  }>
+}
 
-
-export async function sendWhatsAppTextMessage(to: string, body: string) {
+async function sendRawWhatsAppPayload(payload: any) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
 
@@ -22,11 +28,7 @@ export async function sendWhatsAppTextMessage(to: string, body: string) {
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: {
-          body,
-        },
+        ...payload,
       }),
     }
   )
@@ -39,3 +41,76 @@ export async function sendWhatsAppTextMessage(to: string, body: string) {
 
   return data
 }
+
+export async function sendWhatsAppTextMessage(to: string, body: string) {
+  console.log('📤 Sending WhatsApp text message to:', to)
+
+  return sendRawWhatsAppPayload({
+    to,
+    type: 'text',
+    text: {
+      body,
+    },
+  })
+}
+
+export async function sendWhatsAppTemplateMessage(
+  to: string,
+  templateName: string,
+  bodyParams: string[] = [],
+  languageCode = 'he'
+) {
+  console.log('📤 Sending WhatsApp template message to:', to, 'template:', templateName)
+
+  const components: WhatsAppTemplateComponent[] = []
+
+  if (bodyParams.length > 0) {
+    components.push({
+      type: 'body',
+      parameters: bodyParams.map((text) => ({
+        type: 'text',
+        text,
+      })),
+    })
+  }
+
+  return sendRawWhatsAppPayload({
+    to,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: {
+        code: languageCode,
+      },
+      components,
+    },
+  })
+}
+
+export async function sendWhatsAppTextWithTemplateFallback(
+  to: string,
+  body: string,
+  templateName: string,
+  templateParams: string[] = [],
+  languageCode = 'he'
+) {
+  try {
+    return await sendWhatsAppTextMessage(to, body)
+  } catch (error: any) {
+    const errorText = String(error?.message || '')
+
+    const is24HourWindowError =
+      errorText.includes('131047') ||
+      errorText.toLowerCase().includes('re-engagement message') ||
+      errorText.toLowerCase().includes('more than 24 hours have passed')
+
+    if (!is24HourWindowError) {
+      throw error
+    }
+
+    console.warn('⚠️ 24h window blocked text message, falling back to template:', templateName)
+
+    return sendWhatsAppTemplateMessage(to, templateName, templateParams, languageCode)
+  }
+}
+

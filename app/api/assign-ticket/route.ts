@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
+import { sendWhatsAppTextWithTemplateFallback } from '@/lib/whatsapp-send'
+
+const WORKER_TEMPLATE_NAME = 'worker_assignment_notice'
 
 export async function POST(req: Request) {
   try {
@@ -91,13 +93,26 @@ export async function POST(req: Request) {
 
     if (worker.phone) {
       try {
-        await sendWhatsAppTextMessage(
+        console.log('📤 Sending worker notification to:', worker.phone)
+
+        await sendWhatsAppTextWithTemplateFallback(
           worker.phone,
-          `הוקצתה לך תקלה חדשה.\n\nפרויקט: ${projectName}\nפנייה: ${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא תיאור'}`
+          `הוקצתה לך תקלה חדשה.\n\nפרויקט: ${projectName}\nפנייה: ${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא תיאור'}`,
+          WORKER_TEMPLATE_NAME,
+          [
+            projectName,
+            String(ticket.ticket_number),
+            ticket.description || 'ללא תיאור',
+          ],
+          'he'
         )
+
+        console.log('✅ Worker notification sent successfully to:', worker.phone)
       } catch (sendError) {
         console.error('⚠️ Failed to notify worker:', sendError)
       }
+    } else {
+      console.log('ℹ️ Worker has no phone number, skipping WhatsApp notification')
     }
 
     return NextResponse.json({
@@ -112,3 +127,4 @@ export async function POST(req: Request) {
     )
   }
 }
+
