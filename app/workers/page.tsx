@@ -291,14 +291,14 @@ export default function WorkersPage() {
               </div>
             </div>
 
-          <nav style={styles.sidebarNav}>
-  <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
-  <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
-  <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
-  <a href="/workers" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Workers</a>
-  <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
-  <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
-</nav>
+            <nav style={styles.sidebarNav}>
+              <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
+              <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
+              <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
+              <a href="/workers" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Workers</a>
+              <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
+              <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
+            </nav>
 
             <div style={styles.sidebarFooter}>Team & project setup</div>
           </aside>
@@ -793,8 +793,8 @@ const styles: Record<string, CSSProperties> = {
   statCard: {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
-    borderRadius: '20px',
-    padding: '20px',
+    borderRadius: '18px',
+    padding: '22px',
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
   },
   statCardFullWidthMobile: {
@@ -807,7 +807,7 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 600,
   },
   statValue: {
-    fontSize: '40px',
+    fontSize: '42px',
     fontWeight: 800,
     lineHeight: 1,
     color: '#111827',

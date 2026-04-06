@@ -725,17 +725,14 @@ export default function HomePage() {
               </div>
             </div>
 
-     <nav style={styles.sidebarNav}>
-  <a href="/" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>
-    Dashboard
-  </a>
-  <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
-  <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
-  <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
-  <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
-  <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
-</nav>
-
+            <nav style={styles.sidebarNav}>
+              <a href="/" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Dashboard</a>
+              <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
+              <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
+              <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
+              <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
+              <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
+            </nav>
 
             <div style={styles.sidebarFooter}>Maintenance Management System</div>
           </aside>

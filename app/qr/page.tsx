@@ -149,30 +149,30 @@ export default function QrPage() {
             </div>
 
             <nav style={styles.nav}>
-  <Link href="/" style={styles.navItem}>
-    Dashboard
-  </Link>
+              <Link href="/" style={styles.navItem}>
+                Dashboard
+              </Link>
 
-  <Link href="/summary" style={styles.navItem}>
-    Summary
-  </Link>
+              <Link href="/tickets" style={styles.navItem}>
+                Tickets
+              </Link>
 
-  <Link href="/tickets" style={styles.navItem}>
-    Tickets
-  </Link>
+              <Link href="/projects" style={styles.navItem}>
+                Projects
+              </Link>
 
-  <Link href="/workers" style={styles.navItem}>
-    Workers
-  </Link>
+              <Link href="/workers" style={styles.navItem}>
+                Workers
+              </Link>
 
-  <Link href="/projects" style={styles.navItem}>
-    Projects
-  </Link>
+              <Link href="/qr" style={{ ...styles.navItem, ...styles.navItemActive }}>
+                QR Codes
+              </Link>
 
-  <Link href="/qr" style={{ ...styles.navItem, ...styles.navItemActive }}>
-    QR Codes
-  </Link>
-</nav>
+              <Link href="/summary" style={styles.navItem}>
+                Summary
+              </Link>
+            </nav>
           </aside>
         )}
 
@@ -516,24 +516,24 @@ const styles: Record<string, CSSProperties> = {
   statsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-    gap: '12px',
+    gap: '14px',
     marginBottom: '18px',
   },
   statCard: {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
     borderRadius: '18px',
-    padding: '18px',
+    padding: '22px',
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
   },
   statLabel: {
-    fontSize: '13px',
+    fontSize: '14px',
     color: '#6B7280',
-    marginBottom: '10px',
+    marginBottom: '12px',
     fontWeight: 600,
   },
   statValue: {
-    fontSize: '28px',
+    fontSize: '42px',
     fontWeight: 800,
     color: '#111827',
     lineHeight: 1,

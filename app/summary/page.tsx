@@ -169,11 +169,11 @@ export default function SummaryPage() {
 
             <nav style={styles.sidebarNav}>
               <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
-              <a href="/summary" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Summary</a>
               <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
-              <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
               <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
+              <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
               <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
+              <a href="/summary" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Summary</a>
             </nav>
 
             <div style={styles.sidebarFooter}>Reporting & operational summary</div>
@@ -467,8 +467,8 @@ const styles: Record<string, CSSProperties> = {
   kpiCard: {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
-    borderRadius: '22px',
-    padding: '24px',
+    borderRadius: '18px',
+    padding: '22px',
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
     textAlign: 'left',
     minWidth: 0,

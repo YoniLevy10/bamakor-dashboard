@@ -268,29 +268,28 @@ export default function TicketsPage() {
 
             <nav style={styles.nav}>
               <Link href="/" style={styles.navItem}>
-  Dashboard
-</Link>
+                Dashboard
+              </Link>
 
-<Link href="/summary" style={styles.navItem}>
-  Summary
-</Link>
+              <Link href="/tickets" style={{ ...styles.navItem, ...styles.navItemActive }}>
+                Tickets
+              </Link>
 
-<Link href="/tickets" style={{ ...styles.navItem, ...styles.navItemActive }}>
-  Tickets
-</Link>
+              <Link href="/projects" style={styles.navItem}>
+                Projects
+              </Link>
 
-<Link href="/workers" style={styles.navItem}>
-  Workers
-</Link>
+              <Link href="/workers" style={styles.navItem}>
+                Workers
+              </Link>
 
-<Link href="/projects" style={styles.navItem}>
-  Projects
-</Link>
+              <Link href="/qr" style={styles.navItem}>
+                QR Codes
+              </Link>
 
-<Link href="/qr" style={styles.navItem}>
-  QR Codes
-</Link>
-
+              <Link href="/summary" style={styles.navItem}>
+                Summary
+              </Link>
             </nav>
 
             <div style={styles.sidebarFooter}>
