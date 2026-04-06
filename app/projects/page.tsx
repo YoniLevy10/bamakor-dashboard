@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 
@@ -38,6 +39,7 @@ const emptyForm: ProjectForm = {
 const WHATSAPP_NUMBER = '972559740732'
 
 export default function ProjectsPage() {
+  const searchParams = useSearchParams()
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [clientId, setClientId] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -47,6 +49,7 @@ export default function ProjectsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
   const [isMobile, setIsMobile] = useState(false)
+  const [highlightedProjectCode, setHighlightedProjectCode] = useState<string | null>(null)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<ProjectRow | null>(null)
@@ -58,6 +61,15 @@ export default function ProjectsPage() {
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
+
+  useEffect(() => {
+    const projectParam = searchParams.get('project')
+    if (projectParam) {
+      setHighlightedProjectCode(projectParam)
+      setSearchTerm('')
+      setStatusFilter('ALL')
+    }
+  }, [searchParams])
 
   useEffect(() => {
     initializePage()
@@ -314,7 +326,7 @@ export default function ProjectsPage() {
               <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
             </nav>
 
-            <div style={styles.sidebarFooter}>Project setup & QR source</div>
+            <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>
           </aside>
         )}
 
@@ -447,11 +459,27 @@ export default function ProjectsPage() {
                 }}
               >
                 {filteredProjects.map((project) => (
-                  <div key={project.id} style={styles.projectCard}>
+                  <div 
+                    key={project.id} 
+                    style={{
+                      ...styles.projectCard,
+                      ...(highlightedProjectCode === project.project_code ? {
+                        borderColor: '#C1121F',
+                        borderWidth: '2px',
+                        boxShadow: '0 0 0 3px rgba(193, 18, 31, 0.1), 0 10px 30px rgba(0,0,0,0.04)',
+                      } : {}),
+                    }}
+                  >
                     <div style={styles.projectTopRow}>
                       <div>
                         <div style={styles.projectName}>{project.name}</div>
-                        <div style={styles.projectCode}>{project.project_code}</div>
+                        <div 
+                          style={styles.projectCode}
+                          onClick={() => setHighlightedProjectCode(highlightedProjectCode === project.project_code ? null : project.project_code)}
+                          title="Click to highlight project"
+                        >
+                          {project.project_code}
+                        </div>
                       </div>
 
                       <span
@@ -697,7 +725,7 @@ const styles: Record<string, CSSProperties> = {
     boxSizing: 'border-box',
   },
   mainAreaMobile: {
-    padding: '14px',
+    padding: '18px 14px',
   },
   topBar: {
     display: 'flex',
@@ -706,6 +734,7 @@ const styles: Record<string, CSSProperties> = {
     gap: '12px',
     marginBottom: '20px',
     flexWrap: 'wrap',
+    rowGap: '16px',
   },
   titleWrap: {
     minWidth: 0,
@@ -829,8 +858,12 @@ const styles: Record<string, CSSProperties> = {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
     borderRadius: '18px',
-    padding: '22px',
+    padding: '20px',
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
+    minHeight: '110px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
   },
   statCardFullWidthMobile: {
     gridColumn: '1 / -1',
@@ -890,6 +923,9 @@ const styles: Record<string, CSSProperties> = {
     outline: 'none',
     fontSize: '14px',
     boxSizing: 'border-box',
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
   },
   filterSelect: {
     width: '190px',
@@ -901,6 +937,9 @@ const styles: Record<string, CSSProperties> = {
     outline: 'none',
     fontSize: '14px',
     boxSizing: 'border-box',
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
   },
   projectGrid: {
     display: 'grid',
@@ -929,6 +968,8 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '13px',
     color: '#C1121F',
     fontWeight: 800,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
   },
   statusPill: {
     display: 'inline-flex',
@@ -1062,6 +1103,9 @@ const styles: Record<string, CSSProperties> = {
     outline: 'none',
     fontSize: '14px',
     boxSizing: 'border-box',
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
   },
   drawerActions: {
     display: 'flex',

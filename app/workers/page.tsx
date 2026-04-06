@@ -300,7 +300,7 @@ export default function WorkersPage() {
               <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
             </nav>
 
-            <div style={styles.sidebarFooter}>Team & project setup</div>
+            <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>
           </aside>
         )}
 
@@ -662,7 +662,7 @@ const styles: Record<string, CSSProperties> = {
     boxSizing: 'border-box',
   },
   mainAreaMobile: {
-    padding: '14px',
+    padding: '18px 14px',
   },
   topBar: {
     display: 'flex',
@@ -671,6 +671,7 @@ const styles: Record<string, CSSProperties> = {
     gap: '12px',
     marginBottom: '20px',
     flexWrap: 'wrap',
+    rowGap: '16px',
   },
   titleWrap: {
     minWidth: 0,
@@ -794,8 +795,12 @@ const styles: Record<string, CSSProperties> = {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
     borderRadius: '18px',
-    padding: '22px',
+    padding: '20px',
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
+    minHeight: '110px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
   },
   statCardFullWidthMobile: {
     gridColumn: '1 / -1',
@@ -855,6 +860,9 @@ const styles: Record<string, CSSProperties> = {
     outline: 'none',
     fontSize: '14px',
     boxSizing: 'border-box',
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
   },
   filterSelect: {
     width: '190px',
@@ -866,6 +874,9 @@ const styles: Record<string, CSSProperties> = {
     outline: 'none',
     fontSize: '14px',
     boxSizing: 'border-box',
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
   },
   workerGrid: {
     display: 'grid',
@@ -1005,6 +1016,9 @@ const styles: Record<string, CSSProperties> = {
     outline: 'none',
     fontSize: '14px',
     boxSizing: 'border-box',
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
   },
   drawerActions: {
     display: 'flex',

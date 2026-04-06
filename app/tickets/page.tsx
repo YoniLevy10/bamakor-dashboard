@@ -293,7 +293,7 @@ export default function TicketsPage() {
             </nav>
 
             <div style={styles.sidebarFooter}>
-              Maintenance Management System
+              All rights reserved to Yoni Levy
             </div>
           </aside>
         )}
@@ -696,8 +696,12 @@ const styles: Record<string, CSSProperties> = {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
     borderRadius: '18px',
-    padding: '22px',
+    padding: '20px',
     boxShadow: '0 8px 24px rgba(17, 24, 39, 0.04)',
+    minHeight: '110px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
   },
   statLabel: {
     fontSize: '14px',
@@ -715,7 +719,7 @@ const styles: Record<string, CSSProperties> = {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
     borderRadius: '20px',
-    padding: '22px',
+    padding: '20px',
     marginBottom: '18px',
     boxShadow: '0 8px 24px rgba(17, 24, 39, 0.04)',
   },
@@ -728,6 +732,7 @@ const styles: Record<string, CSSProperties> = {
   filtersRow: {
     display: 'grid',
     gap: '12px',
+    width: '100%',
   },
   input: {
     width: '100%',
@@ -738,6 +743,8 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '14px',
     outline: 'none',
     color: '#111827',
+    minHeight: '44px',
+    boxSizing: 'border-box',
   },
   select: {
     width: '100%',
@@ -748,6 +755,8 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '14px',
     outline: 'none',
     color: '#111827',
+    minHeight: '44px',
+    boxSizing: 'border-box',
   },
   resultCount: {
     fontSize: '15px',

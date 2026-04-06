@@ -176,7 +176,7 @@ export default function SummaryPage() {
               <a href="/summary" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Summary</a>
             </nav>
 
-            <div style={styles.sidebarFooter}>Reporting & operational summary</div>
+            <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>
           </aside>
         )}
 
@@ -393,8 +393,8 @@ const styles: Record<string, CSSProperties> = {
     boxSizing: 'border-box',
   },
   mainAreaMobile: {
-    padding: '14px',
-  },
+    padding: '18px 14px',
+  }
   brandWrap: {
     minWidth: 0,
   },
@@ -468,10 +468,14 @@ const styles: Record<string, CSSProperties> = {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
     borderRadius: '18px',
-    padding: '22px',
+    padding: '20px',
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
     textAlign: 'left',
     minWidth: 0,
+    minHeight: '110px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
   },
   kpiLabel: {
     color: '#6B7280',

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
@@ -19,6 +20,7 @@ type ProjectRow = {
 const WHATSAPP_NUMBER = '972559740732'
 
 export default function QrPage() {
+  const router = useRouter()
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -129,6 +131,10 @@ export default function QrPage() {
 
     return { total, active, inactive, ready }
   }, [projects])
+
+  function navigateToProject(projectCode: string) {
+    router.push(`/projects?project=${encodeURIComponent(projectCode)}`)
+  }
 
   return (
     <main style={styles.page}>
@@ -264,7 +270,13 @@ export default function QrPage() {
                   <div key={project.id} style={styles.projectCard}>
                     <div style={styles.projectCardTop}>
                       <div>
-                        <div style={styles.projectCode}>{project.project_code}</div>
+                        <div 
+                          style={styles.projectCode}
+                          onClick={() => navigateToProject(project.project_code)}
+                          title="Click to view project"
+                        >
+                          {project.project_code}
+                        </div>
                         <div style={styles.projectName}>{project.name}</div>
                       </div>
 
@@ -287,7 +299,13 @@ export default function QrPage() {
 
                     <div style={styles.metaRow}>
                       <span style={styles.metaLabel}>Start Code</span>
-                      <span style={styles.metaCode}>{qrIdentifier}</span>
+                      <span 
+                        style={styles.metaCode}
+                        onClick={() => copyText(qrIdentifier, 'START code copied')}
+                        title="Click to copy"
+                      >
+                        {qrIdentifier}
+                      </span>
                     </div>
 
                     <div style={styles.metaRow}>
@@ -460,8 +478,7 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'flex-start',
     gap: '16px',
     marginBottom: '20px',
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap',    rowGap: '16px',  },
   title: {
     margin: 0,
     fontSize: '30px',
@@ -523,8 +540,12 @@ const styles: Record<string, CSSProperties> = {
     background: '#FFFFFF',
     border: '1px solid #E5E7EB',
     borderRadius: '18px',
-    padding: '22px',
+    padding: '20px',
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
+    minHeight: '110px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
   },
   statLabel: {
     fontSize: '14px',
@@ -598,6 +619,8 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: '6px',
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
   },
   projectName: {
     fontSize: '20px',
@@ -647,6 +670,10 @@ const styles: Record<string, CSSProperties> = {
     color: '#B91C1C',
     fontWeight: 800,
     wordBreak: 'break-word',
+    cursor: 'pointer',
+    borderBottom: '2px dotted #B91C1C',
+    padding: '0 2px',
+    transition: 'all 0.2s ease',
   },
   metaLink: {
     fontSize: '13px',

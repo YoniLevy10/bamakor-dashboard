@@ -734,7 +734,7 @@ export default function HomePage() {
               <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
             </nav>
 
-            <div style={styles.sidebarFooter}>Maintenance Management System</div>
+            <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>
           </aside>
         )}
 
@@ -1438,7 +1438,7 @@ const styles: Record<string, CSSProperties> = {
     boxSizing: 'border-box',
   },
   mainAreaMobile: {
-    padding: '14px',
+    padding: '18px 14px',
   },
   brandWrap: {
     minWidth: 0,
@@ -1450,6 +1450,7 @@ const styles: Record<string, CSSProperties> = {
     gap: '12px',
     marginBottom: '20px',
     flexWrap: 'wrap',
+    rowGap: '16px',
   },
   topActions: {
     display: 'flex',
@@ -1526,6 +1527,10 @@ const styles: Record<string, CSSProperties> = {
     color: '#2F2F33',
     cursor: 'pointer',
     fontWeight: 700,
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   secondaryButtonSmall: {
     padding: '8px 10px',
@@ -1536,6 +1541,10 @@ const styles: Record<string, CSSProperties> = {
     color: '#2F2F33',
     cursor: 'pointer',
     fontWeight: 700,
+    minHeight: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   primarySaveButton: {
     background: '#111827',
@@ -1620,7 +1629,7 @@ const styles: Record<string, CSSProperties> = {
   },
   kpiLabel: {
     color: '#6B7280',
-    fontSize: '14px',
+    fontSize: '13px',
     marginBottom: '12px',
     fontWeight: 600,
   },
@@ -1629,6 +1638,7 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     lineHeight: 1,
     color: '#111827',
+    wordBreak: 'break-word',
   },
   projectSection: {
     background: '#FFFFFF',
@@ -1805,6 +1815,8 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: '16px',
     width: '100%',
     minWidth: 0,
+    flexWrap: 'wrap',
+    rowGap: '12px',
   },
   searchInput: {
     width: '100%',
@@ -1816,6 +1828,7 @@ const styles: Record<string, CSSProperties> = {
     outline: 'none',
     fontSize: '14px',
     boxSizing: 'border-box',
+    minHeight: '44px',
   },
   filterSelect: {
     width: '180px',
@@ -1898,6 +1911,7 @@ const styles: Record<string, CSSProperties> = {
     outline: 'none',
     minWidth: '150px',
     boxSizing: 'border-box',
+    minHeight: '44px',
   },
   mobileTouchSelect: {
     minHeight: '44px',
