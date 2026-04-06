@@ -268,24 +268,29 @@ export default function TicketsPage() {
 
             <nav style={styles.nav}>
               <Link href="/" style={styles.navItem}>
-                Dashboard
-              </Link>
+  Dashboard
+</Link>
 
-              <Link href="/tickets" style={{ ...styles.navItem, ...styles.navItemActive }}>
-                Tickets
-              </Link>
+<Link href="/summary" style={styles.navItem}>
+  Summary
+</Link>
 
-              <Link href="/workers" style={styles.navItem}>
-                Workers
-              </Link>
+<Link href="/tickets" style={{ ...styles.navItem, ...styles.navItemActive }}>
+  Tickets
+</Link>
 
-              <Link href="/projects" style={styles.navItem}>
-                Projects
-              </Link>
+<Link href="/workers" style={styles.navItem}>
+  Workers
+</Link>
 
-              <Link href="/qr" style={styles.navItem}>
-                QR Codes
-              </Link>
+<Link href="/projects" style={styles.navItem}>
+  Projects
+</Link>
+
+<Link href="/qr" style={styles.navItem}>
+  QR Codes
+</Link>
+
             </nav>
 
             <div style={styles.sidebarFooter}>
@@ -302,10 +307,11 @@ export default function TicketsPage() {
             </div>
 
             {isMobile && (
-              <div style={styles.mobileTopLinks}>
-                <Link href="/" style={styles.mobileLink}>Dashboard</Link>
-                <Link href="/qr" style={styles.mobileLink}>QR</Link>
-              </div>
+             <div style={styles.mobileTopLinks}>
+  <Link href="/" style={styles.mobileLink}>Dashboard</Link>
+  <Link href="/summary" style={styles.mobileLink}>Summary</Link>
+  <Link href="/qr" style={styles.mobileLink}>QR</Link>
+</div>
             )}
           </div>
 

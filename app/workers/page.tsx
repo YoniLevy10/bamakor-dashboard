@@ -291,8 +291,9 @@ export default function WorkersPage() {
               </div>
             </div>
 
-           <nav style={styles.sidebarNav}>
+          <nav style={styles.sidebarNav}>
   <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
+  <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
   <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
   <a href="/workers" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Workers</a>
   <a href="/projects" style={styles.sidebarNavLink}>Projects</a>

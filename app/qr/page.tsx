@@ -149,26 +149,30 @@ export default function QrPage() {
             </div>
 
             <nav style={styles.nav}>
-              <Link href="/" style={styles.navItem}>
-                Dashboard
-              </Link>
+  <Link href="/" style={styles.navItem}>
+    Dashboard
+  </Link>
 
-              <Link href="/tickets" style={styles.navItem}>
-                Tickets
-              </Link>
+  <Link href="/summary" style={styles.navItem}>
+    Summary
+  </Link>
 
-              <Link href="/workers" style={styles.navItem}>
-                Workers
-              </Link>
+  <Link href="/tickets" style={styles.navItem}>
+    Tickets
+  </Link>
 
-              <Link href="/projects" style={styles.navItem}>
-                Projects
-              </Link>
+  <Link href="/workers" style={styles.navItem}>
+    Workers
+  </Link>
 
-              <Link href="/qr" style={{ ...styles.navItem, ...styles.navItemActive }}>
-                QR Codes
-              </Link>
-            </nav>
+  <Link href="/projects" style={styles.navItem}>
+    Projects
+  </Link>
+
+  <Link href="/qr" style={{ ...styles.navItem, ...styles.navItemActive }}>
+    QR Codes
+  </Link>
+</nav>
           </aside>
         )}
 
