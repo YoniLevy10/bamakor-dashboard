@@ -179,6 +179,8 @@ export default function QrPage() {
                 Summary
               </Link>
             </nav>
+
+            <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>
           </aside>
         )}
 
@@ -447,6 +449,12 @@ const styles: Record<string, CSSProperties> = {
   sidebarSubtitle: {
     fontSize: '12px',
     color: '#6B7280',
+  },
+  sidebarFooter: {
+    marginTop: 'auto',
+    fontSize: '13px',
+    color: '#6B7280',
+    padding: '12px 14px',
   },
   nav: {
     display: 'flex',

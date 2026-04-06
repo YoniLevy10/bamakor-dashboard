@@ -273,6 +273,9 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#111827',
     outline: 'none',
     boxSizing: 'border-box',
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
   },
   textarea: {
     width: '100%',
@@ -286,6 +289,7 @@ const styles: Record<string, React.CSSProperties> = {
     resize: 'vertical',
     boxSizing: 'border-box',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
+    minHeight: '120px',
   },
   submitButton: {
     background: '#111827',
@@ -295,6 +299,10 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '14px 18px',
     fontSize: '15px',
     fontWeight: 800,
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   successBox: {
     background: '#ECFDF5',

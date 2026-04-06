@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 
@@ -39,7 +38,6 @@ const emptyForm: ProjectForm = {
 const WHATSAPP_NUMBER = '972559740732'
 
 export default function ProjectsPage() {
-  const searchParams = useSearchParams()
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [clientId, setClientId] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -61,15 +59,6 @@ export default function ProjectsPage() {
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
-
-  useEffect(() => {
-    const projectParam = searchParams.get('project')
-    if (projectParam) {
-      setHighlightedProjectCode(projectParam)
-      setSearchTerm('')
-      setStatusFilter('ALL')
-    }
-  }, [searchParams])
 
   useEffect(() => {
     initializePage()

@@ -394,7 +394,7 @@ const styles: Record<string, CSSProperties> = {
   },
   mainAreaMobile: {
     padding: '18px 14px',
-  }
+  },
   brandWrap: {
     minWidth: 0,
   },
