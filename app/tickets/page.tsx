@@ -66,6 +66,17 @@ export default function TicketsPage() {
   }, [])
 
   useEffect(() => {
+    // Handle project filter from URL query parameter
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const projectParam = params.get('project')
+      if (projectParam) {
+        setProjectFilter(decodeURIComponent(projectParam))
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     fetchData()
   }, [])
 

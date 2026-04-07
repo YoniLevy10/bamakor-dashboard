@@ -27,6 +27,13 @@ type ProjectForm = {
   is_active: boolean
 }
 
+type TicketRow = {
+  id: string
+  ticket_number: number
+  status: string
+  priority?: string | null
+}
+
 const emptyForm: ProjectForm = {
   name: '',
   project_code: '',
@@ -52,6 +59,10 @@ export default function ProjectsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<ProjectRow | null>(null)
   const [form, setForm] = useState<ProjectForm>(emptyForm)
+  const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null)
+  const [projectTickets, setProjectTickets] = useState<TicketRow[]>([])
+  const [loadingTickets, setLoadingTickets] = useState(false)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -135,6 +146,42 @@ export default function ProjectsPage() {
     setDrawerOpen(false)
     setEditingProject(null)
     setForm(emptyForm)
+  }
+
+  async function openDetailDrawer(project: ProjectRow) {
+    setSelectedProject(project)
+    setDetailDrawerOpen(true)
+    await fetchProjectTickets(project.project_code)
+  }
+
+  function closeDetailDrawer() {
+    setDetailDrawerOpen(false)
+    setSelectedProject(null)
+    setProjectTickets([])
+  }
+
+  async function fetchProjectTickets(projectCode: string) {
+    setLoadingTickets(true)
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .select('id, ticket_number, status, priority')
+        .eq('project_code', projectCode)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      setProjectTickets((data as TicketRow[]) || [])
+    } catch (err: any) {
+      console.error('Failed to load tickets:', err.message)
+      setProjectTickets([])
+    } finally {
+      setLoadingTickets(false)
+    }
+  }
+
+  function navigateToProjectTickets(projectCode: string) {
+    window.location.href = `/tickets?project=${encodeURIComponent(projectCode)}`
   }
 
   function updateForm<K extends keyof ProjectForm>(key: K, value: ProjectForm[K]) {
@@ -450,8 +497,10 @@ export default function ProjectsPage() {
                 {filteredProjects.map((project) => (
                   <div 
                     key={project.id} 
+                    onClick={() => openDetailDrawer(project)}
                     style={{
                       ...styles.projectCard,
+                      cursor: 'pointer',
                       ...(highlightedProjectCode === project.project_code ? {
                         borderColor: '#C1121F',
                         borderWidth: '2px',
@@ -624,6 +673,122 @@ export default function ProjectsPage() {
 
               <button onClick={closeDrawer} style={styles.secondaryButton}>
                 Cancel
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {detailDrawerOpen && selectedProject && (
+        <>
+          <div onClick={closeDetailDrawer} style={styles.drawerOverlay} />
+          <div
+            style={{
+              ...styles.drawer,
+              width: isMobile ? '100%' : '460px',
+            }}
+          >
+            <div style={styles.drawerHeader}>
+              <div>
+                <div style={styles.drawerTitle}>{selectedProject.name}</div>
+                <div style={styles.drawerSubtitle}>{selectedProject.project_code}</div>
+              </div>
+              <button onClick={closeDetailDrawer} style={styles.drawerCloseButton}>
+                ✕
+              </button>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Code</div>
+              <div style={styles.drawerValue}>{selectedProject.project_code}</div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Address</div>
+              <div style={styles.drawerValue}>{selectedProject.address || '-'}</div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Status</div>
+              <div style={styles.drawerValue}>
+                <span
+                  style={{
+                    ...styles.statusPill,
+                    ...(selectedProject.is_active ? styles.activePill : styles.inactivePill),
+                  }}
+                >
+                  {selectedProject.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Created</div>
+              <div style={styles.drawerValue}>
+                {new Date(selectedProject.created_at).toLocaleDateString('en-GB', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>QR Code</div>
+              <div style={styles.drawerValue}>{getStartCode(selectedProject)}</div>
+            </div>
+
+            <div style={styles.drawerDivider} />
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Related Tickets ({projectTickets.length})</div>
+              {loadingTickets && <div style={styles.ticketListItem}>Loading...</div>}
+              {!loadingTickets && projectTickets.length === 0 && (
+                <div style={styles.ticketListItem}>No tickets</div>
+              )}
+              {!loadingTickets && projectTickets.length > 0 && (
+                <div style={styles.ticketList}>
+                  {projectTickets.slice(0, 5).map((ticket) => (
+                    <div key={ticket.id} style={styles.ticketListItem}>
+                      <div style={styles.ticketListItemRow}>
+                        <span style={styles.ticketNumber}>TKT-{ticket.ticket_number}</span>
+                        <span
+                          style={{
+                            ...styles.ticketBadge,
+                            color: ticket.status === 'CLOSED' ? '#16A34A' : '#DC2626',
+                          }}
+                        >
+                          {ticket.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {projectTickets.length > 5 && (
+                    <div style={styles.ticketListMore}>+{projectTickets.length - 5} more tickets</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div style={styles.drawerActions}>
+              <button
+                onClick={() => {
+                  closeDetailDrawer()
+                  navigateToProjectTickets(selectedProject.project_code)
+                }}
+                style={styles.primaryButton}
+              >
+                View All Tickets
+              </button>
+
+              <button
+                onClick={() => {
+                  closeDetailDrawer()
+                  openEditDrawer(selectedProject)
+                }}
+                style={styles.secondaryButton}
+              >
+                Edit Project
               </button>
             </div>
           </div>
@@ -1111,6 +1276,61 @@ const styles: Record<string, CSSProperties> = {
     color: '#B91C1C',
     margin: 0,
     fontWeight: 600,
+  },
+  drawerSection: {
+    marginBottom: '16px',
+  },
+  drawerLabel: {
+    color: '#6B7280',
+    fontSize: '12px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: '8px',
+    fontWeight: 700,
+  },
+  drawerValue: {
+    color: '#2F2F33',
+    fontSize: '15px',
+    lineHeight: 1.5,
+  },
+  drawerDivider: {
+    height: '1px',
+    background: 'rgba(0,0,0,0.04)',
+    margin: '20px 0',
+  },
+  ticketList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  ticketListItem: {
+    background: '#F9F9FA',
+    border: '1px solid rgba(0,0,0,0.04)',
+    borderRadius: '10px',
+    padding: '10px 12px',
+    fontSize: '13px',
+    color: '#6B7280',
+  },
+  ticketListItemRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  ticketNumber: {
+    fontWeight: 700,
+    color: '#2F2F33',
+  },
+  ticketBadge: {
+    fontSize: '11px',
+    fontWeight: 700,
+  },
+  ticketListMore: {
+    fontSize: '12px',
+    color: '#6B7280',
+    fontWeight: 600,
+    padding: '8px 0',
+    textAlign: 'center',
   },
 }
 
