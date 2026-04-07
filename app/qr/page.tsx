@@ -27,6 +27,8 @@ export default function QrPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [copyMessage, setCopyMessage] = useState('')
   const [isMobile, setIsMobile] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
   const qrRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
@@ -136,8 +138,32 @@ export default function QrPage() {
     router.push(`/projects?project=${encodeURIComponent(projectCode)}`)
   }
 
+  function openProjectDrawer(project: ProjectRow) {
+    setSelectedProject(project)
+    setIsDrawerOpen(true)
+  }
+
+  function closeProjectDrawer() {
+    setIsDrawerOpen(false)
+    setSelectedProject(null)
+  }
+
   return (
     <main style={styles.page}>
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
       <div
         style={{
           ...styles.shell,
@@ -269,7 +295,7 @@ export default function QrPage() {
                 const reportLink = buildReportLink(project)
 
                 return (
-                  <div key={project.id} style={styles.projectCard}>
+                  <div key={project.id} style={{ ...styles.projectCard, cursor: 'pointer' }} onClick={() => openProjectDrawer(project)}>
                     <div style={styles.projectCardTop}>
                       <div>
                         <div 
@@ -398,6 +424,95 @@ export default function QrPage() {
           )}
         </section>
       </div>
+
+      {isDrawerOpen && selectedProject && (
+        <>
+          <div
+            style={styles.drawerOverlay}
+            onClick={closeProjectDrawer}
+            aria-label="Close drawer"
+          />
+          <div
+            style={{
+              ...styles.drawerPanel,
+              width: isMobile ? '100%' : '460px',
+            }}
+          >
+            <div style={styles.drawerHeader}>
+              <div>
+                <div style={styles.drawerTitle}>{selectedProject.name}</div>
+                <div style={styles.drawerSubtitle}>{selectedProject.project_code}</div>
+              </div>
+              <button
+                onClick={closeProjectDrawer}
+                style={styles.closeButton}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={styles.drawerContent}>
+              <div style={styles.qrPreviewSection}>
+                <div
+                  ref={(el) => {
+                    if (el) qrRefs.current[selectedProject.project_code] = el
+                  }}
+                  style={styles.qrContainer}
+                >
+                  <QRCodeCanvas
+                    value={buildWhatsAppLink(selectedProject)}
+                    size={isMobile ? 160 : 200}
+                    level="H"
+                    includeMargin
+                  />
+                </div>
+              </div>
+
+              <div style={styles.drawerActionButtons}>
+                <button
+                  onClick={() => copyText(buildStartCode(selectedProject), 'START code copied!')}
+                  style={styles.actionButton}
+                >
+                  Copy START Code
+                </button>
+                <button
+                  onClick={() =>
+                    copyText(buildWhatsAppLink(selectedProject), 'WhatsApp link copied!')
+                  }
+                  style={styles.actionButton}
+                >
+                  Copy WhatsApp Link
+                </button>
+                <button
+                  onClick={() => copyText(buildReportLink(selectedProject), 'Report link copied!')}
+                  style={styles.actionButton}
+                >
+                  Copy Report Link
+                </button>
+                <button
+                  onClick={() => downloadQr(selectedProject.project_code)}
+                  style={styles.actionButton}
+                >
+                  Download QR
+                </button>
+                <a
+                  href={`/report?project=${encodeURIComponent(selectedProject.project_code)}`}
+                  style={styles.actionButtonLink}
+                >
+                  Open Report Page
+                </a>
+              </div>
+            </div>
+
+            {copyMessage && (
+              <div style={styles.drawerCopyToast}>
+                <span>✓ {copyMessage}</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </main>
   )
 }
@@ -790,5 +905,132 @@ const styles: Record<string, CSSProperties> = {
     color: '#B91C1C',
     margin: 0,
     fontWeight: 600,
+  },
+  drawerOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.4)',
+    zIndex: 998,
+    animation: 'fadeIn 0.2s ease',
+  },
+  drawerPanel: {
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: '460px',
+    background: '#FFFFFF',
+    boxShadow: '-8px 0 24px rgba(0, 0, 0, 0.1)',
+    zIndex: 999,
+    display: 'flex',
+    flexDirection: 'column',
+    animation: 'slideIn 0.3s ease',
+  },
+  drawerHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: '20px 24px',
+    borderBottom: '1px solid #E5E7EB',
+    gap: '16px',
+  },
+  drawerTitle: {
+    fontSize: '20px',
+    fontWeight: 800,
+    color: '#111827',
+    margin: 0,
+    marginBottom: '4px',
+  },
+  drawerSubtitle: {
+    fontSize: '13px',
+    color: '#6B7280',
+    margin: 0,
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  closeButton: {
+    background: 'none',
+    border: 'none',
+    fontSize: '22px',
+    color: '#6B7280',
+    cursor: 'pointer',
+    padding: '4px 8px',
+    marginTop: '-2px',
+    transition: 'color 0.2s ease',
+  },
+  drawerContent: {
+    flex: 1,
+    overflow: 'auto',
+    padding: '20px 24px',
+  },
+  qrPreviewSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '16px',
+    marginBottom: '24px',
+    paddingBottom: '16px',
+    borderBottom: '1px solid #E5E7EB',
+  },
+  qrContainer: {
+    background: '#FFFFFF',
+    border: '1px solid #E5E7EB',
+    borderRadius: '16px',
+    padding: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerActionButtons: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  actionButton: {
+    background: '#B91C1C',
+    color: '#FFFFFF',
+    border: '1px solid #B91C1C',
+    borderRadius: '10px',
+    padding: '12px 16px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '14px',
+    minHeight: '44px',
+    transition: 'all 0.2s ease',
+  },
+  actionButtonLink: {
+    background: '#B91C1C',
+    color: '#FFFFFF',
+    border: '1px solid #B91C1C',
+    borderRadius: '10px',
+    padding: '12px 16px',
+    textDecoration: 'none',
+    fontWeight: 700,
+    fontSize: '14px',
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+  },
+  drawerCopyToast: {
+    position: 'absolute',
+    bottom: '20px',
+    left: '24px',
+    right: '24px',
+    background: '#10B981',
+    color: '#FFFFFF',
+    padding: '12px 16px',
+    borderRadius: '10px',
+    fontSize: '14px',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    animation: 'slideUp 0.3s ease',
   },
 }
