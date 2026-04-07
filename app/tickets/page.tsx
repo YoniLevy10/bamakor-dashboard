@@ -53,6 +53,10 @@ export default function TicketsPage() {
   const [projectFilter, setProjectFilter] = useState('ALL')
   const [isMobile, setIsMobile] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
+  const [selectedTicket, setSelectedTicket] = useState<TicketRow | null>(null)
+  const [draftPriority, setDraftPriority] = useState<string>('')
+  const [draftStatus, setDraftStatus] = useState<string>('')
+  const [savingTicket, setSavingTicket] = useState(false)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -167,6 +171,76 @@ export default function TicketsPage() {
       alert(err.message || 'Failed to close ticket')
     } finally {
       setActionLoadingId(null)
+    }
+  }
+
+  function openTicket(ticket: TicketRow) {
+    setSelectedTicket(ticket)
+    setDraftPriority(ticket.priority || 'LOW')
+    setDraftStatus(ticket.status)
+  }
+
+  function closeDrawer() {
+    setSelectedTicket(null)
+    setDraftPriority('')
+    setDraftStatus('')
+  }
+
+  async function updatePriority(ticketId: string, priority: string) {
+    setSavingTicket(true)
+    try {
+      const response = await fetch('/api/update-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticket_id: ticketId,
+          priority: priority,
+          status: draftStatus,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update ticket')
+      }
+
+      setDraftPriority(priority)
+      await fetchData()
+    } catch (err: any) {
+      alert(err.message || 'Failed to update ticket')
+    } finally {
+      setSavingTicket(false)
+    }
+  }
+
+  async function saveTicketChanges() {
+    if (!selectedTicket) return
+
+    setSavingTicket(true)
+    try {
+      const response = await fetch('/api/update-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticket_id: selectedTicket.id,
+          priority: draftPriority,
+          status: draftStatus,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to save changes')
+      }
+
+      await fetchData()
+      closeDrawer()
+    } catch (err: any) {
+      alert(err.message || 'Failed to save changes')
+    } finally {
+      setSavingTicket(false)
     }
   }
 
@@ -421,7 +495,7 @@ export default function TicketsPage() {
 
                 <tbody>
                   {filteredTickets.map((ticket) => (
-                    <tr key={ticket.id}>
+                    <tr key={ticket.id} onClick={() => openTicket(ticket)} style={{ cursor: 'pointer' }}>
                       <td style={styles.tdStrong}>TKT-{ticket.ticket_number}</td>
 
                       <td style={styles.td}>
@@ -490,7 +564,7 @@ export default function TicketsPage() {
           {!loading && !error && filteredTickets.length > 0 && isMobile && (
             <div style={styles.mobileCards}>
               {filteredTickets.map((ticket) => (
-                <div key={ticket.id} style={styles.mobileCard}>
+                <div key={ticket.id} onClick={() => openTicket(ticket)} style={{ ...styles.mobileCard, cursor: 'pointer' }}>
                   <div style={styles.mobileCardTop}>
                     <div>
                       <div style={styles.mobileTicketNumber}>TKT-{ticket.ticket_number}</div>
@@ -557,6 +631,114 @@ export default function TicketsPage() {
           )}
         </section>
       </div>
+
+      {selectedTicket && (
+        <>
+          <div onClick={closeDrawer} style={styles.drawerOverlay} />
+          <div
+            style={{
+              ...styles.drawer,
+              ...(isMobile ? styles.drawerMobile : {}),
+              width: isMobile ? '100%' : '440px',
+            }}
+          >
+            <div style={styles.drawerHeader}>
+              <div>
+                <div style={styles.drawerTitle}>
+                  Ticket #{selectedTicket.ticket_number}
+                </div>
+                <div style={styles.drawerSubtitle}>
+                  {selectedTicket.project_code} - {selectedTicket.project_name}
+                </div>
+              </div>
+              <button onClick={closeDrawer} style={styles.drawerCloseButton}>
+                ✕
+              </button>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Description</div>
+              <div style={styles.drawerValue}>{selectedTicket.description || '-'}</div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Reporter</div>
+              <div style={styles.drawerValue}>
+                {selectedTicket.reporter_name || selectedTicket.reporter_phone || '-'}
+              </div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Status</div>
+              <select
+                value={draftStatus}
+                onChange={(e) => setDraftStatus(e.target.value)}
+                style={styles.select}
+              >
+                {statusOptions.filter((s) => s !== 'ALL').map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Priority</div>
+              <select
+                value={draftPriority}
+                onChange={(e) => setDraftPriority(e.target.value)}
+                style={styles.select}
+              >
+                <option value="LOW">LOW</option>
+                <option value="NORMAL">NORMAL</option>
+                <option value="URGENT">URGENT</option>
+              </select>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Assigned Worker</div>
+              <select
+                value={selectedTicket.assigned_worker_id || ''}
+                onChange={(e) => assignWorker(selectedTicket.id, e.target.value)}
+                style={styles.select}
+              >
+                <option value="">Unassigned</option>
+                {workers.map((worker) => (
+                  <option key={worker.id} value={worker.id}>
+                    {worker.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Created</div>
+              <div style={styles.drawerValue}>
+                {selectedTicket.created_at ? formatDate(selectedTicket.created_at) : '-'}
+              </div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Closed</div>
+              <div style={styles.drawerValue}>
+                {selectedTicket.closed_at ? formatDate(selectedTicket.closed_at) : '-'}
+              </div>
+            </div>
+
+            <div style={styles.drawerActions}>
+              <button onClick={saveTicketChanges} style={styles.primarySaveButton} disabled={savingTicket}>
+                {savingTicket ? 'Saving...' : 'Save Changes'}
+              </button>
+              {selectedTicket.status !== 'CLOSED' && (
+                <button onClick={() => closeTicket(selectedTicket.id)} style={styles.closeButton} disabled={actionLoadingId === selectedTicket.id}>
+                  {actionLoadingId === selectedTicket.id ? 'Closing...' : 'Close Ticket'}
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </main>
   )
 }
@@ -965,5 +1147,96 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '13px',
     color: '#374151',
     fontWeight: 600,
+  },
+  drawerOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.25)',
+    zIndex: 50,
+  },
+  drawer: {
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    height: '100vh',
+    background: '#FFFFFF',
+    borderLeft: '1px solid rgba(0,0,0,0.08)',
+    zIndex: 60,
+    padding: '20px',
+    overflowY: 'auto',
+    boxShadow: '-12px 0 40px rgba(0,0,0,0.08)',
+    boxSizing: 'border-box',
+  },
+  drawerMobile: {
+    borderRadius: '0',
+    padding: '16px',
+  },
+  drawerHeader: {
+    position: 'sticky',
+    top: 0,
+    background: '#FFFFFF',
+    paddingTop: '4px',
+    paddingBottom: '12px',
+    zIndex: 10,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: '16px',
+    marginBottom: '18px',
+    borderBottom: '1px solid rgba(0,0,0,0.04)',
+  },
+  drawerTitle: {
+    fontSize: '22px',
+    fontWeight: 800,
+    color: '#2F2F33',
+    marginBottom: '6px',
+  },
+  drawerSubtitle: {
+    color: '#6B6B72',
+    fontSize: '14px',
+  },
+  drawerCloseButton: {
+    background: '#F9F9FA',
+    color: '#2F2F33',
+    border: '1px solid rgba(0,0,0,0.08)',
+    borderRadius: '12px',
+    width: '40px',
+    height: '40px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    flexShrink: 0,
+  },
+  drawerSection: {
+    marginBottom: '16px',
+  },
+  drawerLabel: {
+    color: '#6B7280',
+    fontSize: '12px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: '8px',
+    fontWeight: 700,
+  },
+  drawerValue: {
+    color: '#2F2F33',
+    fontSize: '15px',
+    lineHeight: 1.5,
+  },
+  drawerActions: {
+    marginTop: '20px',
+    display: 'flex',
+    gap: '10px',
+    flexDirection: 'column',
+  },
+  primarySaveButton: {
+    background: '#111827',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '12px 16px',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    minHeight: '44px',
+    transition: 'all 0.2s ease',
   },
 }
