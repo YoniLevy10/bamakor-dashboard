@@ -1,0 +1,54 @@
+{
+  "name": "Bamakor - Property Management Dashboard",
+  "short_name": "Bamakor",
+  "description": "Professional property and project management platform with real-time ticket tracking, worker assignment, and WhatsApp integration",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#C41E3A",
+  "background_color": "#FFFFFF",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.PNG",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.PNG",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icon.PNG",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "View Tickets",
+      "short_name": "Tickets",
+      "description": "View and manage all project tickets",
+      "url": "/tickets",
+      "icons": [{"src": "/icon.PNG", "sizes": "96x96"}]
+    },
+    {
+      "name": "View Projects",
+      "short_name": "Projects",
+      "description": "Manage all projects",
+      "url": "/projects",
+      "icons": [{"src": "/icon.PNG", "sizes": "96x96"}]
+    }
+  ]
+}
