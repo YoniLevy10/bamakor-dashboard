@@ -151,7 +151,7 @@ export default function ProjectsPage() {
   async function openDetailDrawer(project: ProjectRow) {
     setSelectedProject(project)
     setDetailDrawerOpen(true)
-    await fetchProjectTickets(project.project_code)
+    await fetchProjectTickets(project.id)
   }
 
   function closeDetailDrawer() {
@@ -160,13 +160,13 @@ export default function ProjectsPage() {
     setProjectTickets([])
   }
 
-  async function fetchProjectTickets(projectCode: string) {
+  async function fetchProjectTickets(projectId: string) {
     setLoadingTickets(true)
     try {
       const { data, error } = await supabase
         .from('tickets')
         .select('id, ticket_number, status, priority')
-        .eq('project_code', projectCode)
+        .eq('project_id', projectId)
         .order('created_at', { ascending: false })
 
       if (error) throw error
