@@ -24,9 +24,17 @@ type ProjectRow = {
   project_code: string
 }
 
+type WorkerRow = {
+  id: string
+  full_name: string
+  phone: string
+  is_active: boolean
+}
+
 export default function SummaryPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([])
   const [projects, setProjects] = useState<ProjectRow[]>([])
+  const [workers, setWorkers] = useState<WorkerRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [isMobile, setIsMobile] = useState(false)
@@ -47,7 +55,7 @@ export default function SummaryPage() {
     setError('')
 
     try {
-      const [{ data: ticketsData, error: ticketsError }, { data: projectsData, error: projectsError }] =
+      const [{ data: ticketsData, error: ticketsError }, { data: projectsData, error: projectsError }, { data: workersData, error: workersError }] =
         await Promise.all([
           supabase
             .from('tickets')
@@ -61,6 +69,7 @@ export default function SummaryPage() {
               assigned_worker_id,
               created_at,
               closed_at,
+              priority,
               projects (
                 project_code,
                 name
@@ -71,10 +80,15 @@ export default function SummaryPage() {
             .from('projects')
             .select('id, name, project_code')
             .order('project_code', { ascending: true }),
+          supabase
+            .from('workers')
+            .select('id, full_name, phone, is_active')
+            .eq('is_active', true),
         ])
 
       if (ticketsError) throw ticketsError
       if (projectsError) throw projectsError
+      if (workersError) throw workersError
 
       const formattedTickets: TicketRow[] =
         (ticketsData || []).map((row: any) => ({
@@ -93,6 +107,7 @@ export default function SummaryPage() {
 
       setTickets(formattedTickets)
       setProjects((projectsData as ProjectRow[]) || [])
+      setWorkers((workersData as WorkerRow[]) || [])
     } catch (err: any) {
       setError(err.message || 'Failed to load summary')
     } finally {
@@ -148,6 +163,77 @@ export default function SummaryPage() {
       })
       .sort((a, b) => b.total - a.total)
   }, [projects, tickets])
+
+  const recentTickets = useMemo(() => {
+    return tickets.slice(0, 8)
+  }, [tickets])
+
+  const projectsRequiringAttention = useMemo(() => {
+    return projectStats
+      .filter((p) => p.open > 0 || p.assigned > 0)
+      .sort((a, b) => (b.open + b.assigned) - (a.open + a.assigned))
+      .slice(0, 6)
+  }, [projectStats])
+
+  const workerLoad = useMemo(() => {
+    return workers
+      .map((worker) => {
+        const assignedTickets = tickets.filter(
+          (t) => t.assigned_worker_id === worker.id && t.status !== 'CLOSED'
+        ).length
+        return {
+          id: worker.id,
+          full_name: worker.full_name,
+          assigned_tickets: assignedTickets,
+        }
+      })
+      .filter((w) => w.assigned_tickets > 0)
+      .sort((a, b) => b.assigned_tickets - a.assigned_tickets)
+  }, [workers, tickets])
+
+  function navigateToTickets(filter?: { status?: string; project?: string; worker?: string }) {
+    let url = '/tickets'
+    if (filter) {
+      const params = new URLSearchParams()
+      if (filter.status) params.append('status', filter.status)
+      if (filter.project) params.append('project', filter.project)
+      if (filter.worker) params.append('worker', filter.worker)
+      if (params.toString()) url += `?${params.toString()}`
+    }
+    window.location.href = url
+  }
+
+  function getStatusStyle(status: string): CSSProperties {
+    switch (status) {
+      case 'NEW':
+        return { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }
+      case 'ASSIGNED':
+        return { background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }
+      case 'IN_PROGRESS':
+        return { background: '#EEF2FF', color: '#4F46E5', border: '1px solid #C7D2FE' }
+      case 'WAITING_PARTS':
+        return { background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }
+      case 'CLOSED':
+        return { background: '#ECFDF5', color: '#16A34A', border: '1px solid #BBF7D0' }
+      default:
+        return { background: '#F3F4F6', color: '#4B5563', border: '1px solid #E5E7EB' }
+    }
+  }
+
+  function getPriorityStyle(priority?: string): CSSProperties {
+    switch ((priority || '').toUpperCase()) {
+      case 'URGENT':
+      case 'HIGH':
+        return { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }
+      case 'MEDIUM':
+      case 'NORMAL':
+        return { background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }
+      case 'LOW':
+        return { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }
+      default:
+        return { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }
+    }
+  }
 
   return (
     <main style={styles.page}>
@@ -218,45 +304,133 @@ export default function SummaryPage() {
                     : 'repeat(4, minmax(0, 1fr))',
                 }}
               >
-                <div style={styles.kpiCard}>
-                  <div style={styles.kpiLabel}>Today Opened</div>
-                  <div style={styles.kpiValue}>{summary.todayOpened}</div>
-                </div>
-
-                <div style={styles.kpiCard}>
-                  <div style={styles.kpiLabel}>Today Closed</div>
-                  <div style={styles.kpiValue}>{summary.todayClosed}</div>
-                </div>
-
-                <div style={styles.kpiCard}>
+                <button onClick={() => navigateToTickets()} style={{ ...styles.kpiCard, ...styles.kpiCardButton }}>
                   <div style={styles.kpiLabel}>Open Right Now</div>
                   <div style={styles.kpiValue}>{summary.openNow}</div>
-                </div>
+                </button>
 
-                <div style={styles.kpiCard}>
+                <button onClick={() => navigateToTickets({ status: 'ASSIGNED' })} style={{ ...styles.kpiCard, ...styles.kpiCardButton }}>
                   <div style={styles.kpiLabel}>Assigned Right Now</div>
                   <div style={styles.kpiValue}>{summary.assignedNow}</div>
-                </div>
+                </button>
 
-                <div style={styles.kpiCard}>
+                <button onClick={() => navigateToTickets()} style={{ ...styles.kpiCard, ...styles.kpiCardButton }}>
+                  <div style={styles.kpiLabel}>Today Opened</div>
+                  <div style={styles.kpiValue}>{summary.todayOpened}</div>
+                </button>
+
+                <button onClick={() => navigateToTickets()} style={{ ...styles.kpiCard, ...styles.kpiCardButton }}>
                   <div style={styles.kpiLabel}>Opened This Week</div>
                   <div style={styles.kpiValue}>{summary.weekOpened}</div>
+                </button>
+              </div>
+
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <div>
+                    <div style={styles.cardTitle}>Recent Tickets</div>
+                    <div style={styles.cardSubtitle}>Latest ticket activity</div>
+                  </div>
                 </div>
 
-                <div style={styles.kpiCard}>
-                  <div style={styles.kpiLabel}>Closed This Week</div>
-                  <div style={styles.kpiValue}>{summary.weekClosed}</div>
+                {recentTickets.length === 0 ? (
+                  <p style={styles.infoText}>No tickets found.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {recentTickets.map((ticket) => (
+                      <div
+                        key={ticket.id}
+                        onClick={() => navigateToTickets()}
+                        style={{
+                          ...styles.ticketItem,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={styles.ticketItemHeader}>
+                          <div style={styles.ticketNumber}>#{ticket.ticket_number}</div>
+                          <div style={styles.ticketProject}>{ticket.project_code}</div>
+                          <span style={{ ...styles.badge, ...getStatusStyle(ticket.status) }}>{ticket.status}</span>
+                        </div>
+                        <div style={styles.ticketDetail}>{ticket.description || '-'}</div>
+                        <div style={styles.ticketMeta}>
+                          Created: {new Date(ticket.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <div>
+                    <div style={styles.cardTitle}>Projects Requiring Attention</div>
+                    <div style={styles.cardSubtitle}>Projects with open or in-progress tickets</div>
+                  </div>
                 </div>
 
-                <div style={styles.kpiCard}>
-                  <div style={styles.kpiLabel}>Opened This Month</div>
-                  <div style={styles.kpiValue}>{summary.monthOpened}</div>
+                {projectsRequiringAttention.length === 0 ? (
+                  <p style={styles.infoText}>All projects are up to date!</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {projectsRequiringAttention.map((project) => (
+                      <div
+                        key={project.id}
+                        style={styles.projectItem}
+                      >
+                        <div style={styles.projectItemHeader}>
+                          <div>
+                            <div style={styles.projectName}>{project.name}</div>
+                            <div style={styles.projectCode}>{project.project_code}</div>
+                          </div>
+                          <div style={styles.projectStats}>
+                            <span style={{ marginRight: '12px' }}>{project.open} Open</span>
+                            <span>{project.assigned} In Progress</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => navigateToTickets({ project: project.project_code })}
+                          style={styles.smallButton}
+                        >
+                          View Tickets
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <div>
+                    <div style={styles.cardTitle}>Worker Load</div>
+                    <div style={styles.cardSubtitle}>Open tickets per worker</div>
+                  </div>
                 </div>
 
-                <div style={styles.kpiCard}>
-                  <div style={styles.kpiLabel}>Closed This Month</div>
-                  <div style={styles.kpiValue}>{summary.monthClosed}</div>
-                </div>
+                {workerLoad.length === 0 ? (
+                  <p style={styles.infoText}>No worker assignments.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {workerLoad.map((worker) => (
+                      <div
+                        key={worker.id}
+                        style={styles.workerItem}
+                      >
+                        <div style={styles.workerItemHeader}>
+                          <div style={styles.workerName}>{worker.full_name}</div>
+                          <div style={styles.workerTicketCount}>{worker.assigned_tickets} Open</div>
+                        </div>
+                        <button
+                          onClick={() => navigateToTickets({ worker: worker.id })}
+                          style={styles.smallButton}
+                        >
+                          View Assigned
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div style={styles.card}>
@@ -566,6 +740,115 @@ const styles: Record<string, CSSProperties> = {
   infoText: {
     color: '#6B7280',
     margin: 0,
+  },
+  kpiCardButton: {
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    border: 'none',
+    fontFamily: 'inherit',
+  },
+  ticketItem: {
+    background: '#F9FAFB',
+    border: '1px solid #E5E7EB',
+    borderRadius: '12px',
+    padding: '14px',
+  },
+  ticketItemHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    marginBottom: '8px',
+  },
+  ticketNumber: {
+    fontWeight: 700,
+    color: '#111827',
+    fontSize: '14px',
+  },
+  ticketProject: {
+    fontSize: '12px',
+    color: '#6B7280',
+    fontWeight: 600,
+  },
+  ticketDetail: {
+    fontSize: '13px',
+    color: '#4B5563',
+    marginBottom: '6px',
+    lineHeight: 1.4,
+  },
+  ticketMeta: {
+    fontSize: '11px',
+    color: '#9CA3AF',
+  },
+  badge: {
+    padding: '4px 8px',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: 600,
+    marginLeft: 'auto',
+    whiteSpace: 'nowrap',
+  },
+  projectItem: {
+    background: '#F9FAFB',
+    border: '1px solid #E5E7EB',
+    borderRadius: '12px',
+    padding: '14px',
+  },
+  projectItemHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '10px',
+    gap: '10px',
+  },
+  projectName: {
+    fontWeight: 700,
+    color: '#111827',
+    fontSize: '14px',
+    marginBottom: '4px',
+  },
+  projectCode: {
+    fontSize: '12px',
+    color: '#6B7280',
+    fontWeight: 600,
+  },
+  projectStats: {
+    fontSize: '13px',
+    color: '#4B5563',
+    whiteSpace: 'nowrap',
+  },
+  workerItem: {
+    background: '#F9FAFB',
+    border: '1px solid #E5E7EB',
+    borderRadius: '12px',
+    padding: '14px',
+  },
+  workerItemHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '10px',
+  },
+  workerName: {
+    fontWeight: 700,
+    color: '#111827',
+    fontSize: '14px',
+  },
+  workerTicketCount: {
+    fontSize: '13px',
+    color: '#4B5563',
+    fontWeight: 600,
+  },
+  smallButton: {
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: '12px',
+    borderRadius: '8px',
+    background: '#111827',
+    border: 'none',
+    color: '#FFFFFF',
+    cursor: 'pointer',
+    fontWeight: 700,
+    transition: 'all 0.2s ease',
   },
   errorText: {
     color: '#B91C1C',
