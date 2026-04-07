@@ -586,6 +586,9 @@ const styles: Record<string, CSSProperties> = {
     padding: '24px 16px',
     display: 'flex',
     flexDirection: 'column',
+    position: 'sticky',
+    top: 0,
+    height: '100vh',
     justifyContent: 'space-between',
   },
   sidebarBrand: {

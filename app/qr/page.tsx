@@ -416,7 +416,7 @@ const styles: Record<string, CSSProperties> = {
   sidebar: {
     background: '#FFFFFF',
     borderRight: '1px solid #E5E7EB',
-    padding: '20px 16px',
+    padding: '24px 16px',
     position: 'sticky',
     top: 0,
     height: '100vh',
