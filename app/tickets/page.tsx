@@ -51,6 +51,7 @@ export default function TicketsPage() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [priorityFilter, setPriorityFilter] = useState('ALL')
   const [projectFilter, setProjectFilter] = useState('ALL')
+  const [workerFilter, setWorkerFilter] = useState('ALL')
   const [isMobile, setIsMobile] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [selectedTicket, setSelectedTicket] = useState<TicketRow | null>(null)
@@ -66,12 +67,16 @@ export default function TicketsPage() {
   }, [])
 
   useEffect(() => {
-    // Handle project filter from URL query parameter
+    // Handle project and worker filters from URL query parameters
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       const projectParam = params.get('project')
+      const workerParam = params.get('worker')
       if (projectParam) {
         setProjectFilter(decodeURIComponent(projectParam))
+      }
+      if (workerParam) {
+        setWorkerFilter(decodeURIComponent(workerParam))
       }
     }
   }, [])
@@ -284,9 +289,12 @@ export default function TicketsPage() {
       const matchesProject =
         projectFilter === 'ALL' || ticket.project_code === projectFilter
 
-      return matchesSearch && matchesStatus && matchesPriority && matchesProject
+      const matchesWorker =
+        workerFilter === 'ALL' || ticket.assigned_worker_id === workerFilter
+
+      return matchesSearch && matchesStatus && matchesPriority && matchesProject && matchesWorker
     })
-  }, [tickets, searchTerm, statusFilter, priorityFilter, projectFilter])
+  }, [tickets, searchTerm, statusFilter, priorityFilter, projectFilter, workerFilter])
 
   const stats = useMemo(() => {
     const total = tickets.length

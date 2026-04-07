@@ -15,6 +15,15 @@ type WorkerRow = {
   client_id: string
 }
 
+type TicketRow = {
+  id: string
+  ticket_number: number
+  status: string
+  priority?: string | null
+  project_code?: string
+  project_name?: string
+}
+
 type ClientRow = {
   id: string
 }
@@ -49,6 +58,10 @@ export default function WorkersPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingWorker, setEditingWorker] = useState<WorkerRow | null>(null)
   const [form, setForm] = useState<WorkerForm>(emptyForm)
+  const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
+  const [selectedWorker, setSelectedWorker] = useState<WorkerRow | null>(null)
+  const [workerTickets, setWorkerTickets] = useState<TicketRow[]>([])
+  const [loadingWorkerTickets, setLoadingWorkerTickets] = useState(false)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -245,6 +258,61 @@ export default function WorkersPage() {
     }
   }
 
+  async function openDetailDrawer(worker: WorkerRow) {
+    setSelectedWorker(worker)
+    setDetailDrawerOpen(true)
+    await fetchWorkerTickets(worker.id)
+  }
+
+  function closeDetailDrawer() {
+    setDetailDrawerOpen(false)
+    setSelectedWorker(null)
+    setWorkerTickets([])
+  }
+
+  async function fetchWorkerTickets(workerId: string) {
+    setLoadingWorkerTickets(true)
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .select(`
+          id,
+          ticket_number,
+          status,
+          priority,
+          projects (
+            project_code,
+            name
+          )
+        `)
+        .eq('assigned_worker_id', workerId)
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (error) throw error
+
+      const mapped = (data || []).map((ticket: any) => ({
+        id: ticket.id,
+        ticket_number: ticket.ticket_number,
+        status: ticket.status,
+        priority: ticket.priority,
+        project_code: ticket.projects?.project_code || 'N/A',
+        project_name: ticket.projects?.name || 'Unknown',
+      }))
+
+      setWorkerTickets(mapped)
+    } catch (err: any) {
+      console.error('Failed to load worker tickets:', err.message)
+      setWorkerTickets([])
+    } finally {
+      setLoadingWorkerTickets(false)
+    }
+  }
+
+  function viewWorkerTickets(workerId: string) {
+    window.location.href = `/tickets?worker=${encodeURIComponent(workerId)}`
+  }
+
   const stats = useMemo(() => {
     const total = workers.length
     const active = workers.filter((w) => w.is_active).length
@@ -431,7 +499,15 @@ export default function WorkersPage() {
                 }}
               >
                 {filteredWorkers.map((worker) => (
-                  <div key={worker.id} style={styles.workerCard}>
+                  <div
+                    key={worker.id}
+                    style={{
+                      ...styles.workerCard,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onClick={() => openDetailDrawer(worker)}
+                  >
                     <div style={styles.workerTopRow}>
                       <div>
                         <div style={styles.workerName}>{worker.full_name}</div>
@@ -485,6 +561,124 @@ export default function WorkersPage() {
           </div>
         </div>
       </div>
+
+      {detailDrawerOpen && selectedWorker && (
+        <>
+          <div style={styles.drawerOverlay} onClick={closeDetailDrawer} />
+          <div
+            style={{
+              ...styles.drawer,
+              width: isMobile ? '100%' : '460px',
+            }}
+          >
+            <div style={styles.drawerHeader}>
+              <div>
+                <div style={styles.drawerTitle}>{selectedWorker.full_name}</div>
+                <div style={styles.drawerSubtitle}>{selectedWorker.role || 'No role set'}</div>
+              </div>
+              <button onClick={closeDetailDrawer} style={styles.drawerCloseButton}>
+                ✕
+              </button>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Phone</div>
+              <div style={styles.drawerValue}>{selectedWorker.phone}</div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Email</div>
+              <div style={styles.drawerValue}>{selectedWorker.email || '-'}</div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Status</div>
+              <div
+                style={{
+                  ...styles.statusPill,
+                  ...(selectedWorker.is_active ? styles.activePill : styles.inactivePill),
+                }}
+              >
+                {selectedWorker.is_active ? 'Active' : 'Inactive'}
+              </div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Created</div>
+              <div style={styles.drawerValue}>
+                {new Date(selectedWorker.created_at).toLocaleDateString('en-GB', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </div>
+            </div>
+
+            <div style={{ ...styles.drawerSection, marginTop: '24px', borderTop: '1px solid #EFEFF1', paddingTop: '16px' }}>
+              <div style={styles.drawerLabel}>Assigned Tickets</div>
+              {loadingWorkerTickets && (
+                <div style={styles.drawerValue}>Loading tickets...</div>
+              )}
+              {!loadingWorkerTickets && workerTickets.length === 0 && (
+                <div style={styles.drawerValue}>No tickets assigned</div>
+              )}
+              {!loadingWorkerTickets && workerTickets.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+                  {workerTickets.map((ticket) => (
+                    <div
+                      key={ticket.id}
+                      style={{
+                        background: '#F9FAFB',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '12px',
+                        padding: '12px',
+                        fontSize: '13px',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, marginBottom: '4px', color: '#111827' }}>
+                        #{ticket.ticket_number} - {ticket.project_code}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            ...getTicketStatusStyle(ticket.status),
+                          }}
+                        >
+                          {ticket.status}
+                        </span>
+                        <span
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            ...getTicketPriorityStyle(ticket.priority),
+                          }}
+                        >
+                          {ticket.priority || 'LOW'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={styles.drawerActions}>
+              <button
+                onClick={() => viewWorkerTickets(selectedWorker.id)}
+                style={{ ...styles.primaryButton, width: '100%' }}
+              >
+                View Assigned Tickets
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {drawerOpen && (
         <>
@@ -579,6 +773,38 @@ export default function WorkersPage() {
       )}
     </main>
   )
+}
+
+function getTicketStatusStyle(status: string): CSSProperties {
+  switch (status) {
+    case 'NEW':
+      return { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }
+    case 'ASSIGNED':
+      return { background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }
+    case 'IN_PROGRESS':
+      return { background: '#EEF2FF', color: '#4F46E5', border: '1px solid #C7D2FE' }
+    case 'WAITING_PARTS':
+      return { background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }
+    case 'CLOSED':
+      return { background: '#ECFDF5', color: '#16A34A', border: '1px solid #BBF7D0' }
+    default:
+      return { background: '#F3F4F6', color: '#4B5563', border: '1px solid #E5E7EB' }
+  }
+}
+
+function getTicketPriorityStyle(priority?: string | null): CSSProperties {
+  switch ((priority || '').toUpperCase()) {
+    case 'URGENT':
+    case 'HIGH':
+      return { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }
+    case 'MEDIUM':
+    case 'NORMAL':
+      return { background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }
+    case 'LOW':
+      return { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }
+    default:
+      return { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }
+  }
 }
 
 const styles: Record<string, CSSProperties> = {
@@ -1029,6 +1255,24 @@ const styles: Record<string, CSSProperties> = {
     gap: '10px',
     flexWrap: 'wrap',
     marginTop: '8px',
+  },
+  drawerSection: {
+    marginBottom: '16px',
+  },
+  drawerLabel: {
+    display: 'block',
+    fontSize: '12px',
+    color: '#6B7280',
+    fontWeight: 700,
+    marginBottom: '8px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  drawerValue: {
+    fontSize: '14px',
+    color: '#2F2F33',
+    lineHeight: 1.5,
+    wordBreak: 'break-word',
   },
   infoText: {
     color: '#6B7280',
