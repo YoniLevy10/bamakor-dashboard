@@ -19,7 +19,7 @@ function parseStartCode(text: string) {
 // Search for projects by free-text building/address
 async function searchProjectsByBuilding(searchText: string, supabaseAdmin: any) {
   const trimmed = searchText.trim()
-  
+
   // Require minimum 2 characters to search
   if (trimmed.length < 2) {
     return []
@@ -29,7 +29,7 @@ async function searchProjectsByBuilding(searchText: string, supabaseAdmin: any) 
 
   const { data: projects, error } = await supabaseAdmin
     .from('projects')
-    .select('id, name, project_code')
+    .select('id, name, project_code, address')
     .order('project_code', { ascending: true })
 
   if (error) {
@@ -37,15 +37,90 @@ async function searchProjectsByBuilding(searchText: string, supabaseAdmin: any) 
     return []
   }
 
-  // Filter projects by name match (never expose full list)
+  // Filter projects by name, address, or code match (never expose full list)
   const matches = (projects || [])
     .filter((p: any) =>
-      p.name.toLowerCase().includes(lowerSearch) ||
-      p.project_code.toLowerCase().includes(lowerSearch)
+      p.name?.toLowerCase().includes(lowerSearch) ||
+      p.address?.toLowerCase().includes(lowerSearch) ||
+      p.project_code?.toLowerCase().includes(lowerSearch)
     )
     .slice(0, 3) // Max 3 results to prevent data leakage
 
   return matches
+}
+
+// Create pending selection state for multi-match scenario
+async function createPendingSelection(
+  phoneNumber: string,
+  candidateProjects: any[],
+  supabaseAdmin: any
+) {
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
+
+  const { error } = await supabaseAdmin.from('pending_selections').insert({
+    phone_number: phoneNumber,
+    candidate_projects: candidateProjects,
+    created_at: new Date().toISOString(),
+    expires_at: expiresAt,
+  })
+
+  if (error) {
+    console.error('❌ Error creating pending selection:', error)
+    return null
+  }
+
+  return true
+}
+
+// Get pending selection for a phone number
+async function getPendingSelection(phoneNumber: string, supabaseAdmin: any) {
+  const { data, error } = await supabaseAdmin
+    .from('pending_selections')
+    .select('id, candidate_projects, created_at, expires_at')
+    .eq('phone_number', phoneNumber)
+    .maybeSingle()
+
+  if (error) {
+    console.error('⚠️ Error fetching pending selection:', error)
+    return null
+  }
+
+  if (!data) {
+    return null
+  }
+
+  // Check if expired
+  if (new Date(data.expires_at) < new Date()) {
+    console.log('⏰ Pending selection expired, clearing it')
+    await clearPendingSelection(phoneNumber, supabaseAdmin)
+    return null
+  }
+
+  return data
+}
+
+// Clear pending selection for a phone number
+async function clearPendingSelection(phoneNumber: string, supabaseAdmin: any) {
+  const { error } = await supabaseAdmin
+    .from('pending_selections')
+    .delete()
+    .eq('phone_number', phoneNumber)
+
+  if (error) {
+    console.error('⚠️ Error clearing pending selection:', error)
+  }
+}
+
+// Check if message is a valid numeric selection (1, 2, or 3)
+function isNumericSelection(text: string): number | null {
+  const trimmed = text.trim()
+  const num = parseInt(trimmed, 10)
+
+  if (!isNaN(num) && num >= 1 && num <= 3 && trimmed === String(num)) {
+    return num
+  }
+
+  return null
 }
 
 export async function GET(req: NextRequest) {
@@ -228,8 +303,115 @@ export async function POST(req: NextRequest) {
     }
 
     if (!session) {
-      // STEP 2.5: FREE-TEXT BUILDING SEARCH FALLBACK (when no active session)
-      console.log('ℹ️ No active session found. Attempting free-text building search...')
+      // STEP 2.5: PENDING SELECTION HANDLING (user replies with number 1/2/3)
+      const numericSelection = isNumericSelection(textBody)
+      const pendingSelection = await getPendingSelection(from, supabaseAdmin)
+
+      if (numericSelection && pendingSelection) {
+        // User selected a valid number and pending selection exists
+        console.log(`✅ User selected option: ${numericSelection}`)
+
+        const candidates = pendingSelection.candidate_projects || []
+        const selectedIndex = numericSelection - 1
+
+        if (selectedIndex >= 0 && selectedIndex < candidates.length) {
+          const selectedProject = candidates[selectedIndex]
+          console.log('✅ Creating session for selected building:', selectedProject.name)
+
+          const { data: createdSession, error: sessionCreateError } = await supabaseAdmin
+            .from('sessions')
+            .insert({
+              phone_number: from,
+              project_id: selectedProject.id,
+              is_active: true,
+              active_ticket_id: null,
+              last_activity_at: new Date().toISOString(),
+            })
+            .select()
+            .single()
+
+          if (sessionCreateError) {
+            console.error('❌ Error creating session from selection:', sessionCreateError)
+            return NextResponse.json(
+              { error: 'Session creation failed' },
+              { status: 500 }
+            )
+          }
+
+          // Clear pending selection
+          await clearPendingSelection(from, supabaseAdmin)
+
+          // Send confirmation
+          try {
+            await sendWhatsAppTextMessage(
+              from,
+              `בחרנו את הבניין המתאים. אנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+            )
+          } catch (sendError) {
+            console.error('⚠️ Failed to send selection confirmation:', sendError)
+          }
+
+          return NextResponse.json(
+            {
+              received: true,
+              type: 'selection_confirmed',
+              from,
+              projectId: selectedProject.id,
+              sessionId: createdSession.id,
+            },
+            { status: 200 }
+          )
+        }
+      }
+
+      // INVALID NUMERIC SELECTION (number outside range while pending exists)
+      if (numericSelection && pendingSelection) {
+        console.log(`⚠️ Invalid selection (out of range): ${numericSelection}`)
+
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            `אנא השיבו רק עם מספר האפשרות המתאים: 1, 2 או 3.`
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send invalid-selection message:', sendError)
+        }
+
+        return NextResponse.json(
+          {
+            received: true,
+            type: 'invalid_selection',
+            from,
+          },
+          { status: 200 }
+        )
+      }
+
+      // If there's a pending selection but message is NOT numeric, send reminder
+      if (pendingSelection && !numericSelection) {
+        console.log('⚠️ Pending selection exists but message is not numeric')
+
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            `לא הבנו את התשובה שלכם. אנא השיבו רק עם מספר האפשרות: 1, 2 או 3.`
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send pending-reminder message:', sendError)
+        }
+
+        return NextResponse.json(
+          {
+            received: true,
+            type: 'pending_reminder',
+            from,
+          },
+          { status: 200 }
+        )
+      }
+
+      // NO PENDING SELECTION: Do building search
+      console.log('ℹ️ No active session and no pending selection. Attempting building search...')
 
       const searchResults = await searchProjectsByBuilding(textBody, supabaseAdmin)
 
@@ -304,15 +486,46 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      // Multiple matches (2-3) - send list with project codes
+      // Multiple matches (2-3) - store pending selection and send numbered list
       console.log(`⚠️ Found ${searchResults.length} matching buildings`)
 
+      // Create pending selection state
+      const pendingCreated = await createPendingSelection(
+        from,
+        searchResults,
+        supabaseAdmin
+      )
+
+      if (!pendingCreated) {
+        console.error('⚠️ Failed to create pending selection, sending fallback message')
+
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'תקלה טכנית. אנא סרקו את קוד ה-QR בבניין או פנו למנהלת הבניין.'
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send error message:', sendError)
+        }
+
+        return NextResponse.json(
+          {
+            received: true,
+            type: 'search_error',
+            from,
+          },
+          { status: 200 }
+        )
+      }
+
+      // Build and send numbered list
       let matchList = 'מצאנו כמה בניינים תואמים:\n\n'
       searchResults.forEach((project: any, index: number) => {
-        matchList += `${index + 1}. ${project.name} [${project.project_code}]\n`
+        const addressText = project.address ? ` (${project.address})` : ''
+        matchList += `${index + 1}. ${project.name}${addressText}\n`
       })
       matchList +=
-        '\n📌 אנא חזרו לדף ההתחלה, סרקו את קוד ה-QR של הבניין הנכון, או פנו למנהלת הבניין.'
+        '\n📌 להמשך, השיבו רק עם מספר האפשרות: 1, 2 או 3'
 
       try {
         await sendWhatsAppTextMessage(from, matchList)
