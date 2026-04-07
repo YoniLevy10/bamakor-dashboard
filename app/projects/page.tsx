@@ -657,6 +657,7 @@ const styles: Record<string, CSSProperties> = {
     position: 'sticky',
     top: 0,
     height: '100vh',
+    justifyContent: 'space-between',
   },
   sidebarBrand: {
     display: 'flex',

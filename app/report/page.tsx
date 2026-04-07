@@ -1,22 +1,67 @@
 'use client'
 
 import Link from 'next/link'
-import { Suspense, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+
+type ProjectRow = {
+  id: string
+  name: string
+  project_code: string
+}
 
 function ReportPageContent() {
   const searchParams = useSearchParams()
-  const projectCode = (searchParams.get('project') || '').toUpperCase()
+  const paramProjectCode = (searchParams.get('project') || '').toUpperCase()
 
   const [description, setDescription] = useState('')
   const [reporterName, setReporterName] = useState('')
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [projects, setProjects] = useState<ProjectRow[]>([])
+  const [selectedProjectCode, setSelectedProjectCode] = useState(paramProjectCode)
+  const [searchInput, setSearchInput] = useState('')
+  const [showDropdown, setShowDropdown] = useState(false)
+
+  useEffect(() => {
+    async function loadProjects() {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, project_code')
+        .order('project_code', { ascending: true })
+
+      if (!error && data) {
+        setProjects((data as ProjectRow[]) || [])
+      }
+    }
+
+    loadProjects()
+  }, [])
+
+  // Only search if input is 2+ characters
+  const searchResults = useMemo(() => {
+    if (searchInput.trim().length < 2) return []
+    
+    const lowerSearch = searchInput.toLowerCase()
+    return projects.filter((project) =>
+      project.name.toLowerCase().includes(lowerSearch) ||
+      project.project_code.toLowerCase().includes(lowerSearch)
+    )
+  }, [searchInput, projects])
+
+  // Auto-select if exactly 1 result
+  useEffect(() => {
+    if (searchResults.length === 1) {
+      setSelectedProjectCode(searchResults[0].project_code)
+      setShowDropdown(false)
+    }
+  }, [searchResults])
 
   const canSubmit = useMemo(() => {
-    return Boolean(projectCode && description.trim().length >= 3)
-  }, [projectCode, description])
+    return Boolean(selectedProjectCode && description.trim().length >= 3)
+  }, [selectedProjectCode, description])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -24,8 +69,8 @@ function ReportPageContent() {
     setSuccessMessage('')
     setErrorMessage('')
 
-    if (!projectCode) {
-      setErrorMessage('Missing project code.')
+    if (!selectedProjectCode) {
+      setErrorMessage('Please select a building.')
       return
     }
 
@@ -43,7 +88,7 @@ function ReportPageContent() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          project_code: projectCode,
+          project_code: selectedProjectCode,
           description: description.trim(),
           reporter_name: reporterName.trim() || null,
           source: 'web_form',
@@ -61,12 +106,18 @@ function ReportPageContent() {
       )
       setDescription('')
       setReporterName('')
+      setSelectedProjectCode('')
+      setSearchInput('')
     } catch (err: any) {
       setErrorMessage(err.message || 'Something went wrong.')
     } finally {
       setLoading(false)
     }
   }
+
+  const selectedProject = selectedProjectCode
+    ? projects.find((p) => p.project_code === selectedProjectCode)
+    : null
 
   return (
     <main style={styles.page}>
@@ -87,14 +138,67 @@ function ReportPageContent() {
             </p>
           </div>
 
-          <div style={styles.projectInfo}>
-            <span style={styles.projectLabel}>Project Code</span>
-            <span style={styles.projectValue}>{projectCode || 'Not provided'}</span>
-          </div>
+          {paramProjectCode && selectedProject ? (
+            <div style={styles.projectInfo}>
+              <span style={styles.projectLabel}>Building</span>
+              <span style={styles.projectValue}>{selectedProject.name}</span>
+            </div>
+          ) : (
+            <div style={styles.field}>
+              <label htmlFor="buildingSearch" style={styles.label}>
+                Search Building
+              </label>
+              <div style={styles.searchContainer}>
+                <input
+                  id="buildingSearch"
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value)
+                    setShowDropdown(true)
+                  }}
+                  onFocus={() => setShowDropdown(true)}
+                  placeholder="Type building name or address (min 2 characters)"
+                  style={styles.input}
+                />
+                {showDropdown && searchInput.trim().length >= 2 && (
+                  <div style={styles.dropdown}>
+                    {searchResults.length === 0 ? (
+                      <div style={styles.dropdownItem}>No buildings found</div>
+                    ) : (
+                      searchResults.slice(0, 5).map((project) => (
+                        <button
+                          key={project.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProjectCode(project.project_code)
+                            setSearchInput(project.name)
+                            setShowDropdown(false)
+                          }}
+                          style={styles.dropdownItem}
+                        >
+                          <div style={styles.dropdownItemName}>{project.name}</div>
+                          <div style={styles.dropdownItemCode}>{project.project_code}</div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+                {searchInput.trim().length >= 2 && searchResults.length === 1 && (
+                  <div style={styles.autoSelectNote}>✓ Auto-selected: {searchResults[0].name}</div>
+                )}
+              </div>
+              {selectedProjectCode && !paramProjectCode && (
+                <div style={styles.selectedLabel}>
+                  Selected: <strong>{selectedProject?.name || selectedProjectCode}</strong>
+                </div>
+              )}
+            </div>
+          )}
 
-          {!projectCode && (
-            <div style={styles.errorBox}>
-              This page is missing a project code. Please scan the QR code again.
+          {!selectedProjectCode && !paramProjectCode && searchInput.trim().length === 0 && (
+            <div style={styles.infoBox}>
+              Start typing the building name or address to search.
             </div>
           )}
 
@@ -263,6 +367,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     color: '#374151',
   },
+  searchContainer: {
+    position: 'relative',
+    width: '100%',
+  },
   input: {
     width: '100%',
     padding: '14px 16px',
@@ -276,6 +384,64 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: '44px',
     display: 'flex',
     alignItems: 'center',
+  },
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    background: '#FFFFFF',
+    border: '1px solid #D1D5DB',
+    borderTop: 'none',
+    borderRadius: '0 0 12px 12px',
+    boxShadow: '0 8px 16px rgba(0,0,0,0.08)',
+    maxHeight: '240px',
+    overflowY: 'auto',
+    zIndex: 10,
+  },
+  dropdownItem: {
+    display: 'block',
+    width: '100%',
+    textAlign: 'left',
+    padding: '12px 16px',
+    background: 'none',
+    border: 'none',
+    borderBottom: '1px solid #F3F4F6',
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
+  },
+  dropdownItemName: {
+    fontSize: '14px',
+    fontWeight: 700,
+    color: '#111827',
+    marginBottom: '4px',
+  },
+  dropdownItemCode: {
+    fontSize: '12px',
+    color: '#6B7280',
+  },
+  autoSelectNote: {
+    fontSize: '13px',
+    color: '#059669',
+    fontWeight: 600,
+    marginTop: '8px',
+  },
+  selectedLabel: {
+    fontSize: '13px',
+    color: '#374151',
+    marginTop: '8px',
+    padding: '8px 12px',
+    background: '#F9FAFB',
+    borderRadius: '8px',
+  },
+  infoBox: {
+    background: '#F0F9FF',
+    color: '#0369A1',
+    border: '1px solid #BAE6FD',
+    borderRadius: '12px',
+    padding: '14px 16px',
+    marginBottom: '16px',
+    fontSize: '14px',
   },
   textarea: {
     width: '100%',
@@ -303,6 +469,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    transition: 'all 0.2s ease',
   },
   successBox: {
     background: '#ECFDF5',

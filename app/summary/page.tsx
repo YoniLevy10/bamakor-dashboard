@@ -332,6 +332,7 @@ const styles: Record<string, CSSProperties> = {
     position: 'sticky',
     top: 0,
     height: '100vh',
+    justifyContent: 'space-between',
   },
   sidebarBrand: {
     display: 'flex',
@@ -443,6 +444,7 @@ const styles: Record<string, CSSProperties> = {
     color: '#2F2F33',
     cursor: 'pointer',
     fontWeight: 700,
+    transition: 'all 0.2s ease',
   },
   secondaryLinkButton: {
     padding: '10px 14px',
@@ -456,6 +458,7 @@ const styles: Record<string, CSSProperties> = {
     textDecoration: 'none',
     display: 'inline-flex',
     alignItems: 'center',
+    transition: 'all 0.2s ease',
   },
   statsGrid: {
     display: 'grid',

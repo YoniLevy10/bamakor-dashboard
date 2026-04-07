@@ -586,6 +586,7 @@ const styles: Record<string, CSSProperties> = {
     padding: '24px 16px',
     display: 'flex',
     flexDirection: 'column',
+    justifyContent: 'space-between',
   },
   sidebarBrand: {
     display: 'flex',
@@ -847,6 +848,7 @@ const styles: Record<string, CSSProperties> = {
     cursor: 'pointer',
     fontWeight: 700,
     fontSize: '13px',
+    transition: 'all 0.2s ease',
   },
   doneText: {
     color: '#16A34A',
@@ -890,6 +892,7 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: '18px',
     padding: '16px',
     boxShadow: '0 8px 24px rgba(17, 24, 39, 0.04)',
+    transition: 'all 0.2s ease',
   },
   mobileCardTop: {
     display: 'flex',

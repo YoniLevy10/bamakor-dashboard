@@ -1381,6 +1381,7 @@ const styles: Record<string, CSSProperties> = {
     position: 'sticky',
     top: 0,
     height: '100vh',
+    justifyContent: 'space-between',
   },
   sidebarBrand: {
     display: 'flex',
@@ -1531,6 +1532,7 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    transition: 'all 0.2s ease',
   },
   secondaryButtonSmall: {
     padding: '8px 10px',
@@ -1545,6 +1547,7 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    transition: 'all 0.2s ease',
   },
   primarySaveButton: {
     background: '#111827',
@@ -1554,6 +1557,7 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: '10px',
     cursor: 'pointer',
     fontWeight: 700,
+    transition: 'all 0.2s ease',
   },
   mobileMenuCard: {
     background: '#FFFFFF',
@@ -1617,6 +1621,7 @@ const styles: Record<string, CSSProperties> = {
     textAlign: 'left',
     cursor: 'pointer',
     minWidth: 0,
+    transition: 'all 0.2s ease',
   },
   kpiCardMobile: {
     padding: '18px 14px',
@@ -1688,6 +1693,7 @@ const styles: Record<string, CSSProperties> = {
     textAlign: 'left',
     cursor: 'pointer',
     flexShrink: 0,
+    transition: 'all 0.2s ease',
   },
   projectMiniCardMobile: {
     minWidth: '140px',
@@ -1780,6 +1786,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '13px',
     display: 'inline-flex',
     alignItems: 'center',
+    transition: 'all 0.2s ease',
   },
   card: {
     background: '#FFFFFF',
@@ -1925,6 +1932,7 @@ const styles: Record<string, CSSProperties> = {
     cursor: 'pointer',
     fontWeight: 700,
     boxShadow: '0 6px 18px rgba(193, 18, 31, 0.18)',
+    transition: 'all 0.2s ease',
   },
   closedText: {
     color: '#166534',
@@ -1939,6 +1947,7 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: '12px',
     cursor: 'pointer',
     boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
+    transition: 'all 0.2s ease',
   },
   mobileCardHeader: {
     display: 'flex',
