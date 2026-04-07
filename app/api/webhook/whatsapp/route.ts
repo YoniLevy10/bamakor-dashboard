@@ -16,6 +16,38 @@ function parseStartCode(text: string) {
   }
 }
 
+// Search for projects by free-text building/address
+async function searchProjectsByBuilding(searchText: string, supabaseAdmin: any) {
+  const trimmed = searchText.trim()
+  
+  // Require minimum 2 characters to search
+  if (trimmed.length < 2) {
+    return []
+  }
+
+  const lowerSearch = trimmed.toLowerCase()
+
+  const { data: projects, error } = await supabaseAdmin
+    .from('projects')
+    .select('id, name, project_code')
+    .order('project_code', { ascending: true })
+
+  if (error) {
+    console.error('❌ Error searching projects:', error)
+    return []
+  }
+
+  // Filter projects by name match (never expose full list)
+  const matches = (projects || [])
+    .filter((p: any) =>
+      p.name.toLowerCase().includes(lowerSearch) ||
+      p.project_code.toLowerCase().includes(lowerSearch)
+    )
+    .slice(0, 3) // Max 3 results to prevent data leakage
+
+  return matches
+}
+
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
   const mode = searchParams.get('hub.mode')
@@ -196,12 +228,104 @@ export async function POST(req: NextRequest) {
     }
 
     if (!session) {
-      console.log('ℹ️ No active session found. Ignoring free text for now.')
+      // STEP 2.5: FREE-TEXT BUILDING SEARCH FALLBACK (when no active session)
+      console.log('ℹ️ No active session found. Attempting free-text building search...')
+
+      const searchResults = await searchProjectsByBuilding(textBody, supabaseAdmin)
+
+      if (searchResults.length === 0) {
+        // No matches found - send safe error message
+        console.log('❌ No building matches found for search:', textBody)
+
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'לא הצלחנו לזהות את הבניין. אנא:\n1. סרקו את קוד ה-QR בבניין, או\n2. פנו למנהלת הבניין ודרשו את קוד הגישה.'
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send no-match message:', sendError)
+        }
+
+        return NextResponse.json(
+          {
+            received: true,
+            type: 'search_no_match',
+            from,
+          },
+          { status: 200 }
+        )
+      }
+
+      if (searchResults.length === 1) {
+        // Exactly 1 match - auto-create session
+        const matchedProject = searchResults[0]
+        console.log('✅ Found 1 matching building:', matchedProject.name)
+
+        const { data: createdSession, error: sessionCreateError } = await supabaseAdmin
+          .from('sessions')
+          .insert({
+            phone_number: from,
+            project_id: matchedProject.id,
+            is_active: true,
+            active_ticket_id: null,
+            last_activity_at: new Date().toISOString(),
+          })
+          .select()
+          .single()
+
+        if (sessionCreateError) {
+          console.error('❌ Error creating session from search match:', sessionCreateError)
+          return NextResponse.json(
+            { error: 'Session creation failed' },
+            { status: 500 }
+          )
+        }
+
+        // Send confirmation message with project name
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            `מצאנו את הבניין: ${matchedProject.name}\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send search-match confirmation:', sendError)
+        }
+
+        return NextResponse.json(
+          {
+            received: true,
+            type: 'search_auto_match',
+            from,
+            projectId: matchedProject.id,
+            sessionId: createdSession.id,
+            buildingName: matchedProject.name,
+          },
+          { status: 200 }
+        )
+      }
+
+      // Multiple matches (2-3) - send list with project codes
+      console.log(`⚠️ Found ${searchResults.length} matching buildings`)
+
+      let matchList = 'מצאנו כמה בניינים תואמים:\n\n'
+      searchResults.forEach((project: any, index: number) => {
+        matchList += `${index + 1}. ${project.name} [${project.project_code}]\n`
+      })
+      matchList +=
+        '\n📌 אנא חזרו לדף ההתחלה, סרקו את קוד ה-QR של הבניין הנכון, או פנו למנהלת הבניין.'
+
+      try {
+        await sendWhatsAppTextMessage(from, matchList)
+      } catch (sendError) {
+        console.error('⚠️ Failed to send multi-match list:', sendError)
+      }
+
       return NextResponse.json(
         {
           received: true,
-          type: 'no_active_session',
+          type: 'search_multiple_matches',
           from,
+          matchCount: searchResults.length,
         },
         { status: 200 }
       )
