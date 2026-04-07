@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   },
   manifest: "/manifest.json",
   icons: {
-    icon: "/icon.PNG",
+    icon: "/icon.png",
     apple: "/apple-icon.png",
   },
   openGraph: {
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
     description: "Professional property and project management platform",
     images: [
       {
-        url: "/icon.PNG",
+        url: "/icon.png",
         width: 512,
         height: 512,
         alt: "Bamakor Logo",
