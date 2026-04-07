@@ -422,7 +422,7 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            'לא הצלחנו לזהות את הבניין. אנא:\n1. סרקו את קוד ה-QR בבניין, או\n2. פנו למנהלת הבניין ודרשו את קוד הגישה.'
+            'לא הצלחנו לזהות את הבניין.\n\n📍 כדי שנוכל לאתר אותו, כתבו את כתובת הבניין (רחוב ומספר)\n\nאו:\n1. סרקו את קוד ה-QR בבניין\n2. פנו למנהלת הבניין לקבלת קוד הגישה'
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send no-match message:', sendError)
