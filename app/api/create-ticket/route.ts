@@ -53,6 +53,7 @@ async function uploadAttachments(
           file_name: file.name,
           file_url: filePath,
           mime_type: file.type,
+          attachment_type: 'web_upload',
         })
 
       if (dbError) {

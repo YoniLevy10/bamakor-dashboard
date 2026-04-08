@@ -232,7 +232,9 @@ export async function POST(req: NextRequest) {
               mediaData.fileName,
               uploadResult.filePath,
               uploadResult.fileSize,
-              mediaData.mimeType
+              mediaData.mimeType,
+              mediaId,
+              'whatsapp_image'
             )
 
             if (attachmentCreated) {

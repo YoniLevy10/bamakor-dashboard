@@ -138,7 +138,9 @@ export async function createAttachmentRecord(
   fileName: string,
   filePath: string,
   fileSize: number,
-  mimeType: string
+  mimeType: string,
+  mediaId?: string,
+  attachmentType: string = 'whatsapp_image'
 ): Promise<boolean> {
   try {
     const { error: dbError } = await supabaseAdmin
@@ -148,6 +150,8 @@ export async function createAttachmentRecord(
         file_name: fileName,
         file_url: filePath,
         mime_type: mimeType,
+        attachment_type: attachmentType,
+        whatsapp_media_id: mediaId || null,
       })
 
     if (dbError) {
