@@ -51,8 +51,7 @@ async function uploadAttachments(
         .insert({
           ticket_id: ticketId,
           file_name: file.name,
-          file_path: filePath,
-          file_size: file.size,
+          file_url: filePath,
           mime_type: file.type,
         })
 

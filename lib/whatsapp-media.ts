@@ -146,8 +146,7 @@ export async function createAttachmentRecord(
       .insert({
         ticket_id: ticketId,
         file_name: fileName,
-        file_path: filePath,
-        file_size: fileSize,
+        file_url: filePath,
         mime_type: mimeType,
       })
 
