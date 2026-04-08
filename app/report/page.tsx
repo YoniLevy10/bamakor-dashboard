@@ -24,6 +24,12 @@ function ReportPageContent() {
   const [selectedProjectCode, setSelectedProjectCode] = useState(paramProjectCode)
   const [searchInput, setSearchInput] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [imageUploadError, setImageUploadError] = useState('')
+
+  const SUPPORTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+  const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+  const MAX_FILES = 3
 
   useEffect(() => {
     async function loadProjects() {
@@ -63,11 +69,41 @@ function ReportPageContent() {
     return Boolean(selectedProjectCode && description.trim().length >= 3)
   }, [selectedProjectCode, description])
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    setImageUploadError('')
+
+    // Validate file count
+    if (selectedFiles.length + files.length > MAX_FILES) {
+      setImageUploadError(`Maximum ${MAX_FILES} images allowed`)
+      return
+    }
+
+    // Validate each file
+    for (const file of files) {
+      if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
+        setImageUploadError('Only JPG, PNG, and WebP images are supported')
+        return
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        setImageUploadError(`File "${file.name}" is too large (max 5MB)`)
+        return
+      }
+    }
+
+    setSelectedFiles([...selectedFiles, ...files])
+  }
+
+  function removeFile(indexToRemove: number) {
+    setSelectedFiles(selectedFiles.filter((_, i) => i !== indexToRemove))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
     setSuccessMessage('')
     setErrorMessage('')
+    setImageUploadError('')
 
     if (!selectedProjectCode) {
       setErrorMessage('Please select a building.')
@@ -82,17 +118,20 @@ function ReportPageContent() {
     setLoading(true)
 
     try {
+      const formData = new FormData()
+      formData.append('project_code', selectedProjectCode)
+      formData.append('description', description.trim())
+      formData.append('reporter_name', reporterName.trim() || '')
+      formData.append('source', 'web_form')
+
+      // Add selected image files
+      selectedFiles.forEach((file) => {
+        formData.append('attachments', file)
+      })
+
       const response = await fetch('/api/create-ticket', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          project_code: selectedProjectCode,
-          description: description.trim(),
-          reporter_name: reporterName.trim() || null,
-          source: 'web_form',
-        }),
+        body: formData,
       })
 
       const result = await response.json()
@@ -101,13 +140,19 @@ function ReportPageContent() {
         throw new Error(result.error || 'Failed to create ticket')
       }
 
-      setSuccessMessage(
-        `The issue was submitted successfully. Ticket number: ${result.ticketNumber}`
-      )
+      let successMsg = `The issue was submitted successfully. Ticket number: ${result.ticketNumber}`
+      
+      // Show warning if some images failed but ticket was created
+      if (result.imageUploadWarning) {
+        successMsg += '\n⚠️ ' + result.imageUploadWarning
+      }
+
+      setSuccessMessage(successMsg)
       setDescription('')
       setReporterName('')
       setSelectedProjectCode('')
       setSearchInput('')
+      setSelectedFiles([])
     } catch (err: any) {
       setErrorMessage(err.message || 'Something went wrong.')
     } finally {
@@ -232,6 +277,45 @@ function ReportPageContent() {
                 style={styles.textarea}
                 rows={6}
               />
+            </div>
+
+            <div style={styles.field}>
+              <label htmlFor="images" style={styles.label}>
+                Upload Images (optional)
+              </label>
+              <p style={styles.fieldHint}>
+                Upload up to {MAX_FILES} photos to help describe the issue. JPG, PNG, WebP max 5MB each.
+              </p>
+              <input
+                id="images"
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleFileSelect}
+                style={styles.fileInput}
+              />
+              {imageUploadError && <div style={styles.errorBox}>{imageUploadError}</div>}
+              {selectedFiles.length > 0 && (
+                <div style={styles.filePreviewContainer}>
+                  {selectedFiles.map((file, idx) => (
+                    <div key={idx} style={styles.filePreview}>
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={`Preview ${idx + 1}`}
+                        style={styles.filePreviewImg}
+                      />
+                      <div style={styles.filePreviewName}>{file.name}</div>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(idx)}
+                        style={styles.fileRemoveButton}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <button
@@ -502,5 +586,63 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#111827',
     fontWeight: 700,
     textDecoration: 'none',
+  },
+  fieldHint: {
+    fontSize: '13px',
+    color: '#6B7280',
+    margin: '8px 0 12px 0',
+  },
+  fileInput: {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: '12px',
+    border: '2px dashed #D1D5DB',
+    background: '#F9FAFB',
+    fontSize: '14px',
+    color: '#111827',
+    cursor: 'pointer',
+    boxSizing: 'border-box',
+  },
+  filePreviewContainer: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+    gap: '12px',
+    marginTop: '12px',
+  },
+  filePreview: {
+    position: 'relative',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    border: '1px solid #E5E7EB',
+    backgroundColor: '#F9FAFB',
+  },
+  filePreviewImg: {
+    width: '100%',
+    height: '100px',
+    objectFit: 'cover',
+  },
+  filePreviewName: {
+    fontSize: '11px',
+    padding: '4px 6px',
+    color: '#6B7280',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  fileRemoveButton: {
+    position: 'absolute',
+    top: '4px',
+    right: '4px',
+    background: 'rgba(0,0,0,0.6)',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '4px',
+    width: '24px',
+    height: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    fontSize: '16px',
   },
 }

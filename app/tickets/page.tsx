@@ -30,6 +30,16 @@ type TicketRow = {
     | null
 }
 
+type AttachmentRow = {
+  id: string
+  ticket_id: string
+  file_name: string
+  file_path: string
+  file_size: number
+  mime_type: string
+  created_at: string
+}
+
 type WorkerRow = {
   id: string
   full_name: string
@@ -58,6 +68,9 @@ export default function TicketsPage() {
   const [draftPriority, setDraftPriority] = useState<string>('')
   const [draftStatus, setDraftStatus] = useState<string>('')
   const [savingTicket, setSavingTicket] = useState(false)
+  const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentRow[]>([])
+  const [loadingAttachments, setLoadingAttachments] = useState(false)
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -194,12 +207,43 @@ export default function TicketsPage() {
     setSelectedTicket(ticket)
     setDraftPriority(ticket.priority || 'LOW')
     setDraftStatus(ticket.status)
+    loadTicketAttachments(ticket.id)
+  }
+
+  async function loadTicketAttachments(ticketId: string) {
+    setLoadingAttachments(true)
+    try {
+      const { data, error } = await supabase
+        .from('ticket_attachments')
+        .select('id, ticket_id, file_name, file_path, file_size, mime_type, created_at')
+        .eq('ticket_id', ticketId)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Failed to load attachments:', error)
+        setSelectedTicketAttachments([])
+      } else {
+        setSelectedTicketAttachments((data as AttachmentRow[]) || [])
+      }
+    } catch (err) {
+      console.error('Error loading attachments:', err)
+      setSelectedTicketAttachments([])
+    } finally {
+      setLoadingAttachments(false)
+    }
+  }
+
+  function getImageUrl(filePath: string): string {
+    const supabaseUrl = 'https://jsliqlmjksintyigkulq.supabase.co'
+    return `${supabaseUrl}/storage/v1/object/public/ticket-attachments/${filePath}`
   }
 
   function closeDrawer() {
     setSelectedTicket(null)
     setDraftPriority('')
     setDraftStatus('')
+    setSelectedTicketAttachments([])
+    setSelectedImageUrl(null)
   }
 
   async function updatePriority(ticketId: string, priority: string) {
@@ -745,6 +789,32 @@ export default function TicketsPage() {
               </div>
             </div>
 
+            {selectedTicketAttachments.length > 0 && (
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Attachments</div>
+                {loadingAttachments ? (
+                  <div style={{ fontSize: '13px', color: '#6B7280' }}>Loading images...</div>
+                ) : (
+                  <div style={styles.attachmentGrid}>
+                    {selectedTicketAttachments.map((attachment) => (
+                      <button
+                        key={attachment.id}
+                        onClick={() => setSelectedImageUrl(getImageUrl(attachment.file_path))}
+                        style={styles.attachmentThumbnail}
+                        title={attachment.file_name}
+                      >
+                        <img
+                          src={getImageUrl(attachment.file_path)}
+                          alt={attachment.file_name}
+                          style={styles.attachmentImg}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={styles.drawerActions}>
               <button onClick={saveTicketChanges} style={styles.primarySaveButton} disabled={savingTicket}>
                 {savingTicket ? 'Saving...' : 'Save Changes'}
@@ -756,6 +826,18 @@ export default function TicketsPage() {
               )}
             </div>
           </div>
+
+          {selectedImageUrl && (
+            <>
+              <div onClick={() => setSelectedImageUrl(null)} style={styles.imageModalOverlay} />
+              <div style={styles.imageModal}>
+                <button onClick={() => setSelectedImageUrl(null)} style={styles.imageModalClose}>
+                  ✕
+                </button>
+                <img src={selectedImageUrl} alt="Full view" style={styles.imageModalImg} />
+              </div>
+            </>
+          )}
         </>
       )}
     </main>
@@ -1257,5 +1339,71 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
     minHeight: '44px',
     transition: 'all 0.2s ease',
+  },
+  attachmentGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+    gap: '10px',
+  },
+  attachmentThumbnail: {
+    background: 'none',
+    border: '1px solid #E5E7EB',
+    borderRadius: '10px',
+    padding: 0,
+    cursor: 'pointer',
+    overflow: 'hidden',
+    height: '80px',
+    transition: 'all 0.2s ease',
+  },
+  attachmentImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  imageModalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.8)',
+    zIndex: 100,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageModal: {
+    position: 'fixed',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    zIndex: 101,
+    maxWidth: '90vw',
+    maxHeight: '90vh',
+    backgroundColor: '#FFFFFF',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+  },
+  imageModalImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    maxWidth: '90vw',
+    maxHeight: '80vh',
+  },
+  imageModalClose: {
+    position: 'absolute',
+    top: '12px',
+    right: '12px',
+    background: 'rgba(0,0,0,0.6)',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '6px',
+    width: '32px',
+    height: '32px',
+    fontSize: '18px',
+    cursor: 'pointer',
+    zIndex: 102,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 }

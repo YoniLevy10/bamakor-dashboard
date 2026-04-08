@@ -167,6 +167,9 @@ export default function HomePage() {
   const [draftDescription, setDraftDescription] = useState('')
   const [draftStatus, setDraftStatus] = useState('NEW')
   const [draftWorkerId, setDraftWorkerId] = useState('')
+  const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<any[]>([])
+  const [loadingAttachments, setLoadingAttachments] = useState(false)
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
 
   const activeSource = useMemo(() => {
     return tabs.find((t) => t.key === activeTab)?.source || 'all'
@@ -536,6 +539,35 @@ export default function HomePage() {
     setDraftStatus(ticket.status || 'NEW')
     setDraftWorkerId(ticket.assigned_worker_id || '')
     loadTicketLogs(ticket.id)
+    loadTicketAttachments(ticket.id)
+  }
+
+  async function loadTicketAttachments(ticketId: string) {
+    setLoadingAttachments(true)
+    try {
+      const { data, error } = await supabase
+        .from('ticket_attachments')
+        .select('id, ticket_id, file_name, file_path, file_size, mime_type, created_at')
+        .eq('ticket_id', ticketId)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Failed to load attachments:', error)
+        setSelectedTicketAttachments([])
+      } else {
+        setSelectedTicketAttachments(data || [])
+      }
+    } catch (err) {
+      console.error('Error loading attachments:', err)
+      setSelectedTicketAttachments([])
+    } finally {
+      setLoadingAttachments(false)
+    }
+  }
+
+  function getImageUrl(filePath: string): string {
+    const supabaseUrl = 'https://jsliqlmjksintyigkulq.supabase.co'
+    return `${supabaseUrl}/storage/v1/object/public/ticket-attachments/${filePath}`
   }
 
   async function copyText(value: string, label = 'Copied') {
@@ -1281,6 +1313,32 @@ export default function HomePage() {
               </div>
             </div>
 
+            {selectedTicketAttachments.length > 0 && (
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Attachments</div>
+                {loadingAttachments ? (
+                  <div style={{ fontSize: '13px', color: '#6B7280' }}>Loading images...</div>
+                ) : (
+                  <div style={styles.attachmentGrid}>
+                    {selectedTicketAttachments.map((attachment: any) => (
+                      <button
+                        key={attachment.id}
+                        onClick={() => setSelectedImageUrl(getImageUrl(attachment.file_path))}
+                        style={styles.attachmentThumbnail}
+                        title={attachment.file_name}
+                      >
+                        <img
+                          src={getImageUrl(attachment.file_path)}
+                          alt={attachment.file_name}
+                          style={styles.attachmentImg}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={styles.drawerQuickActions}>
               <button
                 onClick={() => copyText(selectedTicket.reporter_phone, 'Phone copied')}
@@ -1351,6 +1409,18 @@ export default function HomePage() {
                 ))}
             </div>
           </div>
+
+          {selectedImageUrl && (
+            <>
+              <div onClick={() => setSelectedImageUrl(null)} style={styles.imageModalOverlay} />
+              <div style={styles.imageModal}>
+                <button onClick={() => setSelectedImageUrl(null)} style={styles.imageModalClose}>
+                  ✕
+                </button>
+                <img src={selectedImageUrl} alt="Full view" style={styles.imageModalImg} />
+              </div>
+            </>
+          )}
         </>
       )}
     </main>
@@ -2166,6 +2236,72 @@ const styles: Record<string, CSSProperties> = {
     color: '#B91C1C',
     margin: 0,
     fontWeight: 600,
+  },
+  attachmentGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+    gap: '10px',
+  },
+  attachmentThumbnail: {
+    background: 'none',
+    border: '1px solid #E5E7EB',
+    borderRadius: '10px',
+    padding: 0,
+    cursor: 'pointer',
+    overflow: 'hidden',
+    height: '80px',
+    transition: 'all 0.2s ease',
+  },
+  attachmentImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  imageModalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.8)',
+    zIndex: 100,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageModal: {
+    position: 'fixed',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    zIndex: 101,
+    maxWidth: '90vw',
+    maxHeight: '90vh',
+    backgroundColor: '#FFFFFF',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+  },
+  imageModalImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    maxWidth: '90vw',
+    maxHeight: '80vh',
+  },
+  imageModalClose: {
+    position: 'absolute',
+    top: '12px',
+    right: '12px',
+    background: 'rgba(0,0,0,0.6)',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '6px',
+    width: '32px',
+    height: '32px',
+    fontSize: '18px',
+    cursor: 'pointer',
+    zIndex: 102,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 }
 

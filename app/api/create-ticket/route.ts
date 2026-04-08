@@ -12,10 +12,102 @@ function parseStartCode(message: string) {
   }
 }
 
+async function uploadAttachments(
+  supabaseAdmin: any,
+  ticketId: string,
+  files: File[]
+): Promise<{ success: number; failed: number; warning?: string }> {
+  let successCount = 0
+  let failCount = 0
+
+  for (const file of files) {
+    try {
+      // Generate unique file path
+      const timestamp = Date.now()
+      const randomStr = Math.random().toString(36).substring(7)
+      const extension = file.name.split('.').pop()
+      const filePath = `${ticketId}/${timestamp}-${randomStr}.${extension}`
+
+      // Upload to Supabase Storage
+      const arrayBuffer = await file.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
+
+      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+        .from('ticket-attachments')
+        .upload(filePath, uint8Array, {
+          contentType: file.type,
+          upsert: false,
+        })
+
+      if (uploadError) {
+        console.error(`❌ Failed to upload file ${file.name}:`, uploadError)
+        failCount++
+        continue
+      }
+
+      // Create attachment record in database
+      const { error: dbError } = await supabaseAdmin
+        .from('ticket_attachments')
+        .insert({
+          ticket_id: ticketId,
+          file_name: file.name,
+          file_path: filePath,
+          file_size: file.size,
+          mime_type: file.type,
+        })
+
+      if (dbError) {
+        console.error(`❌ Failed to create attachment record for ${file.name}:`, dbError)
+        // Try to delete the uploaded file
+        await supabaseAdmin.storage.from('ticket-attachments').remove([filePath])
+        failCount++
+        continue
+      }
+
+      successCount++
+    } catch (err) {
+      console.error(`❌ Unexpected error uploading ${file.name}:`, err)
+      failCount++
+    }
+  }
+
+  const warning =
+    failCount > 0
+      ? `⚠️ ${failCount} of ${files.length} image(s) failed to upload. Ticket created successfully.`
+      : undefined
+
+  return { success: successCount, failed: failCount, warning }
+}
+
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getSupabaseAdmin()
-    const body = await req.json()
+    
+    // Check if request has FormData (multipart) or JSON
+    const contentType = req.headers.get('content-type') || ''
+    let body: any
+    let files: File[] = []
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData()
+      
+      // Extract text fields
+      body = {
+        message: formData.get('message') || '',
+        phone: formData.get('phone') || '',
+        description: formData.get('description') || '',
+        reporter_name: formData.get('reporter_name') || '',
+        source: formData.get('source') || '',
+        project_code: formData.get('project_code') || '',
+        building_number: formData.get('building_number') || '',
+      }
+
+      // Extract file attachments
+      const attachmentFiles = formData.getAll('attachments')
+      files = attachmentFiles.filter((f) => f instanceof File) as File[]
+    } else {
+      body = await req.json()
+    }
 
     const message = body?.message ? String(body.message).trim() : ''
     const phone = body?.phone ? String(body.phone).trim() : ''
@@ -103,6 +195,13 @@ export async function POST(req: Request) {
         console.error('⚠️ Ticket log insert failed (non-blocking):', logError)
       }
 
+      // Handle file attachments if present
+      let imageUploadWarning: string | undefined
+      if (files.length > 0) {
+        const uploadResult = await uploadAttachments(supabaseAdmin, createdTicket.id, files)
+        imageUploadWarning = uploadResult.warning
+      }
+
       return NextResponse.json({
         success: true,
         mode: 'created_from_web_form',
@@ -110,6 +209,7 @@ export async function POST(req: Request) {
         ticketNumber: createdTicket.ticket_number,
         projectCode: project.project_code,
         buildingNumber: createdTicket.building_number,
+        imageUploadWarning,
       })
     }
 
