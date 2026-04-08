@@ -545,6 +545,16 @@ export default function HomePage() {
   async function loadTicketAttachments(ticketId: string) {
     setLoadingAttachments(true)
     try {
+      // STABILITY: Validate ticketId before query
+      if (!ticketId) {
+        console.error('❌ Cannot load attachments: ticketId is missing or empty')
+        setSelectedTicketAttachments([])
+        setLoadingAttachments(false)
+        return
+      }
+
+      console.log(`📥 Loading attachments for ticket: ${ticketId}`)
+
       const { data, error } = await supabase
         .from('ticket_attachments')
         .select('id, ticket_id, file_name, file_url, file_size, mime_type, created_at')
@@ -552,13 +562,36 @@ export default function HomePage() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('❌ Failed to load attachments:', error)
+        console.error('❌ Failed to load attachments from database:', {
+          ticketId,
+          error: error.message,
+          code: error.code,
+        })
+        setSelectedTicketAttachments([])
+      } else if (!data || data.length === 0) {
+        console.log(`ℹ️ No attachments found for ticket ${ticketId}`)
         setSelectedTicketAttachments([])
       } else {
+        console.log(`📦 Found ${data.length} attachment(s) for ticket ${ticketId}`)
+        
         // Generate signed URLs for each attachment for reliable access
         const attachmentsWithUrls = await Promise.all(
           (data || []).map(async (attachment: any) => {
             try {
+              // STABILITY: Validate file_url before URL generation
+              if (!attachment.file_url) {
+                console.error(`❌ Attachment ${attachment.id} has missing file_url - skipping URL generation`, {
+                  attachmentId: attachment.id,
+                  ticketId,
+                  reason: 'file_url is null or empty',
+                })
+                return {
+                  ...attachment,
+                  signed_url: null,
+                }
+              }
+
+              console.log(`🔗 Generating signed URL for: ${attachment.file_name}`)
               const { data: signedUrlData } = await supabase.storage
                 .from('ticket-attachments')
                 .createSignedUrl(attachment.file_url, 3600) // Valid for 1 hour
@@ -568,7 +601,12 @@ export default function HomePage() {
                 signed_url: signedUrlData?.signedUrl || null,
               }
             } catch (urlErr) {
-              console.warn('⚠️ Failed to generate signed URL for:', attachment.file_url, urlErr)
+              console.warn(`⚠️ Failed to generate signed URL for ${attachment.file_name}:`, {
+                attachmentId: attachment.id,
+                filePath: attachment.file_url,
+                reason: urlErr instanceof Error ? urlErr.message : String(urlErr),
+                action: 'Falling back to public URL',
+              })
               // Fallback to public URL if signed URL fails
               return {
                 ...attachment,
@@ -579,9 +617,13 @@ export default function HomePage() {
         )
 
         setSelectedTicketAttachments(attachmentsWithUrls)
+        console.log(`✅ Loaded ${attachmentsWithUrls.length} attachment(s) with URLs`)
       }
     } catch (err) {
-      console.error('❌ Error loading attachments:', err)
+      console.error('❌ Unexpected error loading attachments:', {
+        ticketId,
+        error: err instanceof Error ? err.message : String(err),
+      })
       setSelectedTicketAttachments([])
     } finally {
       setLoadingAttachments(false)

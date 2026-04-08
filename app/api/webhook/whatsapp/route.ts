@@ -213,14 +213,24 @@ export async function POST(req: NextRequest) {
 
       // Case A: Active ticket exists - attach image to it
       if (session?.active_ticket_id) {
-        console.log('✅ Active ticket found - attaching image to:', session.active_ticket_id)
+        console.log(`📍 Active ticket found for ${from} - attaching image to ticket: ${session.active_ticket_id}`)
 
+        // Step 1: Download media from WhatsApp
+        console.log(`⏳ Step 1/4: Downloading image from WhatsApp (mediaId: ${mediaId})...`)
         const mediaData = await downloadWhatsAppMedia(mediaId, 'image')
 
         if (!mediaData) {
-          console.error('❌ Failed to download media from WhatsApp for ticket:', session.active_ticket_id)
-          // Continue to fallback message below
+          console.error(`❌ Step 1 FAILED: Could not download media from WhatsApp for ticket ${session.active_ticket_id}. MediaId: ${mediaId}`, {
+            reason: 'Meta Graph API download failed',
+            mediaId,
+            ticketId: session.active_ticket_id,
+          })
+          // Continue to fallback message below (ticket already exists, so don't lose it)
         } else {
+          console.log(`✅ Step 1 SUCCESS: Downloaded ${mediaData.fileName} (${mediaData.mimeType}, ${mediaData.buffer.length} bytes)`)
+
+          // Step 2: Upload to Supabase Storage
+          console.log(`⏳ Step 2/4: Uploading to Supabase Storage...`)
           const uploadResult = await uploadWhatsAppMediaToStorage(
             session.active_ticket_id,
             mediaData.buffer,
@@ -229,6 +239,10 @@ export async function POST(req: NextRequest) {
           )
 
           if (uploadResult) {
+            console.log(`✅ Step 2 SUCCESS: Uploaded to ${uploadResult.filePath}`)
+
+            // Step 3: Create database record
+            console.log(`⏳ Step 3/4: Creating attachment database record...`)
             const attachmentCreated = await createAttachmentRecord(
               supabaseAdmin,
               session.active_ticket_id,
@@ -241,13 +255,18 @@ export async function POST(req: NextRequest) {
             )
 
             if (attachmentCreated) {
+              console.log(`✅ Step 3 SUCCESS: Attachment record created in database`)
+
+              // Step 4: Send confirmation message
+              console.log(`⏳ Step 4/4: Sending WhatsApp confirmation...`)
               try {
                 await sendWhatsAppTextMessage(
                   from,
                   '✅ התמונה התקבלה וצורפה לתקלה.\n\nצוות כבר טוען על זה — תשמעו ממנו בקרוב!'
                 )
+                console.log(`✅ Step 4 SUCCESS: Confirmation message sent`)
               } catch (sendError) {
-                console.error('⚠️ Failed to send image-received confirmation:', sendError)
+                console.error('⚠️ Step 4 WARNING: Failed to send confirmation (attachment was successful)', sendError)
               }
 
               return NextResponse.json(
@@ -258,18 +277,31 @@ export async function POST(req: NextRequest) {
                 },
                 { status: 200 }
               )
+            } else {
+              console.error(`❌ Step 3 FAILED: Database record creation failed for ticket ${session.active_ticket_id}`, {
+                reason: 'Attachment record insert failed - possible schema violation',
+                ticketId: session.active_ticket_id,
+                fileName: mediaData.fileName,
+              })
             }
+          } else {
+            console.error(`❌ Step 2 FAILED: Storage upload failed for ticket ${session.active_ticket_id}`, {
+              reason: 'Supabase Storage upload failed - check bucket permissions',
+              ticketId: session.active_ticket_id,
+              fileName: mediaData.fileName,
+            })
           }
         }
 
         // Fallback: Image download/upload failed but don't lose the ticket
+        console.log(`📤 Sending fallback message: attachment failed but ticket preserved`)
         try {
           await sendWhatsAppTextMessage(
             from,
             '⚠️ לא הצלחנו להוסיף את התמונה, אך התקלה שלך תקבלה.\n\nנעדכן כשיהיה טיפול.'
           )
         } catch (sendError) {
-          console.error('⚠️ Failed to send image-failed message:', sendError)
+          console.error('⚠️ Failed to send fallback message:', sendError)
         }
 
         return NextResponse.json(

@@ -143,6 +143,26 @@ export async function createAttachmentRecord(
   attachmentType: string = 'whatsapp_image'
 ): Promise<boolean> {
   try {
+    // STABILITY: Validate required fields before database insert
+    if (!ticketId) {
+      console.error('❌ Cannot create attachment: ticketId is missing')
+      return false
+    }
+    if (!filePath) {
+      console.error('❌ Cannot create attachment: file_url (filePath) is missing')
+      return false
+    }
+    if (!mimeType) {
+      console.error('❌ Cannot create attachment: mimeType is missing')
+      return false
+    }
+    if (!attachmentType) {
+      console.error('❌ Cannot create attachment: attachmentType is missing')
+      return false
+    }
+
+    console.log(`📝 Creating attachment for ticket ${ticketId}: ${fileName} (${mimeType})`)
+
     const { error: dbError } = await supabaseAdmin
       .from('ticket_attachments')
       .insert({
@@ -155,14 +175,24 @@ export async function createAttachmentRecord(
       })
 
     if (dbError) {
-      console.error('❌ Failed to create attachment record:', dbError)
+      console.error('❌ Database insert failed for ticket attachment:', {
+        ticketId,
+        fileName,
+        error: dbError.message,
+        code: dbError.code,
+        details: dbError.details,
+      })
       return false
     }
 
-    console.log(`✅ Attachment record created for ticket: ${ticketId}`)
+    console.log(`✅ Attachment record created for ticket: ${ticketId} (${fileName})`)
     return true
   } catch (err) {
-    console.error('❌ Error creating attachment record:', err)
+    console.error('❌ Error creating attachment record:', {
+      ticketId,
+      fileName,
+      error: err instanceof Error ? err.message : String(err),
+    })
     return false
   }
 }
