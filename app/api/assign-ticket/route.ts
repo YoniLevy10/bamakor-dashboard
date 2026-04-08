@@ -6,7 +6,20 @@ const WORKER_TEMPLATE_NAME = 'worker_assignment_notice'
 
 export async function POST(req: Request) {
   try {
-    const supabaseAdmin = getSupabaseAdmin()
+    let supabaseAdmin
+    try {
+      supabaseAdmin = getSupabaseAdmin()
+    } catch (envError) {
+      console.error('❌ Environment configuration error:', envError)
+      return NextResponse.json(
+        {
+          error: 'Server configuration error. Required environment variables are not set.',
+          details: process.env.NODE_ENV === 'development' ? String(envError) : undefined,
+        },
+        { status: 500 }
+      )
+    }
+
     const body = await req.json()
     const { ticket_id, worker_id } = body
 

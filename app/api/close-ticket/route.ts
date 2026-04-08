@@ -13,21 +13,27 @@ export async function POST(req: Request) {
       )
     }
 
-    // בדיקה שהטיקט קיים
     const { data: ticket, error: ticketError } = await supabase
       .from('tickets')
-      .select('*')
+      .select('id, ticket_number, status')
       .eq('id', ticket_id)
       .single()
 
     if (ticketError || !ticket) {
+      console.warn('Ticket not found:', ticket_id)
       return NextResponse.json(
         { error: 'Ticket not found' },
         { status: 404 }
       )
     }
 
-    // עדכון סטטוס
+    if (ticket.status === 'CLOSED') {
+      return NextResponse.json(
+        { error: 'Ticket is already closed', code: 'ALREADY_CLOSED' },
+        { status: 409 }
+      )
+    }
+
     const { data: updatedTicket, error: updateError } = await supabase
       .from('tickets')
       .update({
@@ -37,16 +43,20 @@ export async function POST(req: Request) {
       })
       .eq('id', ticket_id)
       .select()
+      .single()
 
     if (updateError) {
+      console.error('Failed to update ticket:', updateError)
       return NextResponse.json(
-        { error: updateError.message },
+        {
+          error: 'Failed to close ticket',
+          details: process.env.NODE_ENV === 'development' ? updateError.message : undefined,
+        },
         { status: 500 }
       )
     }
 
-    // ביטול session פעיל
-    await supabase
+    const { error: sessionError } = await supabase
       .from('sessions')
       .update({
         active_ticket_id: null,
@@ -54,24 +64,35 @@ export async function POST(req: Request) {
       })
       .eq('active_ticket_id', ticket_id)
 
-    // לוג
-    await supabase.from('ticket_logs').insert([
+    if (sessionError) {
+      console.error('⚠️ Failed to clear session:', sessionError)
+    }
+
+    const { error: logError } = await supabase.from('ticket_logs').insert([
       {
         ticket_id,
         action_type: 'TICKET_CLOSED',
         performed_by: 'system',
         notes: 'Ticket closed successfully',
+        created_at: new Date().toISOString(),
       },
     ])
 
+    if (logError) {
+      console.error('⚠️ Failed to insert close log:', logError)
+    }
+
     return NextResponse.json({
       success: true,
-      mode: 'closed_ticket',
       ticket: updatedTicket,
     })
-  } catch {
+  } catch (error) {
+    console.error('❌ Error closing ticket:', error)
     return NextResponse.json(
-      { error: 'Server error' },
+      {
+        error: 'Server error',
+        details: process.env.NODE_ENV === 'development' ? String(error) : undefined,
+      },
       { status: 500 }
     )
   }

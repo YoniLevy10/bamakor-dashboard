@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { parseIncomingWhatsAppMessage } from '@/lib/whatsapp-parser'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
+import {
+  downloadWhatsAppMedia,
+  uploadWhatsAppMediaToStorage,
+  createAttachmentRecord,
+} from '@/lib/whatsapp-media'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
 
@@ -139,7 +144,20 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const supabaseAdmin = getSupabaseAdmin()
+    
+    let supabaseAdmin
+    try {
+      supabaseAdmin = getSupabaseAdmin()
+    } catch (envError) {
+      console.error('❌ Environment configuration error:', envError)
+      return NextResponse.json(
+        {
+          error: 'Server configuration error',
+          details: process.env.NODE_ENV === 'development' ? String(envError) : undefined,
+        },
+        { status: 500 }
+      )
+    }
 
     console.log('✅ WEBHOOK DB VERSION ACTIVE')
     console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
@@ -151,17 +169,161 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
-    const { from, messageType, textBody } = parsedMessage
+    const { from, messageType, textBody, mediaId, mediaType } = parsedMessage
 
     console.log('📞 From:', from)
     console.log('🧩 Message Type:', messageType)
     console.log('💬 Message body:', textBody)
+    console.log('📎 Media ID:', mediaId)
+    console.log('📎 Media Type:', mediaType)
 
-    if (messageType !== 'text') {
-      console.log('ℹ️ Non-text message received. Ignoring for MVP.')
-      return NextResponse.json({ received: true }, { status: 200 })
+    // HANDLE VOICE/AUDIO MESSAGES SAFELY
+    if (messageType === 'audio') {
+      console.log('🎙️ Voice/audio message received - sending fallback guidance')
+
+      try {
+        await sendWhatsAppTextMessage(
+          from,
+          '🎙️ קיבלנו הודעת קול, אך לא נוכל לעבד אותה.\n\nבשביל לדווח תקלה:\n1️⃣ כתבו את התקלה בטקסט\n2️⃣ או שלחו תמונה של התקלה\n\nרוצים להתחיל? סרקו את קוד ה-QR בבניין או כתבו את כתובת הבניין.'
+        )
+      } catch (sendError) {
+        console.error('⚠️ Failed to send voice-message guidance:', sendError)
+      }
+
+      return NextResponse.json({ received: true, type: 'voice_message_fallback' }, { status: 200 })
     }
 
+    // HANDLE IMAGE MESSAGES
+    if (messageType === 'image' && mediaId && mediaType === 'image') {
+      console.log('🖼️ Image message received - downloading and attaching to ticket')
+
+      // Check if user has an active session/ticket context
+      const { data: session, error: sessionError } = await supabaseAdmin
+        .from('sessions')
+        .select('id, phone_number, project_id, active_ticket_id, is_active')
+        .eq('phone_number', from)
+        .eq('is_active', true)
+        .order('last_activity_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (sessionError) {
+        console.error('❌ Error fetching session for image attachment:', sessionError)
+      }
+
+      // Case A: Active ticket exists - attach image to it
+      if (session?.active_ticket_id) {
+        console.log('✅ Active ticket found - attaching image to:', session.active_ticket_id)
+
+        const mediaData = await downloadWhatsAppMedia(mediaId, 'image')
+
+        if (mediaData) {
+          const uploadResult = await uploadWhatsAppMediaToStorage(
+            session.active_ticket_id,
+            mediaData.buffer,
+            mediaData.fileName,
+            mediaData.mimeType
+          )
+
+          if (uploadResult) {
+            const attachmentCreated = await createAttachmentRecord(
+              supabaseAdmin,
+              session.active_ticket_id,
+              mediaData.fileName,
+              uploadResult.filePath,
+              uploadResult.fileSize,
+              mediaData.mimeType
+            )
+
+            if (attachmentCreated) {
+              try {
+                await sendWhatsAppTextMessage(
+                  from,
+                  '✅ התמונה התקבלה וצורפה לתקלה.\n\nצוות כבר טוען על זה — תשמעו ממנו בקרוב!'
+                )
+              } catch (sendError) {
+                console.error('⚠️ Failed to send image-received confirmation:', sendError)
+              }
+
+              return NextResponse.json(
+                {
+                  received: true,
+                  type: 'image_attached_to_existing_ticket',
+                  ticketId: session.active_ticket_id,
+                },
+                { status: 200 }
+              )
+            }
+          }
+        }
+
+        // Fallback: Image download/upload failed but don't lose the ticket
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            '⚠️ לא הצלחנו להוסיף את התמונה, אך התקלה שלך תקבלה.\n\nנעדכן כשיהיה טיפול.'
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send image-failed message:', sendError)
+        }
+
+        return NextResponse.json(
+          {
+            received: true,
+            type: 'image_failed_but_ticket_ok',
+            ticketId: session.active_ticket_id,
+            warning: 'Image upload failed but ticket was created',
+          },
+          { status: 200 }
+        )
+      }
+
+      // Case B: No context - guide user to start flow
+      console.log('📍 Image received but no active ticket context - guiding user to start')
+
+      try {
+        await sendWhatsAppTextMessage(
+          from,
+          '🖼️ קיבלנו את התמונה!\n\nכדי לצרף אותה לתקלה, צריך קודם:\n1️⃣ סרקו QR בבניין\n2️⃣ כתבו תיאור התקלה\n3️⃣ אז שלחו תמונה\n\nהשתדלו!'
+        )
+      } catch (sendError) {
+        console.error('⚠️ Failed to send image-context-needed message:', sendError)
+      }
+
+      return NextResponse.json(
+        {
+          received: true,
+          type: 'image_received_no_context',
+        },
+        { status: 200 }
+      )
+    }
+
+    // HANDLE OTHER MEDIA TYPES (video, document) - NOT SUPPORTED YET
+    if (messageType === 'video' || messageType === 'document') {
+      console.log(`📽️ Media message received (${messageType}) - sending fallback`)
+
+      try {
+        const mediaLabel = messageType === 'video' ? 'סרטון' : 'קובץ'
+        await sendWhatsAppTextMessage(
+          from,
+          `קיבלנו ${mediaLabel} 📎\n\nבשביל דיווח תקלה, אנא שלחו תמונה או כתבו תיאור.\n\nרוצים להתחיל? סרקו את קוד ה-QR בבניין.`
+        )
+      } catch (sendError) {
+        console.error(`⚠️ Failed to send ${messageType}-message guidance:`, sendError)
+      }
+
+      return NextResponse.json(
+        {
+          received: true,
+          type: 'unsupported_media_type',
+          mediaType,
+        },
+        { status: 200 }
+      )
+    }
+
+    // If no text body and no valid media, ignore
     if (!textBody) {
       return NextResponse.json({ received: true }, { status: 200 })
     }
@@ -212,7 +374,7 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            'לא הצלחנו לזהות את קוד הפרויקט. אנא סרקו שוב את ה-QR או פנו למנהלת הבניין.'
+            '❌ לא הצלחנו לזהות את הפרויקט.\n\nנסו שוב:\n1️⃣ סרקו את QR מחדש\n2️⃣ או כתבו את כתובת הבניין (רחוב ומספר)\n3️⃣ או צרו קשר למנהלת הבניין'
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send project-not-found reply:', sendError)
@@ -345,7 +507,7 @@ export async function POST(req: NextRequest) {
           try {
             await sendWhatsAppTextMessage(
               from,
-              `בחרנו את הבניין המתאים. אנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+              `✅ בחרתם ${selectedProject.name}!\n\nעכשיו כתבו בקצרה את התקלה 📝\n\n💡 טיפ: אפשר גם לצרף תמונה של התקלה — זה יעזור לנו לטפל בה מהר יותר!`
             )
           } catch (sendError) {
             console.error('⚠️ Failed to send selection confirmation:', sendError)
@@ -394,7 +556,7 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            `לא הבנו את התשובה שלכם. אנא השיבו רק עם מספר האפשרות: 1, 2 או 3.`
+            `⚠️ השיבו רק עם מספר האפשרות: 1, 2 או 3`
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send pending-reminder message:', sendError)
@@ -640,7 +802,7 @@ export async function POST(req: NextRequest) {
 
       await sendWhatsAppTextMessage(
         from,
-        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה חדשה נוספת, סרקו שוב את קוד ה-QR.`
+        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\n\n💡 טיפ: אפשר גם לשלוח תמונה של התקלה - זה יעזור לנו לטפל בה מהר יותר.\n\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה חדשה נוספת, סרקו שוב את קוד ה-QR.`
       )
     } catch (sendError) {
       console.error('⚠️ Failed to send ticket-created reply:', sendError)
@@ -659,7 +821,13 @@ export async function POST(req: NextRequest) {
     )
   } catch (error) {
     console.error('❌ Webhook error:', error)
-    return NextResponse.json({ error: 'Invalid payload' }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: 'Invalid payload',
+        details: process.env.NODE_ENV === 'development' ? String(error) : undefined,
+      },
+      { status: 500 }
+    )
   }
 }
 
