@@ -747,7 +747,7 @@ export async function POST(req: NextRequest) {
       .from('sessions')
       .update({
         active_ticket_id: createdTicket.id,
-        is_active: false,
+        is_active: true,
         last_activity_at: new Date().toISOString(),
       })
       .eq('id', session.id)

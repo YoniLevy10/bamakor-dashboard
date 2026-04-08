@@ -552,22 +552,50 @@ export default function HomePage() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('Failed to load attachments:', error)
+        console.error('❌ Failed to load attachments:', error)
         setSelectedTicketAttachments([])
       } else {
-        setSelectedTicketAttachments(data || [])
+        // Generate signed URLs for each attachment for reliable access
+        const attachmentsWithUrls = await Promise.all(
+          (data || []).map(async (attachment: any) => {
+            try {
+              const { data: signedUrlData } = await supabase.storage
+                .from('ticket-attachments')
+                .createSignedUrl(attachment.file_path, 3600) // Valid for 1 hour
+
+              return {
+                ...attachment,
+                signed_url: signedUrlData?.signedUrl || null,
+              }
+            } catch (urlErr) {
+              console.warn('⚠️ Failed to generate signed URL for:', attachment.file_path, urlErr)
+              // Fallback to public URL if signed URL fails
+              return {
+                ...attachment,
+                signed_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_path}`,
+              }
+            }
+          })
+        )
+
+        setSelectedTicketAttachments(attachmentsWithUrls)
       }
     } catch (err) {
-      console.error('Error loading attachments:', err)
+      console.error('❌ Error loading attachments:', err)
       setSelectedTicketAttachments([])
     } finally {
       setLoadingAttachments(false)
     }
   }
 
-  function getImageUrl(filePath: string): string {
-    const supabaseUrl = 'https://jsliqlmjksintyigkulq.supabase.co'
-    return `${supabaseUrl}/storage/v1/object/public/ticket-attachments/${filePath}`
+  function getImageUrl(attachment: any): string {
+    // Use signed URL if available (most reliable)
+    if (attachment.signed_url) {
+      return attachment.signed_url
+    }
+    // Fallback to public URL
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jsliqlmjksintyigkulq.supabase.co'
+    return `${supabaseUrl}/storage/v1/object/public/ticket-attachments/${attachment.file_path}`
   }
 
   async function copyText(value: string, label = 'Copied') {
@@ -1323,12 +1351,12 @@ export default function HomePage() {
                     {selectedTicketAttachments.map((attachment: any) => (
                       <button
                         key={attachment.id}
-                        onClick={() => setSelectedImageUrl(getImageUrl(attachment.file_path))}
+                        onClick={() => setSelectedImageUrl(getImageUrl(attachment))}
                         style={styles.attachmentThumbnail}
                         title={attachment.file_name}
                       >
                         <img
-                          src={getImageUrl(attachment.file_path)}
+                          src={getImageUrl(attachment)}
                           alt={attachment.file_name}
                           style={styles.attachmentImg}
                         />
