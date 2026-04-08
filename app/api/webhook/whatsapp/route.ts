@@ -217,7 +217,10 @@ export async function POST(req: NextRequest) {
 
         const mediaData = await downloadWhatsAppMedia(mediaId, 'image')
 
-        if (mediaData) {
+        if (!mediaData) {
+          console.error('❌ Failed to download media from WhatsApp for ticket:', session.active_ticket_id)
+          // Continue to fallback message below
+        } else {
           const uploadResult = await uploadWhatsAppMediaToStorage(
             session.active_ticket_id,
             mediaData.buffer,

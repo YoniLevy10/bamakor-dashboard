@@ -20,8 +20,25 @@ async function uploadAttachments(
   let successCount = 0
   let failCount = 0
 
+  const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf']
+
   for (const file of files) {
     try {
+      // Validate file size
+      if (file.size > MAX_FILE_SIZE) {
+        console.error(`❌ File ${file.name} exceeds 5MB limit (size: ${file.size} bytes)`)
+        failCount++
+        continue
+      }
+
+      // Validate file type
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        console.error(`❌ File type ${file.type} not allowed for ${file.name}`)
+        failCount++
+        continue
+      }
+
       // Generate unique file path
       const timestamp = Date.now()
       const randomStr = Math.random().toString(36).substring(7)
