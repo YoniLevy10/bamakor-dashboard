@@ -215,7 +215,7 @@ export default function TicketsPage() {
     try {
       const { data, error } = await supabase
         .from('ticket_attachments')
-        .select('id, ticket_id, file_name, file_path, file_size, mime_type, created_at')
+        .select('id, ticket_id, file_name, file_url, mime_type, created_at')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: false })
 
@@ -229,18 +229,18 @@ export default function TicketsPage() {
             try {
               const { data: signedUrlData } = await supabase.storage
                 .from('ticket-attachments')
-                .createSignedUrl(attachment.file_path, 3600) // Valid for 1 hour
+                .createSignedUrl(attachment.file_url, 3600) // Valid for 1 hour
 
               return {
                 ...attachment,
                 signed_url: signedUrlData?.signedUrl || null,
               }
             } catch (urlErr) {
-              console.warn('⚠️ Failed to generate signed URL for:', attachment.file_path, urlErr)
+              console.warn('⚠️ Failed to generate signed URL for:', attachment.file_url, urlErr)
               // Fallback to public URL if signed URL fails
               return {
                 ...attachment,
-                signed_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_path}`,
+                signed_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_url}`,
               }
             }
           })
@@ -263,7 +263,7 @@ export default function TicketsPage() {
     }
     // Fallback to public URL
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jsliqlmjksintyigkulq.supabase.co'
-    return `${supabaseUrl}/storage/v1/object/public/ticket-attachments/${attachment.file_path}`
+    return `${supabaseUrl}/storage/v1/object/public/ticket-attachments/${attachment.file_url}`
   }
 
   function closeDrawer() {
