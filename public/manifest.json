@@ -41,14 +41,14 @@
       "short_name": "Tickets",
       "description": "View and manage all project tickets",
       "url": "/tickets",
-      "icons": [{"src": "/icon.PNG", "sizes": "96x96"}]
+      "icons": [{"src": "/icon.png", "sizes": "96x96"}]
     },
     {
       "name": "View Projects",
       "short_name": "Projects",
       "description": "Manage all projects",
       "url": "/projects",
-      "icons": [{"src": "/icon.PNG", "sizes": "96x96"}]
+      "icons": [{"src": "/icon.png", "sizes": "96x96"}]
     }
   ]
 }
