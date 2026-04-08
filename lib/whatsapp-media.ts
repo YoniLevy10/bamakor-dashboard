@@ -83,7 +83,7 @@ export async function uploadWhatsAppMediaToStorage(
 ): Promise<{ filePath: string; fileSize: number } | null> {
   try {
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('❌ Missing Supabase credentials')
+      console.error('❌ Missing Supabase credentials for storage upload')
       return null
     }
 
@@ -95,7 +95,7 @@ export async function uploadWhatsAppMediaToStorage(
     const extension = fileName.split('.').pop() || 'dat'
     const filePath = `${ticketId}/${timestamp}-${randomStr}.${extension}`
 
-    console.log(`📤 Uploading to Supabase Storage: ${filePath}`)
+    console.log(`📤 Uploading to Supabase Storage bucket 'ticket-attachments': ${filePath}`)
 
     const { error: uploadError } = await supabase.storage
       .from('ticket-attachments')
@@ -105,7 +105,15 @@ export async function uploadWhatsAppMediaToStorage(
       })
 
     if (uploadError) {
-      console.error('❌ Failed to upload to Supabase Storage:', uploadError)
+      const errorMsg = String(uploadError)
+      const isBucketError = errorMsg.includes('not found') || errorMsg.includes('Bucket')
+      
+      if (isBucketError) {
+        console.error('❌ CRITICAL: Storage bucket "ticket-attachments" not found in Supabase:', uploadError)
+        console.error('⚠️ Action required: Create "ticket-attachments" bucket in Supabase Storage dashboard')
+      } else {
+        console.error('❌ Failed to upload to Supabase Storage:', uploadError)
+      }
       return null
     }
 
