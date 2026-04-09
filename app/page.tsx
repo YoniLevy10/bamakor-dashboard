@@ -540,10 +540,11 @@ export default function HomePage() {
     setDraftWorkerId(ticket.assigned_worker_id || '')
     loadTicketLogs(ticket.id)
     loadTicketAttachments(ticket.id)
-    // DISABLED FOR DEBUG: body.overflow = 'hidden' breaks scroll on PWA
-    // if (isMobile && typeof window !== 'undefined') {
-    //   document.body.style.overflow = 'hidden'
-    // }
+    // Lock body scroll and prevent scroll bleed when modal is open
+    if (typeof window !== 'undefined') {
+      document.body.style.overflow = 'hidden'
+      document.body.style.overscrollBehavior = 'contain'
+    }
   }
 
   async function loadTicketAttachments(ticketId: string) {
@@ -1311,10 +1312,11 @@ export default function HomePage() {
                   setSelectedTicket(null)
                   setSelectedTicketAttachments([])
                   setSelectedImageUrl(null)
-                  // DISABLED FOR DEBUG: body.overflow = 'auto'
-                  // if (typeof window !== 'undefined') {
-                  //   document.body.style.overflow = 'auto'
-                  // }
+                  // Restore body scroll when drawer closes
+                  if (typeof window !== 'undefined') {
+                    document.body.style.overflow = 'auto'
+                    document.body.style.overscrollBehavior = 'auto'
+                  }
                 }}
                 style={styles.drawerCloseButton}
               >
@@ -1331,7 +1333,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div style={isMobile ? styles.drawerContentWrapper : {}}>
+            <div style={styles.drawerContentWrapper}>
               {/* PRIMARY: Description with high emphasis */}
               <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
                 <div style={styles.drawerLabel}>Description</div>
@@ -2258,6 +2260,7 @@ const styles: Record<string, CSSProperties> = {
   },
   drawerContentWrapper: {
     overflowY: 'auto',
+    overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
     flex: 1,
     paddingLeft: '16px',

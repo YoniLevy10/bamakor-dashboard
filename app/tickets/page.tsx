@@ -211,10 +211,11 @@ export default function TicketsPage() {
     // Reset attachments before loading new ones
     setSelectedTicketAttachments([])
     loadTicketAttachments(ticket.id)
-    // DISABLED FOR DEBUG: body.overflow = 'hidden' breaks scroll on PWA
-    // if (isMobile && typeof window !== 'undefined') {
-    //   document.body.style.overflow = 'hidden'
-    // }
+    // Lock body scroll and prevent scroll bleed when modal is open
+    if (typeof window !== 'undefined') {
+      document.body.style.overflow = 'hidden'
+      document.body.style.overscrollBehavior = 'contain'
+    }
   }
 
   async function loadTicketAttachments(ticketId: string) {
@@ -324,10 +325,11 @@ export default function TicketsPage() {
     setDraftStatus('')
     setSelectedTicketAttachments([])
     setSelectedImageUrl(null)
-    // DISABLED FOR DEBUG: body.overflow = 'auto'
-    // if (typeof window !== 'undefined') {
-    //   document.body.style.overflow = 'auto'
-    // }
+    // Restore body scroll when drawer closes
+    if (typeof window !== 'undefined') {
+      document.body.style.overflow = 'auto'
+      document.body.style.overscrollBehavior = 'auto'
+    }
   }
 
   async function updatePriority(ticketId: string, priority: string) {
@@ -800,7 +802,7 @@ export default function TicketsPage() {
               </div>
             </div>
 
-            <div style={isMobile ? styles.drawerContentWrapper : {}}>
+            <div style={styles.drawerContentWrapper}>
               {/* PRIMARY: Description - high emphasis */}
               <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
                 <div style={styles.descriptionValue}>{selectedTicket.description || 'No description provided'}</div>
@@ -1449,6 +1451,7 @@ const styles: Record<string, CSSProperties> = {
   },
   drawerContentWrapper: {
     overflowY: 'auto',
+    overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
     flex: 1,
     paddingLeft: '16px',
