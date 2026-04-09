@@ -1423,6 +1423,7 @@ const styles: Record<string, CSSProperties> = {
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
+    overflow: 'hidden',
   },
   drawerMobile: {
     width: '100% !important',
