@@ -699,16 +699,20 @@ export default function TicketsPage() {
               {filteredTickets.map((ticket) => (
                 <div key={ticket.id} onClick={() => openTicket(ticket)} style={{ ...styles.mobileCard, cursor: 'pointer' }}>
                   <div style={styles.mobileCardTop}>
-                    <div>
-                      <div style={styles.mobileTicketNumber}>TKT-{ticket.ticket_number}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={styles.mobileCardHeader}>
+                        <div style={styles.mobileTicketNumber}>TKT-{ticket.ticket_number}</div>
+                      </div>
                       <div style={styles.mobileProject}>
-                        {ticket.project_code || '-'} · {ticket.project_name || 'No project'}
+                        {ticket.project_code || '-'}
                       </div>
                     </div>
 
-                    <span style={{ ...styles.badge, ...getStatusStyle(ticket.status) }}>
-                      {ticket.status}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                      <span style={{ ...styles.badge, ...getStatusStyle(ticket.status) }}>
+                        {ticket.status}
+                      </span>
+                    </div>
                   </div>
 
                   <div style={styles.mobileDescription}>
@@ -789,79 +793,20 @@ export default function TicketsPage() {
               </button>
             </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Description</div>
-              <div style={styles.drawerValue}>{selectedTicket.description || '-'}</div>
+            {/* PRIMARY: Description - high emphasis */}
+            <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
+              <div style={styles.descriptionValue}>{selectedTicket.description || 'No description provided'}</div>
             </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Reporter</div>
-              <div style={styles.drawerValue}>
-                {selectedTicket.reporter_name || selectedTicket.reporter_phone || '-'}
-              </div>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Status</div>
-              <select
-                value={draftStatus}
-                onChange={(e) => setDraftStatus(e.target.value)}
-                style={styles.select}
-              >
-                {statusOptions.filter((s) => s !== 'ALL').map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Priority</div>
-              <select
-                value={draftPriority}
-                onChange={(e) => setDraftPriority(e.target.value)}
-                style={styles.select}
-              >
-                <option value="LOW">LOW</option>
-                <option value="NORMAL">NORMAL</option>
-                <option value="URGENT">URGENT</option>
-              </select>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Assigned Worker</div>
-              <select
-                value={selectedTicket.assigned_worker_id || ''}
-                onChange={(e) => assignWorker(selectedTicket.id, e.target.value)}
-                style={styles.select}
-              >
-                <option value="">Unassigned</option>
-                {workers.map((worker) => (
-                  <option key={worker.id} value={worker.id}>
-                    {worker.full_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Created</div>
-              <div style={styles.drawerValue}>
-                {selectedTicket.created_at ? formatDate(selectedTicket.created_at) : '-'}
-              </div>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Closed</div>
-              <div style={styles.drawerValue}>
-                {selectedTicket.closed_at ? formatDate(selectedTicket.closed_at) : '-'}
-              </div>
-            </div>
-
+            {/* Attachments - first-class UX */}
             {selectedTicketAttachments.length > 0 && (
               <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Attachments</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <div style={styles.drawerLabel}>📷 Attachments</div>
+                  <span style={{ fontSize: '11px', background: '#FEF2F2', color: '#C1121F', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                    {selectedTicketAttachments.length}
+                  </span>
+                </div>
                 {loadingAttachments ? (
                   <div style={{ fontSize: '13px', color: '#6B7280' }}>Loading images...</div>
                 ) : (
@@ -885,15 +830,92 @@ export default function TicketsPage() {
               </div>
             )}
 
-            <div style={styles.drawerActions}>
-              <button onClick={saveTicketChanges} style={styles.primarySaveButton} disabled={savingTicket}>
-                {savingTicket ? 'Saving...' : 'Save Changes'}
+            {/* KEY ACTIONS - clear, prominent */}
+            <div style={{...styles.drawerActionsZone}}>
+              <button 
+                onClick={saveTicketChanges} 
+                style={styles.primaryActionButton} 
+                disabled={savingTicket}
+              >
+                {savingTicket ? 'Saving...' : '💾 Save Changes'}
               </button>
               {selectedTicket.status !== 'CLOSED' && (
-                <button onClick={() => closeTicket(selectedTicket.id)} style={styles.closeButton} disabled={actionLoadingId === selectedTicket.id}>
-                  {actionLoadingId === selectedTicket.id ? 'Closing...' : 'Close Ticket'}
+                <button 
+                  onClick={() => closeTicket(selectedTicket.id)} 
+                  style={styles.dangerActionButton} 
+                  disabled={actionLoadingId === selectedTicket.id}
+                >
+                  {actionLoadingId === selectedTicket.id ? 'Closing...' : '✓ Close Ticket'}
                 </button>
               )}
+            </div>
+
+            {/* METADATA & CONTROLS - lighter section */}
+            <div style={styles.metadataSection}>
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Reporter</div>
+                <div style={styles.drawerValue}>
+                  {selectedTicket.reporter_name || selectedTicket.reporter_phone || '-'}
+                </div>
+              </div>
+
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Assigned Worker</div>
+                <select
+                  value={selectedTicket.assigned_worker_id || ''}
+                  onChange={(e) => assignWorker(selectedTicket.id, e.target.value)}
+                  style={styles.select}
+                >
+                  <option value="">Unassigned</option>
+                  {workers.map((worker) => (
+                    <option key={worker.id} value={worker.id}>
+                      {worker.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Status</div>
+                <select
+                  value={draftStatus}
+                  onChange={(e) => setDraftStatus(e.target.value)}
+                  style={styles.select}
+                >
+                  {statusOptions.filter((s) => s !== 'ALL').map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Priority</div>
+                <select
+                  value={draftPriority}
+                  onChange={(e) => setDraftPriority(e.target.value)}
+                  style={styles.select}
+                >
+                  <option value="LOW">LOW</option>
+                  <option value="NORMAL">NORMAL</option>
+                  <option value="URGENT">URGENT</option>
+                </select>
+              </div>
+
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Created</div>
+                <div style={styles.drawerValue}>
+                  {selectedTicket.created_at ? formatDate(selectedTicket.created_at) : '-'}
+                </div>
+              </div>
+
+              <div style={{...styles.drawerSection, borderBottom: 'none'}}>
+                <div style={styles.drawerLabel}>Closed</div>
+                <div style={styles.drawerValue}>
+                  {selectedTicket.closed_at ? formatDate(selectedTicket.closed_at) : '-'}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1028,16 +1050,20 @@ const styles: Record<string, CSSProperties> = {
   },
   mobileTopLinks: {
     display: 'flex',
-    gap: '10px',
+    gap: '8px',
+    flexWrap: 'wrap',
   },
   mobileLink: {
     textDecoration: 'none',
     color: '#111827',
     fontWeight: 700,
-    padding: '10px 12px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
+    fontSize: '13px',
+    padding: '10px 14px',
+    borderRadius: '10px',
+    background: '#F9F9FA',
     border: '1px solid rgba(0,0,0,0.08)',
+    transition: 'all 0.2s ease',
+    cursor: 'pointer',
   },
   statsGrid: {
     display: 'grid',
@@ -1257,18 +1283,36 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     gap: '12px',
-    marginBottom: '12px',
+    marginBottom: '14px',
     alignItems: 'flex-start',
   },
+  mobileCardHeader: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'flex-start',
+    marginBottom: '2px',
+  },
   mobileTicketNumber: {
-    fontSize: '15px',
+    fontSize: '16px',
     fontWeight: 800,
     color: '#111827',
-    marginBottom: '4px',
+    lineHeight: 1.2,
+  },
+  mobileAttachmentBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    backgroundColor: '#FEF2F2',
+    color: '#C1121F',
+    padding: '4px 8px',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: 700,
   },
   mobileProject: {
     fontSize: '13px',
     color: '#6B7280',
+    marginTop: '6px',
   },
   mobileDescription: {
     fontSize: '14px',
@@ -1357,14 +1401,16 @@ const styles: Record<string, CSSProperties> = {
     borderBottom: '1px solid rgba(0,0,0,0.04)',
   },
   drawerTitle: {
-    fontSize: '22px',
+    fontSize: '24px',
     fontWeight: 800,
-    color: '#2F2F33',
+    color: '#111827',
     marginBottom: '6px',
+    lineHeight: 1.2,
   },
   drawerSubtitle: {
-    color: '#6B6B72',
+    color: '#6B7280',
     fontSize: '14px',
+    fontWeight: '500',
   },
   drawerCloseButton: {
     background: '#F9F9FA',
@@ -1378,26 +1424,84 @@ const styles: Record<string, CSSProperties> = {
     flexShrink: 0,
   },
   drawerSection: {
-    marginBottom: '16px',
+    marginBottom: '18px',
+    paddingBottom: '16px',
+    borderBottom: '1px solid rgba(0,0,0,0.04)',
   },
   drawerLabel: {
     color: '#6B7280',
-    fontSize: '12px',
+    fontSize: '11px',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    marginBottom: '8px',
+    marginBottom: '10px',
     fontWeight: 700,
   },
   drawerValue: {
-    color: '#2F2F33',
+    color: '#111827',
     fontSize: '15px',
-    lineHeight: 1.5,
+    lineHeight: 1.6,
+    fontWeight: '500',
   },
   drawerActions: {
-    marginTop: '20px',
+    marginTop: '6px',
+    paddingTop: '14px',
     display: 'flex',
     gap: '10px',
     flexDirection: 'column',
+    borderTop: '1px solid rgba(0,0,0,0.04)',
+  },
+  descriptionSection: {
+    marginBottom: '20px !important',
+    paddingBottom: '20px !important',
+    borderBottom: '2px solid rgba(193, 18, 31, 0.15) !important',
+  },
+  descriptionValue: {
+    fontSize: '16px',
+    lineHeight: 1.7,
+    color: '#111827',
+    fontWeight: '500',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+  },
+  drawerActionsZone: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    marginBottom: '24px',
+    paddingBottom: '24px',
+    borderBottom: '1px solid rgba(0,0,0,0.08)',
+  },
+  primaryActionButton: {
+    background: '#111827',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '14px 16px',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '15px',
+    minHeight: '48px',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 4px 12px rgba(17, 24, 39, 0.15)',
+  },
+  dangerActionButton: {
+    background: '#C1121F',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '14px 16px',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '15px',
+    minHeight: '48px',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 4px 12px rgba(193, 18, 31, 0.2)',
+  },
+  metadataSection: {
+    background: '#F9F9FA',
+    borderRadius: '12px',
+    padding: '16px',
+    marginTop: '0',
   },
   primarySaveButton: {
     background: '#111827',
@@ -1412,18 +1516,19 @@ const styles: Record<string, CSSProperties> = {
   },
   attachmentGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-    gap: '10px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
+    gap: '12px',
   },
   attachmentThumbnail: {
-    background: 'none',
-    border: '1px solid #E5E7EB',
-    borderRadius: '10px',
+    background: '#F9F9FA',
+    border: '2px solid rgba(0,0,0,0.06)',
+    borderRadius: '12px',
     padding: 0,
     cursor: 'pointer',
     overflow: 'hidden',
-    height: '80px',
+    height: '90px',
     transition: 'all 0.2s ease',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
   },
   attachmentImg: {
     width: '100%',

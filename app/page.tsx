@@ -1316,76 +1316,25 @@ export default function HomePage() {
               </button>
             </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Phone</div>
-              <div style={styles.drawerValue}>{selectedTicket.reporter_phone}</div>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Status</div>
-              <select
-                value={draftStatus}
-                onChange={(e) => setDraftStatus(e.target.value)}
-                style={{
-                  ...styles.select,
-                  ...(isMobile ? styles.mobileTouchSelect : {}),
-                }}
-              >
-                {editableStatusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.drawerSection}>
+            {/* PRIMARY: Description with high emphasis */}
+            <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
               <div style={styles.drawerLabel}>Description</div>
               <textarea
                 value={draftDescription}
                 onChange={(e) => setDraftDescription(e.target.value)}
-                style={styles.drawerTextarea}
+                style={{...styles.drawerTextarea, ...styles.descriptionTextarea}}
               />
             </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Worker</div>
-              <select
-                value={draftWorkerId}
-                onChange={(e) => setDraftWorkerId(e.target.value)}
-                style={{
-                  ...styles.select,
-                  ...(isMobile ? styles.mobileTouchSelect : {}),
-                }}
-              >
-                <option value="">Assign Worker</option>
-                {Object.entries(workersMap).map(([id, name]) => (
-                  <option key={id} value={id}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Created</div>
-              <div style={styles.drawerValue}>
-                {new Date(selectedTicket.created_at).toLocaleString()}
-              </div>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Closed</div>
-              <div style={styles.drawerValue}>
-                {selectedTicket.closed_at
-                  ? new Date(selectedTicket.closed_at).toLocaleString()
-                  : '-'}
-              </div>
-            </div>
-
+            {/* Attachments - first-class UX */}
             {selectedTicketAttachments.length > 0 && (
               <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Attachments</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <div style={styles.drawerLabel}>📷 Attachments</div>
+                  <span style={{ fontSize: '11px', background: '#FEF2F2', color: '#C1121F', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                    {selectedTicketAttachments.length}
+                  </span>
+                </div>
                 {loadingAttachments ? (
                   <div style={{ fontSize: '13px', color: '#6B7280' }}>Loading images...</div>
                 ) : (
@@ -1409,6 +1358,27 @@ export default function HomePage() {
               </div>
             )}
 
+            {/* KEY ACTIONS - clear, prominent */}
+            <div style={styles.drawerActionsZone}>
+              <button 
+                onClick={saveSelectedTicket} 
+                style={styles.primaryActionButton}
+                disabled={savingTicket}
+              >
+                {savingTicket ? 'Saving...' : '💾 Save Changes'}
+              </button>
+
+              {draftStatus !== 'CLOSED' && (
+                <button
+                  onClick={() => closeTicket(selectedTicket.id)}
+                  style={styles.dangerActionButton}
+                >
+                  ✓ Close Ticket
+                </button>
+              )}
+            </div>
+
+            {/* QUICK ACTIONS */}
             <div style={styles.drawerQuickActions}>
               <button
                 onClick={() => copyText(selectedTicket.reporter_phone, 'Phone copied')}
@@ -1427,19 +1397,65 @@ export default function HomePage() {
               )}
             </div>
 
-            <div style={styles.drawerActions}>
-              <button onClick={saveSelectedTicket} style={styles.primarySaveButton}>
-                {savingTicket ? 'Saving...' : 'Save Changes'}
-              </button>
+            {/* METADATA & CONTROLS - lighter section */}
+            <div style={styles.metadataSection}>
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Phone</div>
+                <div style={styles.drawerValue}>{selectedTicket.reporter_phone}</div>
+              </div>
 
-              {draftStatus !== 'CLOSED' && (
-                <button
-                  onClick={() => closeTicket(selectedTicket.id)}
-                  style={styles.closeButton}
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Status</div>
+                <select
+                  value={draftStatus}
+                  onChange={(e) => setDraftStatus(e.target.value)}
+                  style={{
+                    ...styles.select,
+                    ...(isMobile ? styles.mobileTouchSelect : {}),
+                  }}
                 >
-                  Close Ticket
-                </button>
-              )}
+                  {editableStatusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Worker</div>
+                <select
+                  value={draftWorkerId}
+                  onChange={(e) => setDraftWorkerId(e.target.value)}
+                  style={{
+                    ...styles.select,
+                    ...(isMobile ? styles.mobileTouchSelect : {}),
+                  }}
+                >
+                  <option value="">Assign Worker</option>
+                  {Object.entries(workersMap).map(([id, name]) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Created</div>
+                <div style={styles.drawerValue}>
+                  {new Date(selectedTicket.created_at).toLocaleString()}
+                </div>
+              </div>
+
+              <div style={{...styles.drawerSection, borderBottom: 'none'}}>
+                <div style={styles.drawerLabel}>Closed</div>
+                <div style={styles.drawerValue}>
+                  {selectedTicket.closed_at
+                    ? new Date(selectedTicket.closed_at).toLocaleString()
+                    : '-'}
+                </div>
+              </div>
             </div>
 
             <div style={styles.historySection}>
@@ -2101,17 +2117,31 @@ const styles: Record<string, CSSProperties> = {
   },
   mobileCardHeaderLeft: {
     minWidth: 0,
+    flex: 1,
   },
   mobileCardTicketNumber: {
-    fontSize: '18px',
+    fontSize: '16px',
     fontWeight: 800,
     color: '#2F2F33',
+    lineHeight: 1.2,
+  },
+  mobileAttachmentBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    backgroundColor: '#FEF2F2',
+    color: '#C1121F',
+    padding: '4px 8px',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: 700,
+    marginTop: '4px',
   },
   mobileProject: {
     marginTop: '6px',
-    color: '#2F2F33',
-    fontSize: '14px',
-    fontWeight: 700,
+    color: '#6B7280',
+    fontSize: '13px',
+    fontWeight: 600,
     lineHeight: 1.35,
   },
   mobileProjectCode: {
@@ -2121,9 +2151,10 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
   },
   mobileDescription: {
-    marginTop: '6px',
+    marginTop: '10px',
     color: '#2F2F33',
     lineHeight: 1.5,
+    fontWeight: '500',
   },
   mobileMetaGroup: {
     display: 'flex',
@@ -2133,7 +2164,7 @@ const styles: Record<string, CSSProperties> = {
   },
   mobileMeta: {
     fontSize: '13px',
-    color: '#55555C',
+    color: '#6B7280',
   },
   mobileField: {
     marginTop: '14px',
@@ -2190,14 +2221,16 @@ const styles: Record<string, CSSProperties> = {
     borderBottom: '1px solid rgba(0,0,0,0.04)',
   },
   drawerTitle: {
-    fontSize: '22px',
+    fontSize: '24px',
     fontWeight: 800,
-    color: '#2F2F33',
+    color: '#111827',
     marginBottom: '6px',
+    lineHeight: 1.2,
   },
   drawerSubtitle: {
-    color: '#6B6B72',
+    color: '#6B7280',
     fontSize: '14px',
+    fontWeight: '500',
   },
   drawerCloseButton: {
     background: '#F9F9FA',
@@ -2211,20 +2244,23 @@ const styles: Record<string, CSSProperties> = {
     flexShrink: 0,
   },
   drawerSection: {
-    marginBottom: '16px',
+    marginBottom: '18px',
+    paddingBottom: '16px',
+    borderBottom: '1px solid rgba(0,0,0,0.04)',
   },
   drawerLabel: {
-    color: '#6B6B72',
-    fontSize: '12px',
+    color: '#6B7280',
+    fontSize: '11px',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    marginBottom: '8px',
+    marginBottom: '10px',
     fontWeight: 700,
   },
   drawerValue: {
-    color: '#2F2F33',
+    color: '#111827',
     fontSize: '15px',
-    lineHeight: 1.5,
+    lineHeight: 1.6,
+    fontWeight: '500',
   },
   drawerTextarea: {
     width: '100%',
@@ -2240,6 +2276,57 @@ const styles: Record<string, CSSProperties> = {
     outline: 'none',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
     boxSizing: 'border-box',
+  },
+  descriptionTextarea: {
+    minHeight: '140px !important',
+    fontSize: '15px !important',
+    fontWeight: '500 !important',
+    lineHeight: '1.7 !important',
+  },
+  descriptionSection: {
+    marginBottom: '20px !important',
+    paddingBottom: '20px !important',
+    borderBottom: '2px solid rgba(193, 18, 31, 0.15) !important',
+  },
+  drawerActionsZone: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    marginBottom: '24px',
+    paddingBottom: '24px',
+    borderBottom: '1px solid rgba(0,0,0,0.08)',
+  },
+  primaryActionButton: {
+    background: '#111827',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '14px 16px',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '15px',
+    minHeight: '48px',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 4px 12px rgba(17, 24, 39, 0.15)',
+  },
+  dangerActionButton: {
+    background: '#C1121F',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '14px 16px',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '15px',
+    minHeight: '48px',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 4px 12px rgba(193, 18, 31, 0.2)',
+  },
+  metadataSection: {
+    background: '#F9F9FA',
+    borderRadius: '12px',
+    padding: '16px',
+    marginTop: '0',
   },
   drawerQuickActions: {
     display: 'flex',
@@ -2309,18 +2396,19 @@ const styles: Record<string, CSSProperties> = {
   },
   attachmentGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-    gap: '10px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
+    gap: '12px',
   },
   attachmentThumbnail: {
-    background: 'none',
-    border: '1px solid #E5E7EB',
-    borderRadius: '10px',
+    background: '#F9F9FA',
+    border: '2px solid rgba(0,0,0,0.06)',
+    borderRadius: '12px',
     padding: 0,
     cursor: 'pointer',
     overflow: 'hidden',
-    height: '80px',
+    height: '90px',
     transition: 'all 0.2s ease',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
   },
   attachmentImg: {
     width: '100%',
