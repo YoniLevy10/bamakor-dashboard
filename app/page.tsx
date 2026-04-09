@@ -2249,7 +2249,6 @@ const styles: Record<string, CSSProperties> = {
     boxShadow: 'none',
     display: 'flex',
     flexDirection: 'column',
-    position: 'relative',
   },
   drawerHeader: {
     position: 'sticky',
@@ -2269,6 +2268,7 @@ const styles: Record<string, CSSProperties> = {
   },
   drawerContentWrapper: {
     flex: 1,
+    minHeight: 0,
     overflowY: 'scroll',
     overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
