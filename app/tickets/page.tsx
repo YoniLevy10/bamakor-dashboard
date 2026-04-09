@@ -1420,7 +1420,7 @@ const styles: Record<string, CSSProperties> = {
     paddingTop: 'env(safe-area-inset-top) !important',
     paddingLeft: '0 !important',
     paddingRight: '0 !important',
-    paddingBottom: '0 !important',
+    paddingBottom: '120px !important',
     overflowY: 'auto',
     WebkitOverflowScrolling: 'touch',
     borderLeft: 'none',
