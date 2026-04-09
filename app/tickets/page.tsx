@@ -1459,7 +1459,7 @@ const styles: Record<string, CSSProperties> = {
     marginRight: '0',
   },
   drawerContentWrapper: {
-    overflowY: 'auto',
+    overflowY: 'scroll',
     overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
     flex: 1,
