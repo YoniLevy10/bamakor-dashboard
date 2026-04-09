@@ -697,68 +697,60 @@ export default function TicketsPage() {
           {!loading && !error && filteredTickets.length > 0 && isMobile && (
             <div style={styles.mobileCards}>
               {filteredTickets.map((ticket) => (
-                <div key={ticket.id} onClick={() => openTicket(ticket)} style={{ ...styles.mobileCard, cursor: 'pointer' }}>
+                <div key={ticket.id} onClick={() => openTicket(ticket)} style={styles.mobileCard}>
                   <div style={styles.mobileCardTop}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={styles.mobileCardHeader}>
-                        <div style={styles.mobileTicketNumber}>TKT-{ticket.ticket_number}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={styles.mobileTicketNumber}>#{ticket.ticket_number}</div>
+                        {/* Attachment indicator */}
+                        <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#C1121F' }}>📷</div>
                       </div>
                       <div style={styles.mobileProject}>
                         {ticket.project_code || '-'}
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-                      <span style={{ ...styles.badge, ...getStatusStyle(ticket.status) }}>
-                        {ticket.status}
-                      </span>
-                    </div>
+                    <span style={{ ...styles.badge, ...getStatusStyle(ticket.status) }}>
+                      {ticket.status}
+                    </span>
                   </div>
 
                   <div style={styles.mobileDescription}>
                     {ticket.description || 'No description'}
                   </div>
 
-                  <div style={styles.mobileMeta}>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
                     <span style={{ ...styles.badge, ...getPriorityStyle(ticket.priority) }}>
                       {(ticket.priority || 'LOW').toUpperCase()}
                     </span>
-                    <span style={styles.mobileMetaText}>
-                      {ticket.created_at ? formatDate(ticket.created_at) : '-'}
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                      {ticket.assigned_worker_id ? getWorkerName(ticket.assigned_worker_id) : 'Unassigned'}
                     </span>
                   </div>
 
-                  <div style={styles.mobileField}>
-                    <div style={styles.mobileFieldLabel}>Assigned Worker</div>
-                    <select
-                      value={ticket.assigned_worker_id || ''}
-                      onChange={(e) => assignWorker(ticket.id, e.target.value)}
-                      style={styles.mobileSelect}
-                      disabled={actionLoadingId === ticket.id || ticket.status === 'CLOSED'}
-                    >
-                      <option value="">Unassigned</option>
-                      {workers.map((worker) => (
-                        <option key={worker.id} value={worker.id}>
-                          {worker.full_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   <div style={styles.mobileActions}>
-                    <div style={styles.mobileAssignedText}>
-                      {getWorkerName(ticket.assigned_worker_id)}
-                    </div>
-
-                    {ticket.status === 'CLOSED' ? (
-                      <span style={styles.doneText}>Done</span>
-                    ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        assignWorker(ticket.id, 'temp')
+                        setSelectedTicket(ticket)
+                        openTicket(ticket)
+                      }}
+                      style={{ ...styles.mobileActionButton, flex: 1 }}
+                      disabled={actionLoadingId === ticket.id}
+                    >
+                      {ticket.status === 'CLOSED' ? '✓ Done' : 'Assign'}
+                    </button>
+                    {ticket.status !== 'CLOSED' && (
                       <button
-                        onClick={() => closeTicket(ticket.id)}
-                        style={styles.closeButton}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closeTicket(ticket.id)
+                        }}
+                        style={{ ...styles.mobileActionButton, ...styles.mobileActionButtonSecondary, flex: 1 }}
                         disabled={actionLoadingId === ticket.id}
                       >
-                        {actionLoadingId === ticket.id ? 'Saving...' : 'Close'}
+                        Close
                       </button>
                     )}
                   </div>
@@ -775,8 +767,9 @@ export default function TicketsPage() {
           <div
             style={{
               ...styles.drawer,
-              ...(isMobile ? styles.drawerMobile : {}),
-              width: isMobile ? '100%' : '440px',
+              ...(isMobile ? { ...styles.drawerMobile, left: 0, right: 'auto' } : {}),
+              width: isMobile ? '100vw' : '440px',
+              right: !isMobile ? 0 : 'auto',
             }}
           >
             <div style={styles.drawerHeader}>
@@ -1358,6 +1351,23 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     gap: '12px',
   },
+  mobileActionButton: {
+    background: '#111827',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '11px 14px',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '13px',
+    minHeight: '44px',
+    transition: 'all 0.2s ease',
+  },
+  mobileActionButtonSecondary: {
+    background: '#F0F0F0',
+    color: '#111827',
+    border: '1px solid rgba(0,0,0,0.08)',
+  },
   mobileAssignedText: {
     fontSize: '13px',
     color: '#374151',
@@ -1383,8 +1393,14 @@ const styles: Record<string, CSSProperties> = {
     boxSizing: 'border-box',
   },
   drawerMobile: {
+    width: '100% !important',
+    left: '0 !important',
+    right: 'auto !important',
     borderRadius: '0',
-    padding: '16px',
+    padding: '0',
+    paddingTop: '14px',
+    borderLeft: 'none',
+    boxShadow: 'none',
   },
   drawerHeader: {
     position: 'sticky',
@@ -1399,6 +1415,8 @@ const styles: Record<string, CSSProperties> = {
     gap: '16px',
     marginBottom: '18px',
     borderBottom: '1px solid rgba(0,0,0,0.04)',
+    paddingLeft: '16px',
+    paddingRight: '16px',
   },
   drawerTitle: {
     fontSize: '24px',
@@ -1427,6 +1445,8 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: '18px',
     paddingBottom: '16px',
     borderBottom: '1px solid rgba(0,0,0,0.04)',
+    paddingLeft: '16px',
+    paddingRight: '16px',
   },
   drawerLabel: {
     color: '#6B7280',

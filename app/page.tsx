@@ -1293,8 +1293,9 @@ export default function HomePage() {
           <div
             style={{
               ...styles.drawer,
-              ...(isMobile ? styles.drawerMobile : {}),
-              width: isMobile ? '100%' : '440px',
+              ...(isMobile ? { ...styles.drawerMobile, left: 0, right: 'auto' } : {}),
+              width: isMobile ? '100vw' : '440px',
+              right: !isMobile ? 0 : 'auto',
             }}
           >
             <div style={styles.drawerHeader}>
@@ -2203,8 +2204,14 @@ const styles: Record<string, CSSProperties> = {
     boxSizing: 'border-box',
   },
   drawerMobile: {
+    width: '100% !important',
+    left: '0 !important',
+    right: 'auto !important',
     borderRadius: '0',
-    padding: '16px',
+    padding: '0',
+    paddingTop: '14px',
+    borderLeft: 'none',
+    boxShadow: 'none',
   },
   drawerHeader: {
     position: 'sticky',
@@ -2219,6 +2226,8 @@ const styles: Record<string, CSSProperties> = {
     gap: '16px',
     marginBottom: '18px',
     borderBottom: '1px solid rgba(0,0,0,0.04)',
+    paddingLeft: '16px',
+    paddingRight: '16px',
   },
   drawerTitle: {
     fontSize: '24px',
