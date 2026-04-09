@@ -773,7 +773,10 @@ export default function TicketsPage() {
             }}
           >
             <div style={styles.drawerHeader}>
-              <div>
+              <button onClick={closeDrawer} style={styles.drawerCloseButton}>
+                {isMobile ? '← Back' : '✕'}
+              </button>
+              <div style={{ flex: 1 }}>
                 <div style={styles.drawerTitle}>
                   Ticket #{selectedTicket.ticket_number}
                 </div>
@@ -781,9 +784,6 @@ export default function TicketsPage() {
                   {selectedTicket.project_code} - {selectedTicket.project_name}
                 </div>
               </div>
-              <button onClick={closeDrawer} style={styles.drawerCloseButton}>
-                ✕
-              </button>
             </div>
 
             {/* PRIMARY: Description - high emphasis */}
@@ -792,36 +792,38 @@ export default function TicketsPage() {
             </div>
 
             {/* Attachments - first-class UX */}
-            {selectedTicketAttachments.length > 0 && (
-              <div style={styles.drawerSection}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <div style={styles.drawerLabel}>📷 Attachments</div>
+            <div style={styles.drawerSection}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <div style={styles.drawerLabel}>📷 Attachments</div>
+                {selectedTicketAttachments.length > 0 && (
                   <span style={{ fontSize: '11px', background: '#FEF2F2', color: '#C1121F', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>
                     {selectedTicketAttachments.length}
                   </span>
-                </div>
-                {loadingAttachments ? (
-                  <div style={{ fontSize: '13px', color: '#6B7280' }}>Loading images...</div>
-                ) : (
-                  <div style={styles.attachmentGrid}>
-                    {selectedTicketAttachments.map((attachment) => (
-                      <button
-                        key={attachment.id}
-                        onClick={() => setSelectedImageUrl(getImageUrl(attachment))}
-                        style={styles.attachmentThumbnail}
-                        title={attachment.file_name}
-                      >
-                        <img
-                          src={getImageUrl(attachment)}
-                          alt={attachment.file_name}
-                          style={styles.attachmentImg}
-                        />
-                      </button>
-                    ))}
-                  </div>
                 )}
               </div>
-            )}
+              {loadingAttachments ? (
+                <div style={{ fontSize: '13px', color: '#6B7280' }}>Loading images...</div>
+              ) : selectedTicketAttachments.length > 0 ? (
+                <div style={styles.attachmentGrid}>
+                  {selectedTicketAttachments.map((attachment) => (
+                    <button
+                      key={attachment.id}
+                      onClick={() => setSelectedImageUrl(getImageUrl(attachment))}
+                      style={styles.attachmentThumbnail}
+                      title={attachment.file_name}
+                    >
+                      <img
+                        src={getImageUrl(attachment)}
+                        alt={attachment.file_name}
+                        style={styles.attachmentImg}
+                      />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '13px', color: '#9CA3AF' }}>No images attached</div>
+              )}
+            </div>
 
             {/* KEY ACTIONS - clear, prominent */}
             <div style={{...styles.drawerActionsZone}}>
@@ -1383,11 +1385,12 @@ const styles: Record<string, CSSProperties> = {
     position: 'fixed',
     top: 0,
     right: 0,
-    height: '100vh',
+    height: '100dvh',
     background: '#FFFFFF',
     borderLeft: '1px solid rgba(0,0,0,0.08)',
     zIndex: 60,
     padding: '20px',
+    paddingTop: 'calc(20px + env(safe-area-inset-top))',
     overflowY: 'auto',
     boxShadow: '-12px 0 40px rgba(0,0,0,0.08)',
     boxSizing: 'border-box',
@@ -1398,7 +1401,8 @@ const styles: Record<string, CSSProperties> = {
     right: 'auto !important',
     borderRadius: '0',
     padding: '0',
-    paddingTop: '14px',
+    height: '100dvh !important',
+    paddingTop: 'env(safe-area-inset-top)',
     borderLeft: 'none',
     boxShadow: 'none',
   },
