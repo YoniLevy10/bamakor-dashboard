@@ -1296,7 +1296,17 @@ export default function HomePage() {
 
       {selectedTicket && (
         <>
-          <div style={styles.drawerOverlay} />
+          <div 
+            style={styles.drawerOverlay}
+            onTouchMove={(e) => e.preventDefault()}
+            onWheelCapture={(e) => {
+              const target = e.target as HTMLElement
+              const contentWrapper = target.closest('[data-drawer-content]')
+              if (!contentWrapper) {
+                e.preventDefault()
+              }
+            }}
+          />
 
           <div
             style={{
@@ -1305,6 +1315,7 @@ export default function HomePage() {
               width: isMobile ? '100vw' : '440px',
               right: !isMobile ? 0 : 'auto',
             }}
+            onTouchMove={(e) => e.stopPropagation()}
           >
             <div style={styles.drawerHeader}>
               <button
@@ -1333,7 +1344,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div style={styles.drawerContentWrapper}>
+            <div style={styles.drawerContentWrapper} data-drawer-content="true">
               {/* PRIMARY: Description with high emphasis */}
               <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
                 <div style={styles.drawerLabel}>Description</div>

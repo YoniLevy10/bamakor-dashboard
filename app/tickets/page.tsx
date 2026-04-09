@@ -779,7 +779,17 @@ export default function TicketsPage() {
 
       {selectedTicket && (
         <>
-          <div style={styles.drawerOverlay} />
+          <div 
+            style={styles.drawerOverlay}
+            onTouchMove={(e) => e.preventDefault()}
+            onWheelCapture={(e) => {
+              const target = e.target as HTMLElement
+              const contentWrapper = target.closest('[data-drawer-content]')
+              if (!contentWrapper) {
+                e.preventDefault()
+              }
+            }}
+          />
           <div
             style={{
               ...styles.drawer,
@@ -787,6 +797,7 @@ export default function TicketsPage() {
               width: isMobile ? '100vw' : '440px',
               right: !isMobile ? 0 : 'auto',
             }}
+            onTouchMove={(e) => e.stopPropagation()}
           >
             <div style={styles.drawerHeader}>
               <button onClick={closeDrawer} style={styles.drawerCloseButton}>
@@ -802,7 +813,7 @@ export default function TicketsPage() {
               </div>
             </div>
 
-            <div style={styles.drawerContentWrapper}>
+            <div style={styles.drawerContentWrapper} data-drawer-content="true">
               {/* PRIMARY: Description - high emphasis */}
               <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
                 <div style={styles.descriptionValue}>{selectedTicket.description || 'No description provided'}</div>
