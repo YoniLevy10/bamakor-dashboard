@@ -546,8 +546,8 @@ export default function HomePage() {
     setLoadingAttachments(true)
     try {
       // STABILITY: Validate ticketId before query
-      if (!ticketId) {
-        console.error('❌ Cannot load attachments: ticketId is missing or empty')
+      if (!ticketId || typeof ticketId !== 'string') {
+        console.error('❌ Cannot load attachments: ticketId is invalid', { ticketId, type: typeof ticketId })
         setSelectedTicketAttachments([])
         setLoadingAttachments(false)
         return
@@ -575,7 +575,7 @@ export default function HomePage() {
         console.log(`ℹ️ No attachments found for ticket ${ticketId}`)
         setSelectedTicketAttachments([])
       } else {
-        console.log(`📦 Found ${data.length} attachment(s) for ticket ${ticketId}`)
+        console.log(`📦 Found ${data.length} attachment(s) for ticket ${ticketId}`, { data })
         
         // Generate signed URLs for each attachment for reliable access
         const attachmentsWithUrls = await Promise.all(
@@ -2205,6 +2205,7 @@ const styles: Record<string, CSSProperties> = {
     padding: '20px',
     paddingTop: 'calc(20px + env(safe-area-inset-top))',
     overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
     boxShadow: '-12px 0 40px rgba(0,0,0,0.08)',
     boxSizing: 'border-box',
   },

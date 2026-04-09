@@ -204,9 +204,12 @@ export default function TicketsPage() {
   }
 
   function openTicket(ticket: TicketRow) {
+    console.log(`🎟️ Opening ticket: ${ticket.id}`, { ticketNumber: ticket.ticket_number, ticketId: ticket.id })
     setSelectedTicket(ticket)
     setDraftPriority(ticket.priority || 'LOW')
     setDraftStatus(ticket.status)
+    // Reset attachments before loading new ones
+    setSelectedTicketAttachments([])
     loadTicketAttachments(ticket.id)
   }
 
@@ -214,8 +217,8 @@ export default function TicketsPage() {
     setLoadingAttachments(true)
     try {
       // STABILITY: Validate ticketId before query
-      if (!ticketId) {
-        console.error('❌ Cannot load attachments: ticketId is missing or empty')
+      if (!ticketId || typeof ticketId !== 'string') {
+        console.error('❌ Cannot load attachments: ticketId is invalid', { ticketId, type: typeof ticketId })
         setSelectedTicketAttachments([])
         setLoadingAttachments(false)
         return
@@ -240,10 +243,10 @@ export default function TicketsPage() {
         })
         setSelectedTicketAttachments([])
       } else if (!data || data.length === 0) {
-        console.log(`ℹ️ No attachments found for ticket ${ticketId}`)
+        console.log(`ℹ️  No attachments found for ticket ${ticketId}`)
         setSelectedTicketAttachments([])
       } else {
-        console.log(`📦 Found ${data.length} attachment(s) for ticket ${ticketId}`)
+        console.log(`📦 Found ${data.length} attachment(s) for ticket ${ticketId}`, { data })
         
         // Generate signed URLs for each attachment for reliable access
         const attachmentsWithUrls = await Promise.all(
@@ -1395,6 +1398,7 @@ const styles: Record<string, CSSProperties> = {
     padding: '20px',
     paddingTop: 'calc(20px + env(safe-area-inset-top))',
     overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
     boxShadow: '-12px 0 40px rgba(0,0,0,0.08)',
     boxSizing: 'border-box',
   },
@@ -1406,6 +1410,11 @@ const styles: Record<string, CSSProperties> = {
     padding: '0',
     height: '100dvh !important',
     paddingTop: 'env(safe-area-inset-top)',
+    paddingLeft: '0 !important',
+    paddingRight: '0 !important',
+    paddingBottom: '0 !important',
+    overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
     borderLeft: 'none',
     boxShadow: 'none',
   },
@@ -1415,7 +1424,7 @@ const styles: Record<string, CSSProperties> = {
     background: '#FFFFFF',
     paddingTop: '4px',
     paddingBottom: '12px',
-    zIndex: 10,
+    zIndex: 50,
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
