@@ -211,11 +211,6 @@ export default function TicketsPage() {
     // Reset attachments before loading new ones
     setSelectedTicketAttachments([])
     loadTicketAttachments(ticket.id)
-    // Lock body scroll and prevent scroll bleed when modal is open
-    if (typeof window !== 'undefined') {
-      document.body.style.overflow = 'hidden'
-      document.body.style.overscrollBehavior = 'contain'
-    }
   }
 
   async function loadTicketAttachments(ticketId: string) {
@@ -325,11 +320,6 @@ export default function TicketsPage() {
     setDraftStatus('')
     setSelectedTicketAttachments([])
     setSelectedImageUrl(null)
-    // Restore body scroll when drawer closes
-    if (typeof window !== 'undefined') {
-      document.body.style.overflow = 'auto'
-      document.body.style.overscrollBehavior = 'auto'
-    }
   }
 
   async function updatePriority(ticketId: string, priority: string) {
@@ -781,14 +771,6 @@ export default function TicketsPage() {
         <>
           <div 
             style={styles.drawerOverlay}
-            onTouchMove={(e) => e.preventDefault()}
-            onWheelCapture={(e) => {
-              const target = e.target as HTMLElement
-              const contentWrapper = target.closest('[data-drawer-content]')
-              if (!contentWrapper) {
-                e.preventDefault()
-              }
-            }}
           />
           <div
             style={{
@@ -970,16 +952,16 @@ function formatDate(value: string) {
 
 const styles: Record<string, CSSProperties> = {
   page: {
-    height: '100dvh',
-    overflow: 'hidden',
+    minHeight: '100dvh',
+    overflow: 'clip',
     background: '#F5F6F8',
     color: '#111827',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
   },
   shell: {
     display: 'grid',
-    height: '100%',
-    overflow: 'hidden',
+    minHeight: '100dvh',
+    overflow: 'visible',
   },
   sidebar: {
     background: '#FFFFFF',
@@ -1437,20 +1419,15 @@ const styles: Record<string, CSSProperties> = {
     overflow: 'hidden',
   },
   drawerMobile: {
-    width: '100% !important',
-    left: '0 !important',
-    right: 'auto !important',
-    borderRadius: '0',
-    padding: '0 !important',
-    height: '100dvh !important',
-    paddingTop: 'env(safe-area-inset-top) !important',
-    paddingLeft: '0 !important',
-    paddingRight: '0 !important',
-    paddingBottom: '0 !important',
+    width: '100%',
+    left: 0,
+    right: 'auto',
+    height: '100dvh',
     borderLeft: 'none',
     boxShadow: 'none',
     display: 'flex',
     flexDirection: 'column',
+    overflow: 'hidden',
   },
   drawerHeader: {
     background: '#FFFFFF',
@@ -1472,8 +1449,8 @@ const styles: Record<string, CSSProperties> = {
   drawerContentWrapper: {
     flex: '1 1 0%',
     minHeight: 0,
-    overflow: 'auto',
     overflowY: 'auto',
+    overflowX: 'hidden',
     overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
     paddingLeft: '16px',

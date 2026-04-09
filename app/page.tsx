@@ -540,11 +540,12 @@ export default function HomePage() {
     setDraftWorkerId(ticket.assigned_worker_id || '')
     loadTicketLogs(ticket.id)
     loadTicketAttachments(ticket.id)
-    // Lock body scroll and prevent scroll bleed when modal is open
-    if (typeof window !== 'undefined') {
-      document.body.style.overflow = 'hidden'
-      document.body.style.overscrollBehavior = 'contain'
-    }
+  }
+
+  function closeDrawer() {
+    setSelectedTicket(null)
+    setSelectedTicketAttachments([])
+    setSelectedImageUrl(null)
   }
 
   async function loadTicketAttachments(ticketId: string) {
@@ -1298,14 +1299,6 @@ export default function HomePage() {
         <>
           <div 
             style={styles.drawerOverlay}
-            onTouchMove={(e) => e.preventDefault()}
-            onWheelCapture={(e) => {
-              const target = e.target as HTMLElement
-              const contentWrapper = target.closest('[data-drawer-content]')
-              if (!contentWrapper) {
-                e.preventDefault()
-              }
-            }}
           />
 
           <div
@@ -1319,16 +1312,7 @@ export default function HomePage() {
           >
             <div style={styles.drawerHeader}>
               <button
-                onClick={() => {
-                  setSelectedTicket(null)
-                  setSelectedTicketAttachments([])
-                  setSelectedImageUrl(null)
-                  // Restore body scroll when drawer closes
-                  if (typeof window !== 'undefined') {
-                    document.body.style.overflow = 'auto'
-                    document.body.style.overscrollBehavior = 'auto'
-                  }
-                }}
+                onClick={closeDrawer}
                 style={styles.drawerCloseButton}
               >
                 {isMobile ? '←' : '✕'}
@@ -1547,10 +1531,10 @@ export default function HomePage() {
 
 const styles: Record<string, CSSProperties> = {
   page: {
-    height: '100dvh',
+    minHeight: '100dvh',
     width: '100%',
     maxWidth: '100%',
-    overflow: 'hidden',
+    overflow: 'clip',
     background: '#F4F4F5',
     color: '#2F2F33',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
@@ -1562,8 +1546,8 @@ const styles: Record<string, CSSProperties> = {
   appShell: {
     display: 'grid',
     width: '100%',
-    height: '100%',
-    overflow: 'hidden',
+    minHeight: '100dvh',
+    overflow: 'visible',
   },
   sidebar: {
     background: '#FFFFFF',
@@ -2273,22 +2257,15 @@ const styles: Record<string, CSSProperties> = {
     animation: 'slideInRight 0.3s ease-out',
   },
   drawerMobile: {
-    width: '100% !important',
-    left: '0 !important',
-    right: 'auto !important',
-    borderRadius: '0',
-    padding: '0 !important',
-    height: '100dvh !important',
-    paddingTop: 'calc(env(safe-area-inset-top) + 16px) !important',
-    paddingLeft: 'env(safe-area-inset-left) !important',
-    paddingRight: 'env(safe-area-inset-right) !important',
-    paddingBottom: 'env(safe-area-inset-bottom) !important',
+    width: '100%',
+    left: 0,
+    right: 'auto',
+    height: '100dvh',
     borderLeft: 'none',
     boxShadow: 'none',
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden !important',
-    animation: 'slideInLeft 0.3s ease-out',
+    overflow: 'hidden',
   },
   drawerHeader: {
     background: '#FFFFFF',
@@ -2310,8 +2287,8 @@ const styles: Record<string, CSSProperties> = {
   drawerContentWrapper: {
     flex: '1 1 0%',
     minHeight: 0,
-    overflow: 'auto',
     overflowY: 'auto',
+    overflowX: 'hidden',
     overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
     paddingLeft: 'calc(16px + env(safe-area-inset-left))',
