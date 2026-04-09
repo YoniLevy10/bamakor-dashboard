@@ -1442,8 +1442,6 @@ const styles: Record<string, CSSProperties> = {
     flexDirection: 'column',
   },
   drawerHeader: {
-    position: 'sticky',
-    top: 0,
     background: '#FFFFFF',
     paddingTop: '4px',
     paddingBottom: '12px',
@@ -1458,11 +1456,12 @@ const styles: Record<string, CSSProperties> = {
     paddingRight: '16px',
     marginLeft: '0',
     marginRight: '0',
+    flexShrink: 0,
   },
   drawerContentWrapper: {
     flex: 1,
     minHeight: 0,
-    overflowY: 'scroll',
+    overflowY: 'auto',
     overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
     paddingLeft: '16px',
