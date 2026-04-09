@@ -914,20 +914,20 @@ export default function HomePage() {
   <a href="/" style={{ ...styles.mobileMenuLink, ...styles.mobileMenuItemActive }}>
     Dashboard
   </a>
-  <a href="/summary" style={styles.mobileMenuLink}>
-    Summary
-  </a>
   <a href="/tickets" style={styles.mobileMenuLink}>
     Tickets
-  </a>
-  <a href="/workers" style={styles.mobileMenuLink}>
-    Workers
   </a>
   <a href="/projects" style={styles.mobileMenuLink}>
     Projects
   </a>
+  <a href="/workers" style={styles.mobileMenuLink}>
+    Workers
+  </a>
   <a href="/qr" style={styles.mobileMenuLink}>
     QR Codes
+  </a>
+  <a href="/summary" style={styles.mobileMenuLink}>
+    Summary
   </a>
 </div>
 
