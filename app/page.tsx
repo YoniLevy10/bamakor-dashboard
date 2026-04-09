@@ -2243,6 +2243,7 @@ const styles: Record<string, CSSProperties> = {
     paddingTop: 'env(safe-area-inset-top) !important',
     paddingLeft: '0 !important',
     paddingRight: '0 !important',
+  
     paddingBottom: '0 !important',
     borderLeft: 'none',
     boxShadow: 'none',
@@ -2264,7 +2265,6 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: '18px',
     borderBottom: '1px solid rgba(0,0,0,0.04)',
     paddingLeft: '16px',
-    paddingRight: '16px',
     paddingRight: '16px',
   },
   drawerContentWrapper: {
