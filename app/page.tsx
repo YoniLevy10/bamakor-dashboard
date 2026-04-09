@@ -540,10 +540,10 @@ export default function HomePage() {
     setDraftWorkerId(ticket.assigned_worker_id || '')
     loadTicketLogs(ticket.id)
     loadTicketAttachments(ticket.id)
-    // Disable body scroll on mobile to prevent scroll conflicts
-    if (isMobile && typeof window !== 'undefined') {
-      document.body.style.overflow = 'hidden'
-    }
+    // DISABLED FOR DEBUG: body.overflow = 'hidden' breaks scroll on PWA
+    // if (isMobile && typeof window !== 'undefined') {
+    //   document.body.style.overflow = 'hidden'
+    // }
   }
 
   async function loadTicketAttachments(ticketId: string) {
@@ -1311,10 +1311,10 @@ export default function HomePage() {
                   setSelectedTicket(null)
                   setSelectedTicketAttachments([])
                   setSelectedImageUrl(null)
-                  // Re-enable body scroll when drawer closes
-                  if (typeof window !== 'undefined') {
-                    document.body.style.overflow = 'auto'
-                  }
+                  // DISABLED FOR DEBUG: body.overflow = 'auto'
+                  // if (typeof window !== 'undefined') {
+                  //   document.body.style.overflow = 'auto'
+                  // }
                 }}
                 style={styles.drawerCloseButton}
               >
