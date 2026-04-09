@@ -1597,7 +1597,7 @@ const styles: Record<string, CSSProperties> = {
     boxSizing: 'border-box',
   },
   mainAreaMobile: {
-    padding: '16px',
+    padding: '12px',
   },
   brandWrap: {
     minWidth: 0,
@@ -1766,7 +1766,7 @@ const styles: Record<string, CSSProperties> = {
   },
   statsGrid: {
     display: 'grid',
-    gap: '14px',
+    gap: '10px',
     marginBottom: '18px',
     width: '100%',
     minWidth: 0,
@@ -1783,9 +1783,9 @@ const styles: Record<string, CSSProperties> = {
     transition: 'all 0.2s ease',
   },
   kpiCardMobile: {
-    padding: '16px',
+    padding: '12px',
     borderRadius: '20px',
-    minHeight: '118px',
+    minHeight: '100px',
   },
   kpiCardActive: {
     border: '1px solid #C1121F',
