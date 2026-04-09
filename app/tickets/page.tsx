@@ -1463,6 +1463,7 @@ const styles: Record<string, CSSProperties> = {
     overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
     flex: 1,
+    minHeight: 0,
     paddingLeft: '16px',
     paddingRight: '16px',
     paddingBottom: '120px',
