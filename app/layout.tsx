@@ -19,12 +19,17 @@ export const viewport: Viewport = {
   userScalable: true,
   viewportFit: "cover",
   themeColor: "#C41E3A",
+  colorScheme: "light dark",
+  interactiveWidget: "resizes-content",
 };
 
 export const metadata: Metadata = {
   title: "Bamakor - Property Management Dashboard",
   description: "Professional property and project management platform with real-time ticket tracking, worker assignment, and WhatsApp integration",
   applicationName: "Bamakor",
+  keywords: ["property management", "maintenance", "tickets", "project management", "real-time"],
+  authors: [{ name: "Yoni Levy" }],
+  creator: "Yoni Levy",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -35,8 +40,13 @@ export const metadata: Metadata = {
   },
   manifest: "/manifest.json",
   icons: {
-    icon: "/icon.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32", type: "image/x-icon" },
+      { url: "/icon.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
     apple: "/apple-icon.png",
+    shortcut: "/icon.png",
   },
   openGraph: {
     type: "website",
@@ -51,9 +61,17 @@ export const metadata: Metadata = {
         width: 512,
         height: 512,
         alt: "Bamakor Logo",
+        type: "image/png",
       },
     ],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "Bamakor - Property Management Dashboard",
+    description: "Professional property and project management platform",
+    images: ["/icon.png"],
+  },
+  category: "productivity",
 };
 
 export default function RootLayout({
