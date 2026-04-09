@@ -1339,15 +1339,16 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* PRIMARY: Description with high emphasis */}
-            <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
-              <div style={styles.drawerLabel}>Description</div>
-              <textarea
-                value={draftDescription}
-                onChange={(e) => setDraftDescription(e.target.value)}
-                style={{...styles.drawerTextarea, ...styles.descriptionTextarea}}
-              />
-            </div>
+            <div style={isMobile ? styles.drawerContentWrapper : {}}>
+              {/* PRIMARY: Description with high emphasis */}
+              <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
+                <div style={styles.drawerLabel}>Description</div>
+                <textarea
+                  value={draftDescription}
+                  onChange={(e) => setDraftDescription(e.target.value)}
+                  style={{...styles.drawerTextarea, ...styles.descriptionTextarea}}
+                />
+              </div>
 
             {/* Attachments - first-class UX */}
             <div style={styles.drawerSection}>
@@ -1518,6 +1519,7 @@ export default function HomePage() {
                     )}
                   </div>
                 ))}
+            </div>
             </div>
           </div>
 
@@ -2224,10 +2226,10 @@ const styles: Record<string, CSSProperties> = {
     zIndex: 60,
     padding: '20px',
     paddingTop: 'calc(20px + env(safe-area-inset-top))',
-    overflowY: 'auto',
-    WebkitOverflowScrolling: 'touch',
     boxShadow: '-12px 0 40px rgba(0,0,0,0.08)',
     boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
   },
   drawerMobile: {
     width: '100% !important',
@@ -2239,11 +2241,11 @@ const styles: Record<string, CSSProperties> = {
     paddingTop: 'env(safe-area-inset-top) !important',
     paddingLeft: '0 !important',
     paddingRight: '0 !important',
-    paddingBottom: '120px !important',
-    overflowY: 'auto',
-    WebkitOverflowScrolling: 'touch',
+    paddingBottom: '0 !important',
     borderLeft: 'none',
     boxShadow: 'none',
+    display: 'flex',
+    flexDirection: 'column',
   },
   drawerHeader: {
     position: 'sticky',
@@ -2260,6 +2262,14 @@ const styles: Record<string, CSSProperties> = {
     borderBottom: '1px solid rgba(0,0,0,0.04)',
     paddingLeft: '16px',
     paddingRight: '16px',
+  },
+  drawerContentWrapper: {
+    overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    flex: 1,
+    paddingLeft: '16px',
+    paddingRight: '16px',
+    paddingBottom: '120px',
   },
   drawerTitle: {
     fontSize: '24px',

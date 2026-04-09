@@ -800,10 +800,11 @@ export default function TicketsPage() {
               </div>
             </div>
 
-            {/* PRIMARY: Description - high emphasis */}
-            <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
-              <div style={styles.descriptionValue}>{selectedTicket.description || 'No description provided'}</div>
-            </div>
+            <div style={isMobile ? styles.drawerContentWrapper : {}}>
+              {/* PRIMARY: Description - high emphasis */}
+              <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
+                <div style={styles.descriptionValue}>{selectedTicket.description || 'No description provided'}</div>
+              </div>
 
             {/* Attachments - first-class UX */}
             <div style={styles.drawerSection}>
@@ -925,6 +926,7 @@ export default function TicketsPage() {
                   {selectedTicket.closed_at ? formatDate(selectedTicket.closed_at) : '-'}
                 </div>
               </div>
+            </div>
             </div>
           </div>
 
@@ -1405,10 +1407,10 @@ const styles: Record<string, CSSProperties> = {
     zIndex: 60,
     padding: '20px',
     paddingTop: 'calc(20px + env(safe-area-inset-top))',
-    overflowY: 'auto',
-    WebkitOverflowScrolling: 'touch',
     boxShadow: '-12px 0 40px rgba(0,0,0,0.08)',
     boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
   },
   drawerMobile: {
     width: '100% !important',
@@ -1420,11 +1422,11 @@ const styles: Record<string, CSSProperties> = {
     paddingTop: 'env(safe-area-inset-top) !important',
     paddingLeft: '0 !important',
     paddingRight: '0 !important',
-    paddingBottom: '120px !important',
-    overflowY: 'auto',
-    WebkitOverflowScrolling: 'touch',
+    paddingBottom: '0 !important',
     borderLeft: 'none',
     boxShadow: 'none',
+    display: 'flex',
+    flexDirection: 'column',
   },
   drawerHeader: {
     position: 'sticky',
@@ -1443,6 +1445,14 @@ const styles: Record<string, CSSProperties> = {
     paddingRight: '16px',
     marginLeft: '0',
     marginRight: '0',
+  },
+  drawerContentWrapper: {
+    overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    flex: 1,
+    paddingLeft: '16px',
+    paddingRight: '16px',
+    paddingBottom: '120px',
   },
   drawerTitle: {
     fontSize: '24px',
