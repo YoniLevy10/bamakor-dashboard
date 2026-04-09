@@ -1439,6 +1439,7 @@ const styles: Record<string, CSSProperties> = {
     boxShadow: 'none',
     display: 'flex',
     flexDirection: 'column',
+    position: 'relative',
   },
   drawerHeader: {
     position: 'sticky',
@@ -1459,18 +1460,13 @@ const styles: Record<string, CSSProperties> = {
     marginRight: '0',
   },
   drawerContentWrapper: {
-    position: 'absolute',
-    top: '70px',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     overflowY: 'scroll',
     overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
     paddingLeft: '16px',
     paddingRight: '16px',
     paddingBottom: '120px',
-    boxSizing: 'border-box',
   },
   drawerTitle: {
     fontSize: '24px',
