@@ -211,6 +211,10 @@ export default function TicketsPage() {
     // Reset attachments before loading new ones
     setSelectedTicketAttachments([])
     loadTicketAttachments(ticket.id)
+    // Disable body scroll on mobile to prevent scroll conflicts
+    if (isMobile && typeof window !== 'undefined') {
+      document.body.style.overflow = 'hidden'
+    }
   }
 
   async function loadTicketAttachments(ticketId: string) {
@@ -320,6 +324,10 @@ export default function TicketsPage() {
     setDraftStatus('')
     setSelectedTicketAttachments([])
     setSelectedImageUrl(null)
+    // Re-enable body scroll when drawer closes
+    if (typeof window !== 'undefined') {
+      document.body.style.overflow = 'auto'
+    }
   }
 
   async function updatePriority(ticketId: string, priority: string) {
@@ -780,7 +788,7 @@ export default function TicketsPage() {
           >
             <div style={styles.drawerHeader}>
               <button onClick={closeDrawer} style={styles.drawerCloseButton}>
-                {isMobile ? '← Back' : '✕'}
+                {isMobile ? '←' : '✕'}
               </button>
               <div style={{ flex: 1 }}>
                 <div style={styles.drawerTitle}>

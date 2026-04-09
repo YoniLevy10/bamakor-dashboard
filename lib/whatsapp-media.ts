@@ -169,6 +169,7 @@ export async function createAttachmentRecord(
         ticket_id: ticketId,
         file_name: fileName,
         file_url: filePath,
+        file_size: fileSize,
         mime_type: mimeType,
         attachment_type: attachmentType,
         whatsapp_media_id: mediaId || null,

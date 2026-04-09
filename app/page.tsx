@@ -540,6 +540,10 @@ export default function HomePage() {
     setDraftWorkerId(ticket.assigned_worker_id || '')
     loadTicketLogs(ticket.id)
     loadTicketAttachments(ticket.id)
+    // Disable body scroll on mobile to prevent scroll conflicts
+    if (isMobile && typeof window !== 'undefined') {
+      document.body.style.overflow = 'hidden'
+    }
   }
 
   async function loadTicketAttachments(ticketId: string) {
@@ -1291,7 +1295,15 @@ export default function HomePage() {
 
       {selectedTicket && (
         <>
-          <div onClick={() => setSelectedTicket(null)} style={styles.drawerOverlay} />
+          <div onClick={() => {
+            setSelectedTicket(null)
+            setSelectedTicketAttachments([])
+            setSelectedImageUrl(null)
+            // Re-enable body scroll when drawer closes
+            if (typeof window !== 'undefined') {
+              document.body.style.overflow = 'auto'
+            }
+          }} style={styles.drawerOverlay} />
 
           <div
             style={{
@@ -1303,10 +1315,18 @@ export default function HomePage() {
           >
             <div style={styles.drawerHeader}>
               <button
-                onClick={() => setSelectedTicket(null)}
+                onClick={() => {
+                  setSelectedTicket(null)
+                  setSelectedTicketAttachments([])
+                  setSelectedImageUrl(null)
+                  // Re-enable body scroll when drawer closes
+                  if (typeof window !== 'undefined') {
+                    document.body.style.overflow = 'auto'
+                  }
+                }}
                 style={styles.drawerCloseButton}
               >
-                {isMobile ? '← Back' : '✕'}
+                {isMobile ? '←' : '✕'}
               </button>
               <div style={{ flex: 1 }}>
                 <div style={styles.drawerTitle}>
