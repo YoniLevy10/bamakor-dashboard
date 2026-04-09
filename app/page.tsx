@@ -564,8 +564,11 @@ export default function HomePage() {
       if (error) {
         console.error('❌ Failed to load attachments from database:', {
           ticketId,
-          error: error.message,
-          code: error.code,
+          error,
+          message: error?.message || 'Unknown error',
+          code: error?.code || 'NO_CODE',
+          details: error?.details || 'No details available',
+          hint: error?.hint || 'No hint available',
         })
         setSelectedTicketAttachments([])
       } else if (!data || data.length === 0) {
