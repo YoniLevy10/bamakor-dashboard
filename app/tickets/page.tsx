@@ -232,7 +232,7 @@ export default function TicketsPage() {
 
       const { data, error } = await supabase
         .from('ticket_attachments')
-        .select('id, ticket_id, file_name, file_url, file_size, mime_type, created_at')
+        .select('id, ticket_id, file_name, file_url, mime_type, created_at')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: false })
 
@@ -1420,7 +1420,7 @@ const styles: Record<string, CSSProperties> = {
     paddingTop: 'env(safe-area-inset-top)',
     paddingLeft: '0 !important',
     paddingRight: '0 !important',
-    paddingBottom: '0 !important',
+    paddingBottom: '80px !important',
     overflowY: 'auto',
     WebkitOverflowScrolling: 'touch',
     borderLeft: 'none',
