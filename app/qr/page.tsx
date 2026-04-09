@@ -519,14 +519,18 @@ export default function QrPage() {
 
 const styles: Record<string, CSSProperties> = {
   page: {
-    minHeight: '100vh',
+    height: '100dvh',
+    width: '100%',
     background: '#F4F4F5',
     color: '#2F2F33',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
+    overflow: 'hidden',
   },
   shell: {
     display: 'grid',
-    minHeight: '100vh',
+    minHeight: '100dvh',
+    height: '100dvh',
+    overflow: 'hidden',
   },
   sidebar: {
     background: '#FFFFFF',
@@ -593,6 +597,11 @@ const styles: Record<string, CSSProperties> = {
   },
   content: {
     padding: '28px',
+    overflow: 'auto',
+    overscrollBehavior: 'contain',
+    WebkitOverflowScrolling: 'touch',
+    height: '100%',
+    boxSizing: 'border-box',
   },
   topBar: {
     display: 'flex',
