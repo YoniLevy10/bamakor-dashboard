@@ -199,6 +199,32 @@ export default function HomePage() {
     return () => window.clearTimeout(timer)
   }, [copyMessage])
 
+  // DEBUG: Monitor drawer scroll state on real device
+  useEffect(() => {
+    if (!selectedTicket || !isMobile) return
+    
+    const monitorDrawer = () => {
+      const drawer = document.querySelector('[style*="position: fixed"]') as HTMLElement | null
+      const contentWrapper = document.querySelector('[style*="flex: 1"]') as HTMLElement | null
+      
+      if (drawer && contentWrapper) {
+        console.log('📏 DRAWER DIMENSIONS DEBUG:', {
+          drawerHeight: drawer.clientHeight,
+          drawerScrollHeight: drawer.scrollHeight,
+          contentWrapperHeight: contentWrapper.clientHeight,
+          contentWrapperScrollHeight: contentWrapper.scrollHeight,
+          contentWrapperScrollTop: contentWrapper.scrollTop,
+          isScrollable: contentWrapper.scrollHeight > contentWrapper.clientHeight,
+          bodyOverflow: window.getComputedStyle(document.body).overflow,
+          pointerEvents: window.getComputedStyle(contentWrapper).pointerEvents,
+        })
+      }
+    }
+    
+    const timer = window.setTimeout(monitorDrawer, 500)
+    return () => window.clearTimeout(timer)
+  }, [selectedTicket, isMobile])
+
   useEffect(() => {
     const channel = supabase
       .channel('bamakor-live-updates')
@@ -543,6 +569,16 @@ export default function HomePage() {
     // Disable body scroll on mobile to prevent scroll conflicts
     if (isMobile && typeof window !== 'undefined') {
       document.body.style.overflow = 'hidden'
+      // DEBUG: Log viewport/scroll state on real device
+      console.log('🎫 DRAWER OPENED - Mobile:', {
+        innerHeight: window.innerHeight,
+        visualViewportHeight: window.visualViewport?.height,
+        bodyOverflow: document.body.style.overflow,
+        bodyHeight: document.body.clientHeight,
+        documentElementHeight: document.documentElement.clientHeight,
+        devicePixelRatio: window.devicePixelRatio,
+        scrollY: window.scrollY,
+      })
     }
   }
 
@@ -1295,15 +1331,7 @@ export default function HomePage() {
 
       {selectedTicket && (
         <>
-          <div onClick={() => {
-            setSelectedTicket(null)
-            setSelectedTicketAttachments([])
-            setSelectedImageUrl(null)
-            // Re-enable body scroll when drawer closes
-            if (typeof window !== 'undefined') {
-              document.body.style.overflow = 'auto'
-            }
-          }} style={styles.drawerOverlay} />
+          <div style={styles.drawerOverlay} />
 
           <div
             style={{
@@ -2213,6 +2241,7 @@ const styles: Record<string, CSSProperties> = {
     inset: 0,
     background: 'rgba(0,0,0,0.25)',
     zIndex: 50,
+    pointerEvents: 'none',
   },
   drawer: {
     position: 'fixed',

@@ -777,7 +777,7 @@ export default function TicketsPage() {
 
       {selectedTicket && (
         <>
-          <div onClick={closeDrawer} style={styles.drawerOverlay} />
+          <div style={styles.drawerOverlay} />
           <div
             style={{
               ...styles.drawer,
@@ -1396,6 +1396,7 @@ const styles: Record<string, CSSProperties> = {
     inset: 0,
     background: 'rgba(0,0,0,0.25)',
     zIndex: 50,
+    pointerEvents: 'none',
   },
   drawer: {
     position: 'fixed',
