@@ -356,7 +356,10 @@ export default function ReportPage() {
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    minHeight: '100vh',
+    height: '100dvh',
+    overflow: 'auto',
+    overscrollBehavior: 'contain',
+    WebkitOverflowScrolling: 'touch',
     background: 'linear-gradient(180deg, #F5F6F8 0%, #EEF1F4 100%)',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
     padding: '32px 16px',

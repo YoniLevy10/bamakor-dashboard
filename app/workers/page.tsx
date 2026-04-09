@@ -809,10 +809,10 @@ function getTicketPriorityStyle(priority?: string | null): CSSProperties {
 
 const styles: Record<string, CSSProperties> = {
   page: {
-    minHeight: '100vh',
+    height: '100dvh',
     width: '100%',
     maxWidth: '100%',
-    overflowX: 'hidden',
+    overflow: 'hidden',
     background: '#F4F4F5',
     color: '#2F2F33',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
@@ -820,7 +820,8 @@ const styles: Record<string, CSSProperties> = {
   appShell: {
     display: 'grid',
     width: '100%',
-    minHeight: '100vh',
+    height: '100dvh',
+    overflow: 'hidden',
   },
   sidebar: {
     background: '#FFFFFF',
@@ -830,8 +831,9 @@ const styles: Record<string, CSSProperties> = {
     flexDirection: 'column',
     position: 'sticky',
     top: 0,
-    height: '100vh',
+    height: '100%',
     justifyContent: 'space-between',
+    overflow: 'auto',
   },
   sidebarBrand: {
     display: 'flex',
@@ -887,9 +889,17 @@ const styles: Record<string, CSSProperties> = {
     maxWidth: '100%',
     minWidth: 0,
     boxSizing: 'border-box',
+    overflow: 'auto',
+    overscrollBehavior: 'contain',
+    WebkitOverflowScrolling: 'touch',
+    height: '100%',
   },
   mainAreaMobile: {
     padding: '18px 14px',
+    overflow: 'auto',
+    overscrollBehavior: 'contain',
+    WebkitOverflowScrolling: 'touch',
+    height: '100%',
   },
   topBar: {
     display: 'flex',
