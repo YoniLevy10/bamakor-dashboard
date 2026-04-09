@@ -959,14 +959,16 @@ function formatDate(value: string) {
 
 const styles: Record<string, CSSProperties> = {
   page: {
-    minHeight: '100vh',
+    height: '100dvh',
+    overflow: 'hidden',
     background: '#F5F6F8',
     color: '#111827',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
   },
   shell: {
     display: 'grid',
-    minHeight: '100vh',
+    height: '100%',
+    overflow: 'hidden',
   },
   sidebar: {
     background: '#FFFFFF',
@@ -976,8 +978,10 @@ const styles: Record<string, CSSProperties> = {
     flexDirection: 'column',
     position: 'sticky',
     top: 0,
-    height: '100vh',
+    height: '100%',
     justifyContent: 'space-between',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
   },
   sidebarBrand: {
     display: 'flex',
@@ -1040,6 +1044,11 @@ const styles: Record<string, CSSProperties> = {
   },
   content: {
     padding: '24px',
+    height: '100%',
+    overflow: 'auto',
+    overscrollBehavior: 'contain',
+    WebkitOverflowScrolling: 'touch',
+    boxSizing: 'border-box',
   },
   header: {
     display: 'flex',

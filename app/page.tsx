@@ -1536,10 +1536,10 @@ export default function HomePage() {
 
 const styles: Record<string, CSSProperties> = {
   page: {
-    minHeight: '100vh',
+    height: '100dvh',
     width: '100%',
     maxWidth: '100%',
-    overflowX: 'hidden',
+    overflow: 'hidden',
     background: '#F4F4F5',
     color: '#2F2F33',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
@@ -1547,7 +1547,8 @@ const styles: Record<string, CSSProperties> = {
   appShell: {
     display: 'grid',
     width: '100%',
-    minHeight: '100vh',
+    height: '100%',
+    overflow: 'hidden',
   },
   sidebar: {
     background: '#FFFFFF',
@@ -1557,8 +1558,10 @@ const styles: Record<string, CSSProperties> = {
     flexDirection: 'column',
     position: 'sticky',
     top: 0,
-    height: '100vh',
+    height: '100%',
     justifyContent: 'space-between',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
   },
   sidebarBrand: {
     display: 'flex',
@@ -1614,6 +1617,10 @@ const styles: Record<string, CSSProperties> = {
     maxWidth: '100%',
     minWidth: 0,
     boxSizing: 'border-box',
+    height: '100%',
+    overflow: 'auto',
+    overscrollBehavior: 'contain',
+    WebkitOverflowScrolling: 'touch',
   },
   mainAreaMobile: {
     padding: '12px',
