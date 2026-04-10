@@ -172,7 +172,9 @@ export default function HomePage() {
   const [selectedProjectCode, setSelectedProjectCode] = useState<string>('ALL')
 
   const [draftDescription, setDraftDescription] = useState('')
+  const [draftPhone, setDraftPhone] = useState('')
   const [draftStatus, setDraftStatus] = useState('NEW')
+  const [draftPriority, setDraftPriority] = useState('LOW')
   const [draftWorkerId, setDraftWorkerId] = useState('')
   const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentRow[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
@@ -592,17 +594,26 @@ export default function HomePage() {
     )
   }
 
-  function openTicket(ticket: TicketRow) {
+   function openTicket(ticket: TicketRow) {
+    console.log(`🎟️ Opening ticket: ${ticket.id}`, { ticketNumber: ticket.ticket_number, ticketId: ticket.id })
     setSelectedTicket(ticket)
     setDraftDescription(ticket.description || '')
-    setDraftStatus(ticket.status || 'NEW')
+    setDraftPhone(ticket.reporter_phone || '')
     setDraftWorkerId(ticket.assigned_worker_id || '')
-    loadTicketLogs(ticket.id)
+    // Note: priority is only available in tickets/page.tsx
+    setDraftStatus(ticket.status)
+    setSelectedTicketAttachments([])
     loadTicketAttachments(ticket.id)
   }
 
+
   function closeDrawer() {
     setSelectedTicket(null)
+    setDraftDescription('')
+    setDraftPhone('')
+    setDraftWorkerId('')
+    setDraftPriority('LOW')
+    setDraftStatus('NEW')
     setSelectedTicketAttachments([])
     setSelectedImageUrl(null)
   }
