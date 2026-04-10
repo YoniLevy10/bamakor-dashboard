@@ -1031,7 +1031,7 @@ export default function HomePage() {
                 onClick={() => setShowAddTicketModal(true)}
                 style={styles.primaryActionButton}
               >
-                + Add Ticket
+                + New Ticket
               </button>
 
               <button
