@@ -920,7 +920,7 @@ export default function HomePage() {
       }
 
       const result = await response.json()
-      toast.success(`Ticket #${result.ticket_number} created successfully`)
+      toast.success(`Ticket #${result.ticketNumber} created successfully`)
       
       // Reset form and close modal
       setAddTicketForm({
