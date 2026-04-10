@@ -1360,7 +1360,6 @@ export default function HomePage() {
               width: isMobile ? '100vw' : '440px',
               right: !isMobile ? 0 : 'auto',
             }}
-            onTouchMove={(e) => e.stopPropagation()}
           >
             <div style={styles.drawerHeader}>
               <button

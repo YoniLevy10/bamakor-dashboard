@@ -771,7 +771,6 @@ export default function TicketsPage() {
               width: isMobile ? '100vw' : '440px',
               right: !isMobile ? 0 : 'auto',
             }}
-            onTouchMove={(e) => e.stopPropagation()}
           >
             <div style={styles.drawerHeader}>
               <button onClick={closeDrawer} style={styles.drawerCloseButton}>
@@ -1425,6 +1424,8 @@ const styles: Record<string, CSSProperties> = {
     position: 'fixed',
     top: 0,
     right: 0,
+    width: '440px',
+    maxWidth: '100%',
     height: '100dvh',
     background: '#FFFFFF',
     borderLeft: '1px solid rgba(0,0,0,0.08)',
