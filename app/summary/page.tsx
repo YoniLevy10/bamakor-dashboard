@@ -179,7 +179,7 @@ export default function SummaryPage() {
   }, [projects, tickets])
 
   const recentTickets = useMemo(() => {
-    return tickets.slice(0, 8)
+    return tickets.slice(0, 4)
   }, [tickets])
 
   const projectsRequiringAttention = useMemo(() => {
