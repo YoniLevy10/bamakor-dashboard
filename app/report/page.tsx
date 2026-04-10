@@ -391,6 +391,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'linear-gradient(180deg, #F5F6F8 0%, #EEF1F4 100%)',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
     padding: '32px 16px',
+    paddingTop: 'calc(32px + env(safe-area-inset-top))',
     color: '#111827',
   },
   wrapper: {

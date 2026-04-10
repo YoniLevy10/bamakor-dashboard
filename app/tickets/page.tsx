@@ -505,11 +505,12 @@ export default function TicketsPage() {
             </div>
 
             {isMobile && (
-             <div style={styles.mobileTopLinks}>
-  <Link href="/" style={styles.mobileLink}>Dashboard</Link>
-  <Link href="/summary" style={styles.mobileLink}>Summary</Link>
-  <Link href="/qr" style={styles.mobileLink}>QR</Link>
-</div>
+              <button
+                onClick={() => setSelectedTicket({ id: 'new', ticket_number: 0, status: 'NEW', created_at: new Date().toISOString(), reporter_phone: '', description: '', assigned_worker_id: null, closed_at: null, project_code: '', project_name: '' } as TicketRow)}
+                style={styles.mobileAddButton}
+              >
+                + New Ticket
+              </button>
             )}
           </div>
 
@@ -1023,6 +1024,7 @@ const styles: Record<string, CSSProperties> = {
   },
   content: {
     padding: '24px',
+    paddingTop: 'calc(24px + env(safe-area-inset-top))',
     height: '100%',
     overflow: 'auto',
     overscrollBehavior: 'contain',
@@ -1049,10 +1051,17 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '16px',
     color: '#6B7280',
   },
-  mobileTopLinks: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
+  mobileAddButton: {
+    background: '#C41E3A',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    fontSize: '14px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    minHeight: '44px',
+    transition: 'all 0.2s ease',
   },
   mobileLink: {
     textDecoration: 'none',

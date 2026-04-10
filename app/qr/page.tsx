@@ -598,6 +598,7 @@ const styles: Record<string, CSSProperties> = {
   },
   content: {
     padding: '28px',
+    paddingTop: 'calc(28px + env(safe-area-inset-top))',
     overflow: 'auto',
     overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',

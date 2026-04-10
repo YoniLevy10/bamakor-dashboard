@@ -956,7 +956,7 @@ const styles: Record<string, CSSProperties> = {
     height: '100%',
   },
   mainAreaMobile: {
-    padding: '18px 14px',
+    padding: 'calc(18px + env(safe-area-inset-top)) 14px 18px 14px',
     overflow: 'auto',
     overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',

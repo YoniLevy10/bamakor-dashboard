@@ -490,6 +490,7 @@ const styles: Record<string, CSSProperties> = {
     background: '#F4F4F5',
     color: '#2F2F33',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
+    paddingTop: 'env(safe-area-inset-top)',
   },
   appShell: {
     display: 'grid',
