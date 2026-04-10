@@ -162,6 +162,7 @@ export default function HomePage() {
   const [ticketLogs, setTicketLogs] = useState<TicketLog[]>([])
   const [drawerLoading, setDrawerLoading] = useState(false)
   const [savingTicket, setSavingTicket] = useState(false)
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -573,6 +574,7 @@ export default function HomePage() {
   }
 
   async function closeTicket(ticketId: string) {
+    setActionLoadingId(ticketId)
     await asyncHandler(
       async () => {
         const response = await fetch('/api/close-ticket', {
@@ -592,6 +594,7 @@ export default function HomePage() {
       },
       { context: 'Failed to close ticket', showErrorToast: true }
     )
+    setActionLoadingId(null)
   }
 
    function openTicket(ticket: TicketRow) {
@@ -1532,8 +1535,9 @@ export default function HomePage() {
                 <button
                   onClick={() => closeTicket(selectedTicket.id)}
                   style={styles.dangerActionButton}
+                  disabled={actionLoadingId === selectedTicket.id}
                 >
-                  ✓ Close Ticket
+                  {actionLoadingId === selectedTicket.id ? 'Closing...' : '✓ Close Ticket'}
                 </button>
               )}
             </div>
