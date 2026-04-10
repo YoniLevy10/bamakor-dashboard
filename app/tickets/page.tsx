@@ -76,6 +76,16 @@ export default function TicketsPage() {
   const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentWithUrl[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
+  const [showAddTicketModal, setShowAddTicketModal] = useState(false)
+  const [addTicketForm, setAddTicketForm] = useState({
+    project_code: '',
+    description: '',
+    reporter_name: '',
+    reporter_phone: '',
+  })
+  const [addingTicket, setAddingTicket] = useState(false)
+  const [addTicketError, setAddTicketError] = useState('')
+  const [projects, setProjects] = useState<{ id: string; name: string; project_code: string }[]>([])
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -101,6 +111,7 @@ export default function TicketsPage() {
 
   useEffect(() => {
     fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function fetchData() {
@@ -109,9 +120,10 @@ export default function TicketsPage() {
 
     await asyncHandler(
       async () => {
-        const { data: ticketsData, error: ticketsError } = await supabase
-          .from('tickets')
-          .select(`
+        const [ticketsResult, workersResult, projectsResult] = await Promise.all([
+          supabase
+            .from('tickets')
+            .select(`
           id,
           ticket_number,
           project_id,
@@ -128,18 +140,22 @@ export default function TicketsPage() {
             project_code
           )
         `)
-          .order('created_at', { ascending: false })
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('workers')
+            .select('id, full_name, phone, email, role, is_active')
+            .order('full_name', { ascending: true }),
+          supabase
+            .from('projects')
+            .select('id, name, project_code')
+            .order('project_code', { ascending: true }),
+        ])
 
-        if (ticketsError) throw ticketsError
+        if (ticketsResult.error) throw ticketsResult.error
+        if (workersResult.error) throw workersResult.error
+        if (projectsResult.error) throw projectsResult.error
 
-        const { data: workersData, error: workersError } = await supabase
-          .from('workers')
-          .select('id, full_name, phone, email, role, is_active')
-          .order('full_name', { ascending: true })
-
-        if (workersError) throw workersError
-
-        const normalizedTickets: TicketRow[] = ((ticketsData as TicketRow[]) || []).map((ticket) => {
+        const normalizedTickets: TicketRow[] = ((ticketsResult.data as TicketRow[]) || []).map((ticket) => {
           const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
 
           return {
@@ -150,11 +166,12 @@ export default function TicketsPage() {
         })
 
         setTickets(normalizedTickets)
-        setWorkers((workersData as WorkerRow[]) || [])
+        setWorkers((workersResult.data as WorkerRow[]) || [])
+        setProjects((projectsResult.data as typeof projects) || [])
         return true
       },
       {
-        context: 'Failed to load tickets and workers',
+        context: 'Failed to load tickets, workers, and projects',
         showErrorToast: true,
         onError: (err) => setError(err),
       }
@@ -335,6 +352,74 @@ export default function TicketsPage() {
     setSelectedImageUrl(null)
   }
 
+  async function handleCreateTicket(e: React.FormEvent) {
+    e.preventDefault()
+    
+    // Validation
+    if (!addTicketForm.project_code) {
+      setAddTicketError('Please select a project')
+      return
+    }
+    if (!addTicketForm.description || addTicketForm.description.trim().length < 3) {
+      setAddTicketError('Description must be at least 3 characters')
+      return
+    }
+
+    setAddingTicket(true)
+    setAddTicketError('')
+
+    try {
+      const formData = new FormData()
+      formData.append('project_code', addTicketForm.project_code)
+      formData.append('description', addTicketForm.description)
+      if (addTicketForm.reporter_name) {
+        formData.append('reporter_name', addTicketForm.reporter_name)
+      }
+      if (addTicketForm.reporter_phone) {
+        formData.append('reporter_phone', addTicketForm.reporter_phone)
+      }
+      formData.append('source', 'manual')
+
+      const response = await fetch('/api/create-ticket', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Failed to create ticket')
+      }
+
+      const result = await response.json()
+      
+      // Check if ticket was created but images failed
+      if (result.imageUploadWarning) {
+        toast.success(`Ticket #${result.ticketNumber} created successfully`)
+        toast.error(result.imageUploadWarning)
+      } else {
+        toast.success(`Ticket #${result.ticketNumber} created successfully`)
+      }
+      
+      // Reset form and close modal
+      setAddTicketForm({
+        project_code: '',
+        description: '',
+        reporter_name: '',
+        reporter_phone: '',
+      })
+      setShowAddTicketModal(false)
+      
+      // Refresh ticket list
+      await fetchData()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create ticket'
+      setAddTicketError(message)
+      toast.error(message)
+    } finally {
+      setAddingTicket(false)
+    }
+  }
+
   async function saveTicketChanges() {
     if (!selectedTicket) return
 
@@ -451,7 +536,7 @@ export default function TicketsPage() {
     <main style={styles.page}>
       <div
         style={{
-          ...styles.shell,
+          ...styles.appShell,
           gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
         }}
       >
@@ -497,7 +582,7 @@ export default function TicketsPage() {
           </aside>
         )}
 
-        <section style={styles.content}>
+        <div style={{ ...styles.mainArea, ...(isMobile ? styles.mainAreaMobile : {}) }}>
           <div style={styles.header}>
             <div style={styles.mobileTopRow}>
               <Link href="/" style={styles.backButton}>
@@ -509,10 +594,20 @@ export default function TicketsPage() {
               </div>
             </div>
 
-
+            <div style={styles.headerActions}>
+              <button 
+                onClick={() => setShowAddTicketModal(true)}
+                style={styles.primaryButton}
+              >
+                + New Ticket
+              </button>
+            </div>
           </div>
 
-          <div style={styles.statsGrid}>
+          <div style={{
+            ...styles.statsGrid,
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(180px, 1fr))',
+          }}>
             <div style={styles.statCard}>
               <div style={styles.statLabel}>Total Tickets</div>
               <div style={styles.statValue}>{stats.total}</div>
@@ -749,8 +844,120 @@ export default function TicketsPage() {
               ))}
             </div>
           )}
-        </section>
+        </div>
       </div>
+
+      {showAddTicketModal && (
+        <>
+          <div style={styles.modalOverlay} onClick={() => setShowAddTicketModal(false)} />
+          <div style={styles.addTicketModal}>
+            <div style={styles.addTicketModalHeader}>
+              <h3 style={styles.addTicketModalTitle}>Create New Ticket</h3>
+              <button
+                onClick={() => setShowAddTicketModal(false)}
+                style={styles.addTicketModalClose}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTicket} style={styles.addTicketForm}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Project *</label>
+                <select
+                  value={addTicketForm.project_code}
+                  onChange={(e) =>
+                    setAddTicketForm({
+                      ...addTicketForm,
+                      project_code: e.target.value,
+                    })
+                  }
+                  style={styles.formSelect}
+                >
+                  <option value="">Select a project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.project_code}>
+                      {p.project_code} - {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Description *</label>
+                <textarea
+                  value={addTicketForm.description}
+                  onChange={(e) =>
+                    setAddTicketForm({
+                      ...addTicketForm,
+                      description: e.target.value,
+                    })
+                  }
+                  placeholder="Enter ticket description (min 3 characters)"
+                  style={styles.formTextarea}
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Reporter Name</label>
+                <input
+                  type="text"
+                  value={addTicketForm.reporter_name}
+                  onChange={(e) =>
+                    setAddTicketForm({
+                      ...addTicketForm,
+                      reporter_name: e.target.value,
+                    })
+                  }
+                  placeholder="Enter reporter name"
+                  style={styles.formInput}
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Reporter Phone</label>
+                <input
+                  type="tel"
+                  value={addTicketForm.reporter_phone}
+                  onChange={(e) =>
+                    setAddTicketForm({
+                      ...addTicketForm,
+                      reporter_phone: e.target.value,
+                    })
+                  }
+                  placeholder="Enter phone number"
+                  style={styles.formInput}
+                />
+              </div>
+
+              {addTicketError && (
+                <div style={styles.formError}>{addTicketError}</div>
+              )}
+
+              <div style={styles.formActions}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddTicketModal(false)}
+                  style={styles.formCancelButton}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addingTicket}
+                  style={{
+                    ...styles.formSubmitButton,
+                    opacity: addingTicket ? 0.6 : 1,
+                    cursor: addingTicket ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {addingTicket ? 'Creating...' : 'Create Ticket'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
 
       {selectedTicket && (
         <>
@@ -944,10 +1151,28 @@ const styles: Record<string, CSSProperties> = {
     color: '#111827',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
   },
+  appShell: {
+    display: 'grid',
+    minHeight: '100dvh',
+    overflow: 'visible',
+  },
   shell: {
     display: 'grid',
     minHeight: '100dvh',
     overflow: 'visible',
+  },
+  mainArea: {
+    padding: '24px',
+    paddingTop: 'calc(24px + env(safe-area-inset-top))',
+    height: '100%',
+    overflow: 'auto',
+    overscrollBehavior: 'contain',
+    WebkitOverflowScrolling: 'touch',
+    boxSizing: 'border-box',
+  },
+  mainAreaMobile: {
+    padding: '16px',
+    paddingTop: 'calc(16px + env(safe-area-inset-top))',
   },
   sidebar: {
     background: '#FFFFFF',
@@ -1037,6 +1262,22 @@ const styles: Record<string, CSSProperties> = {
     gap: '16px',
     marginBottom: '20px',
     flexWrap: 'wrap',
+  },
+  headerActions: {
+    display: 'flex',
+    gap: '12px',
+  },
+  primaryButton: {
+    background: '#111827',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '12px 16px',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '14px',
+    minHeight: '44px',
+    transition: 'all 0.2s ease',
   },
   title: {
     margin: 0,
@@ -1646,5 +1887,136 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.5)',
+    zIndex: 150,
+  },
+  addTicketModal: {
+    position: 'fixed',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: '90%',
+    maxWidth: '500px',
+    background: '#FFFFFF',
+    borderRadius: '12px',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+    zIndex: 200,
+    maxHeight: '90vh',
+    overflow: 'auto',
+    paddingTop: 'env(safe-area-inset-top)',
+    paddingBottom: 'env(safe-area-inset-bottom)',
+  },
+  addTicketModalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px',
+    borderBottom: '1px solid #E5E7EB',
+    position: 'sticky',
+    top: 0,
+    background: '#FFFFFF',
+    zIndex: 1,
+  },
+  addTicketModalTitle: {
+    fontSize: '18px',
+    fontWeight: '600' as const,
+    color: '#111827',
+    margin: 0,
+  },
+  addTicketModalClose: {
+    background: 'none',
+    border: 'none',
+    fontSize: '20px',
+    color: '#6B7280',
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addTicketForm: {
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  },
+  formGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  formLabel: {
+    fontSize: '14px',
+    fontWeight: '500' as const,
+    color: '#111827',
+  },
+  formInput: {
+    padding: '10px 12px',
+    borderRadius: '6px',
+    border: '1px solid #D1D5DB',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box' as const,
+  },
+  formSelect: {
+    padding: '10px 12px',
+    borderRadius: '6px',
+    border: '1px solid #D1D5DB',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box' as const,
+    background: '#FFFFFF',
+    cursor: 'pointer',
+  },
+  formTextarea: {
+    padding: '10px 12px',
+    borderRadius: '6px',
+    border: '1px solid #D1D5DB',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box' as const,
+    minHeight: '100px',
+    resize: 'vertical' as const,
+  },
+  formError: {
+    padding: '10px 12px',
+    background: '#FEE2E2',
+    color: '#DC2626',
+    borderRadius: '6px',
+    fontSize: '13px',
+  },
+  formActions: {
+    display: 'flex',
+    gap: '10px',
+    justifyContent: 'flex-end',
+    marginTop: '8px',
+  },
+  formCancelButton: {
+    padding: '10px 16px',
+    background: '#F3F4F6',
+    color: '#111827',
+    border: '1px solid #D1D5DB',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '14px',
+    minHeight: '44px',
+    transition: 'all 0.2s ease',
+  },
+  formSubmitButton: {
+    padding: '10px 16px',
+    background: '#111827',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '14px',
+    minHeight: '44px',
+    transition: 'all 0.2s ease',
   },
 }
