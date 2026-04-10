@@ -327,6 +327,7 @@ function ReportPageContent() {
                 <div style={styles.filePreviewContainer}>
                   {selectedFiles.map((file, idx) => (
                     <div key={idx} style={styles.filePreview}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={URL.createObjectURL(file)}
                         alt={`Preview ${idx + 1}`}

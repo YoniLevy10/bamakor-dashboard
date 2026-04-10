@@ -813,6 +813,7 @@ export default function TicketsPage() {
                       style={styles.attachmentThumbnail}
                       title={attachment.file_name}
                     >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={getImageUrl(attachment)}
                         alt={attachment.file_name}
@@ -923,6 +924,7 @@ export default function TicketsPage() {
                 <button onClick={() => setSelectedImageUrl(null)} style={styles.imageModalClose}>
                   ✕
                 </button>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={selectedImageUrl} alt="Full view" style={styles.imageModalImg} />
               </div>
             </>
