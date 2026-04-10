@@ -3,7 +3,7 @@
  * Centralizes validation logic, error responses, and rate limiting
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
 // ============================================================================
 // 1. TYPES & INTERFACES
@@ -31,6 +31,17 @@ export interface RateLimitInfo {
   resetTime: number;
   isLimited: boolean;
 }
+
+export interface ValidationRule {
+  type?: string;
+  required?: boolean;
+  enum?: string[];
+  pattern?: RegExp | string;
+  minLength?: number;
+  maxLength?: number;
+}
+
+export type ValidationSchema = Record<string, ValidationRule>;
 
 // ============================================================================
 // 2. VALIDATION SCHEMAS
@@ -83,7 +94,7 @@ export class RequestValidator {
     this.errors = [];
   }
 
-  validate(data: unknown, schema: Record<string, any>): boolean {
+  validate(data: unknown, schema: ValidationSchema): boolean {
     this.errors = [];
 
     if (typeof data !== 'object' || data === null) {
@@ -118,7 +129,7 @@ export class RequestValidator {
       }
 
       // Enum check
-      if (rules.enum && !rules.enum.includes(value)) {
+      if (rules.enum && !rules.enum.includes(String(value))) {
         this.errors.push({
           field,
           message: `${field} must be one of: ${rules.enum.join(', ')}`,
@@ -129,7 +140,7 @@ export class RequestValidator {
 
       // Pattern check
       if (rules.pattern) {
-        const pattern = new RegExp(rules.pattern);
+        const pattern = typeof rules.pattern === 'string' ? new RegExp(rules.pattern) : rules.pattern
         if (!pattern.test(String(value))) {
           this.errors.push({
             field,

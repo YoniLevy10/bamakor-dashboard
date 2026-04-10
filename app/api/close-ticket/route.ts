@@ -1,11 +1,9 @@
-import { supabase } from '@/lib/supabase'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
-import { getLogger, getAuditLogger } from '@/lib/logging'
+import { getLogger } from '@/lib/logging'
 
 export async function POST(req: Request) {
   const logger = getLogger()
-  const audit = getAuditLogger()
   const requestId = `close-ticket-${Date.now()}`
   
   logger.info('TICKET_API', 'Close ticket request received', { requestId })
