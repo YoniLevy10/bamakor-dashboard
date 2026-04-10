@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ToastContainer } from "./components/ToastContainer";
+import { initializeLogger, LogLevel } from "@/lib/logging";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -80,6 +81,15 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Initialize logger on app startup
+  initializeLogger({
+    minLevel: process.env.NODE_ENV === 'production' ? LogLevel.WARN : LogLevel.DEBUG,
+    enableConsole: true,
+    enableFile: true,
+    enableRemote: process.env.NODE_ENV === 'production',
+    defaultCategory: 'APP',
+  });
+
   return (
     <html
       lang="en"

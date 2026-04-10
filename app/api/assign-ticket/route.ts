@@ -1,16 +1,25 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { sendWhatsAppTextWithTemplateFallback } from '@/lib/whatsapp-send'
+import { getLogger, getAuditLogger } from '@/lib/logging'
 
 const WORKER_TEMPLATE_NAME = 'worker_assignment_notice'
 
 export async function POST(req: Request) {
+  const logger = getLogger()
+  const audit = getAuditLogger()
+  const requestId = `assign-ticket-${Date.now()}`
+  
+  logger.info('TICKET_API', 'Assign ticket request received', { requestId })
+  
   try {
     let supabaseAdmin
     try {
       supabaseAdmin = getSupabaseAdmin()
     } catch (envError) {
       console.error('❌ Environment configuration error:', envError)
+      const error = envError instanceof Error ? envError : new Error(String(envError))
+      logger.error('TICKET_API', 'Failed to initialize Supabase admin', error, { requestId })
       return NextResponse.json(
         {
           error: 'Server configuration error. Required environment variables are not set.',
@@ -24,6 +33,7 @@ export async function POST(req: Request) {
     const { ticket_id, worker_id } = body
 
     if (!ticket_id || !worker_id) {
+      logger.error('TICKET_API', 'Missing required parameters', undefined, { requestId, ticket_id, worker_id })
       return NextResponse.json(
         { error: 'ticket_id and worker_id are required' },
         { status: 400 }
@@ -78,11 +88,16 @@ export async function POST(req: Request) {
       .single()
 
     if (updateError) {
+      logger.error('TICKET_API', 'Failed to assign ticket', updateError, { requestId, ticket_id, worker_id })
+      audit.logFailedOperation('UPDATE', 'TICKET', ticket_id, 'unknown', `Assignment failed: ${updateError.message}`)
       return NextResponse.json(
         { error: updateError.message },
         { status: 500 }
       )
     }
+    
+    audit.logTicketAssigned('unknown', ticket_id, worker_id)
+    logger.info('TICKET_API', 'Ticket assigned successfully', { requestId, ticket_id, worker_id })
 
     const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
     const projectName = project?.name || 'ללא שם פרויקט'
@@ -133,6 +148,8 @@ export async function POST(req: Request) {
       ticket: updatedTicket,
     })
   } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    logger.error('TICKET_API', 'Assign ticket route error', err, { requestId })
     console.error('❌ assign-ticket route error:', error)
     return NextResponse.json(
       { error: 'Server error' },

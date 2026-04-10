@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { getLogger, getAuditLogger } from '@/lib/logging'
 
 function parseStartCode(message: string) {
   const match = message.trim().toUpperCase().match(/^START_(BMK\d+)(?:_(.+))?$/i)
@@ -108,12 +109,19 @@ async function uploadAttachments(
 }
 
 export async function POST(req: Request) {
+  const logger = getLogger()
+  const audit = getAuditLogger()
+  const requestId = `ticket-${Date.now()}`
+  
   try {
+    logger.debug('TICKET_API', 'Incoming request', { requestId })
+    
     let supabaseAdmin
     try {
       supabaseAdmin = getSupabaseAdmin()
     } catch (envError) {
       console.error('❌ Environment configuration error:', envError)
+      logger.error('TICKET_API', 'Environment config error', envError as Error, { requestId })
       return NextResponse.json(
         {
           error: 'Server configuration error. Required environment variables are not set.',
@@ -210,11 +218,26 @@ export async function POST(req: Request) {
 
       if (ticketError) {
         console.error('❌ Failed to create ticket from web form:', ticketError)
+        logger.error('TICKET_API', 'Failed to create ticket from web form', ticketError as Error, { 
+          requestId, 
+          projectCode: projectCodeFromBody,
+          clientId: project.client_id 
+        })
+        audit.logFailedOperation('CREATE', 'TICKET', 'unknown', project.client_id, ticketError.message)
         return NextResponse.json(
           { error: ticketError.message || 'Failed to create ticket' },
           { status: 500 }
         )
       }
+
+      // Log audit trail
+      audit.logTicketCreated(project.client_id, createdTicket.id, 'web_form')
+      logger.info('TICKET_API', 'Ticket created from web form', { 
+        requestId, 
+        ticketId: createdTicket.id, 
+        ticketNumber: createdTicket.ticket_number,
+        clientId: project.client_id 
+      })
 
       const { error: logError } = await supabaseAdmin
         .from('ticket_logs')
@@ -389,11 +412,28 @@ export async function POST(req: Request) {
       .single()
 
     if (ticketError) {
+      logger.error('TICKET_API', 'Failed to create WhatsApp ticket', ticketError as Error, { 
+        requestId, 
+        phone, 
+        projectCode,
+        clientId: project.client_id 
+      })
+      audit.logFailedOperation('CREATE', 'TICKET', 'unknown', project.client_id, ticketError.message)
       return NextResponse.json(
         { error: ticketError.message || 'Failed to create ticket' },
         { status: 500 }
       )
     }
+
+    // Log audit trail
+    audit.logTicketCreated(project.client_id, createdTicket.id, 'whatsapp')
+    logger.info('TICKET_API', 'Ticket created from WhatsApp', { 
+      requestId, 
+      ticketId: createdTicket.id, 
+      ticketNumber: createdTicket.ticket_number,
+      phone,
+      clientId: project.client_id 
+    })
 
     const { data: createdSession, error: createSessionError } = await supabaseAdmin
       .from('sessions')
@@ -454,6 +494,8 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     console.error('❌ create-ticket route error:', err)
+    const error = err instanceof Error ? err : new Error(String(err))
+    logger.error('TICKET_API', 'Unhandled error in create-ticket', error, { requestId })
     return NextResponse.json(
       {
         error: 'Server error',

@@ -8,8 +8,10 @@ import {
   uploadWhatsAppMediaToStorage,
   createAttachmentRecord,
 } from '@/lib/whatsapp-media'
+import { getLogger } from '@/lib/logging'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
+const logger = getLogger()
 
 type ProjectRow = {
   id: string
@@ -150,6 +152,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const requestId = `webhook-whatsapp-${Date.now()}`
+  logger.info('WEBHOOK', 'WhatsApp webhook POST received', { requestId })
+  
   try {
     const body = await req.json()
     
@@ -157,6 +162,8 @@ export async function POST(req: NextRequest) {
     try {
       supabaseAdmin = getSupabaseAdmin()
     } catch (envError) {
+      const error = envError instanceof Error ? envError : new Error(String(envError))
+      logger.error('WEBHOOK', 'Failed to initialize Supabase admin', error, { requestId })
       console.error('❌ Environment configuration error:', envError)
       return NextResponse.json(
         {
@@ -169,11 +176,13 @@ export async function POST(req: NextRequest) {
 
     console.log('✅ WEBHOOK DB VERSION ACTIVE')
     console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
+    logger.debug('WEBHOOK', 'Full webhook payload', { requestId, payload: body })
 
     const parsedMessage = parseIncomingWhatsAppMessage(body)
 
     if (!parsedMessage) {
       console.log('ℹ️ No incoming user message in payload')
+      logger.debug('WEBHOOK', 'No incoming message in payload', { requestId })
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
@@ -184,6 +193,14 @@ export async function POST(req: NextRequest) {
     console.log('💬 Message body:', textBody)
     console.log('📎 Media ID:', mediaId)
     console.log('📎 Media Type:', mediaType)
+    
+    logger.info('WEBHOOK', 'Parsed incoming message', { 
+      requestId, 
+      from, 
+      messageType, 
+      hasText: !!textBody,
+      hasMedia: !!mediaId 
+    })
 
     // HANDLE VOICE/AUDIO MESSAGES SAFELY
     if (messageType === 'audio') {
@@ -865,6 +882,8 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    logger.error('WEBHOOK', 'WhatsApp webhook POST error', err, { requestId })
     console.error('❌ Webhook error:', error)
     return NextResponse.json(
       {

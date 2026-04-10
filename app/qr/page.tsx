@@ -213,20 +213,22 @@ export default function QrPage() {
 
         <section style={styles.content}>
           <div style={styles.topBar}>
-            <div>
-              <h1 style={styles.title}>QR Codes</h1>
-              <p style={styles.subtitle}>
-                WhatsApp QR for fast reporting, plus a direct web form link for structured reporting
-              </p>
+            <div style={styles.mobileTopRow}>
+              <Link href="/" style={styles.backButton}>
+                ←
+              </Link>
+              <div>
+                <h1 style={styles.title}>QR Codes</h1>
+                <p style={styles.subtitle}>
+                  WhatsApp QR for fast reporting, plus a direct web form link for structured reporting
+                </p>
+              </div>
             </div>
 
             <div style={styles.topActions}>
               <button onClick={loadProjects} style={styles.secondaryButton}>
                 Refresh
               </button>
-              <Link href="/" style={styles.primaryLinkButton}>
-                Back to Dashboard
-              </Link>
             </div>
           </div>
 
@@ -1043,5 +1045,24 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     gap: '8px',
     animation: 'slideUp 0.3s ease',
+  },
+  mobileTopRow: {
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'flex-start',
+  },
+  backButton: {
+    width: '42px',
+    height: '42px',
+    borderRadius: '12px',
+    background: '#FFFFFF',
+    border: '1px solid #D7D7DB',
+    color: '#111827',
+    textDecoration: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 800,
+    flexShrink: 0,
   },
 }

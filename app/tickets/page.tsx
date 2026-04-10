@@ -499,9 +499,14 @@ export default function TicketsPage() {
 
         <section style={styles.content}>
           <div style={styles.header}>
-            <div>
-              <h1 style={styles.title}>All Tickets</h1>
-              <p style={styles.subtitle}>Manage and track maintenance requests</p>
+            <div style={styles.mobileTopRow}>
+              <Link href="/" style={styles.backButton}>
+                ←
+              </Link>
+              <div>
+                <h1 style={styles.title}>All Tickets</h1>
+                <p style={styles.subtitle}>Manage and track maintenance requests</p>
+              </div>
             </div>
 
             {isMobile && (
@@ -1117,6 +1122,25 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     color: '#111827',
     marginBottom: '16px',
+  },
+  mobileTopRow: {
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'flex-start',
+  },
+  backButton: {
+    width: '42px',
+    height: '42px',
+    borderRadius: '12px',
+    background: '#FFFFFF',
+    border: '1px solid #D7D7DB',
+    color: '#111827',
+    textDecoration: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 800,
+    flexShrink: 0,
   },
   filtersRow: {
     display: 'grid',

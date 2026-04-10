@@ -268,7 +268,10 @@ export default function SummaryPage() {
         <div style={{ ...styles.mainArea, ...(isMobile ? styles.mainAreaMobile : {}) }}>
           <div style={styles.topBar}>
             <div style={styles.brandWrap}>
-              <div style={styles.brandRow}>
+              <div style={styles.mobileTopRow}>
+                <Link href="/" style={styles.backButton}>
+                  ←
+                </Link>
                 <div>
                   <h1 style={{ ...styles.title, ...(isMobile ? styles.titleMobile : {}) }}>
                     Summary
@@ -284,9 +287,6 @@ export default function SummaryPage() {
               <button onClick={loadData} style={styles.secondaryButton}>
                 Refresh
               </button>
-              <Link href="/" style={styles.secondaryLinkButton}>
-                Back to Dashboard
-              </Link>
             </div>
           </div>
 
@@ -561,6 +561,25 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '13px',
     color: '#6B7280',
     padding: '12px 14px',
+  },
+  mobileTopRow: {
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'flex-start',
+  },
+  backButton: {
+    width: '42px',
+    height: '42px',
+    borderRadius: '12px',
+    background: '#FFFFFF',
+    border: '1px solid #D7D7DB',
+    color: '#111827',
+    textDecoration: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 800,
+    flexShrink: 0,
   },
   mainArea: {
     padding: '24px',
