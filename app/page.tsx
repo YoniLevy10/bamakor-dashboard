@@ -178,6 +178,17 @@ export default function HomePage() {
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
 
+  // Add Ticket Modal States
+  const [showAddTicketModal, setShowAddTicketModal] = useState(false)
+  const [addTicketForm, setAddTicketForm] = useState({
+    project_code: '',
+    description: '',
+    reporter_name: '',
+    reporter_phone: '',
+  })
+  const [addingTicket, setAddingTicket] = useState(false)
+  const [addTicketError, setAddTicketError] = useState('')
+
   const activeSource = useMemo(() => {
     return 'all'
   }, [])
@@ -870,6 +881,67 @@ export default function HomePage() {
     setSearchTerm('')
   }
 
+  async function handleCreateTicket(e: React.FormEvent) {
+    e.preventDefault()
+    
+    // Validation
+    if (!addTicketForm.project_code) {
+      setAddTicketError('Please select a project')
+      return
+    }
+    if (!addTicketForm.description || addTicketForm.description.trim().length < 3) {
+      setAddTicketError('Description must be at least 3 characters')
+      return
+    }
+
+    setAddingTicket(true)
+    setAddTicketError('')
+
+    try {
+      const formData = new FormData()
+      formData.append('project_code', addTicketForm.project_code)
+      formData.append('description', addTicketForm.description)
+      if (addTicketForm.reporter_name) {
+        formData.append('reporter_name', addTicketForm.reporter_name)
+      }
+      if (addTicketForm.reporter_phone) {
+        formData.append('reporter_phone', addTicketForm.reporter_phone)
+      }
+      formData.append('source', 'manual')
+
+      const response = await fetch('/api/create-ticket', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Failed to create ticket')
+      }
+
+      const result = await response.json()
+      toast.success(`Ticket #${result.ticket_number} created successfully`)
+      
+      // Reset form and close modal
+      setAddTicketForm({
+        project_code: '',
+        description: '',
+        reporter_name: '',
+        reporter_phone: '',
+      })
+      setShowAddTicketModal(false)
+      
+      // Refresh ticket list
+      await refreshData()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create ticket'
+      setAddTicketError(message)
+      toast.error(message)
+    } finally {
+      setAddingTicket(false)
+    }
+  }
+
   return (
     <main style={styles.page}>
       <div
@@ -941,6 +1013,13 @@ export default function HomePage() {
             </div>
 
             <div style={styles.topActions}>
+              <button
+                onClick={() => setShowAddTicketModal(true)}
+                style={styles.primaryActionButton}
+              >
+                + Add Ticket
+              </button>
+
               <button
                 onClick={() => setShowQrSection((prev) => !prev)}
                 style={styles.secondaryButton}
@@ -1576,6 +1655,119 @@ export default function HomePage() {
               </div>
             </>
           )}
+
+          {/* Add Ticket Modal */}
+          {showAddTicketModal && (
+            <>
+              <div style={styles.modalOverlay} onClick={() => setShowAddTicketModal(false)} />
+              <div style={styles.addTicketModal}>
+                <div style={styles.addTicketModalHeader}>
+                  <h3 style={styles.addTicketModalTitle}>Create New Ticket</h3>
+                  <button
+                    onClick={() => setShowAddTicketModal(false)}
+                    style={styles.addTicketModalClose}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleCreateTicket} style={styles.addTicketForm}>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Project *</label>
+                    <select
+                      value={addTicketForm.project_code}
+                      onChange={(e) =>
+                        setAddTicketForm({
+                          ...addTicketForm,
+                          project_code: e.target.value,
+                        })
+                      }
+                      style={styles.formSelect}
+                    >
+                      <option value="">Select a project</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.project_code}>
+                          {p.project_code} - {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Description *</label>
+                    <textarea
+                      value={addTicketForm.description}
+                      onChange={(e) =>
+                        setAddTicketForm({
+                          ...addTicketForm,
+                          description: e.target.value,
+                        })
+                      }
+                      placeholder="Enter ticket description (min 3 characters)"
+                      style={styles.formTextarea}
+                    />
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Reporter Name</label>
+                    <input
+                      type="text"
+                      value={addTicketForm.reporter_name}
+                      onChange={(e) =>
+                        setAddTicketForm({
+                          ...addTicketForm,
+                          reporter_name: e.target.value,
+                        })
+                      }
+                      placeholder="Enter reporter name"
+                      style={styles.formInput}
+                    />
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Reporter Phone</label>
+                    <input
+                      type="tel"
+                      value={addTicketForm.reporter_phone}
+                      onChange={(e) =>
+                        setAddTicketForm({
+                          ...addTicketForm,
+                          reporter_phone: e.target.value,
+                        })
+                      }
+                      placeholder="Enter phone number"
+                      style={styles.formInput}
+                    />
+                  </div>
+
+                  {addTicketError && (
+                    <div style={styles.formError}>{addTicketError}</div>
+                  )}
+
+                  <div style={styles.formActions}>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddTicketModal(false)}
+                      style={styles.formCancelButton}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={addingTicket}
+                      style={{
+                        ...styles.formSubmitButton,
+                        opacity: addingTicket ? 0.6 : 1,
+                        cursor: addingTicket ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {addingTicket ? 'Creating...' : 'Create Ticket'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </>
+          )}
         </>
       )}
     </main>
@@ -1679,11 +1871,11 @@ const styles: Record<string, CSSProperties> = {
     paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
   },
   mainAreaMobile: {
-    padding: '12px',
-    paddingTop: 'calc(12px + env(safe-area-inset-top))',
-    paddingLeft: 'calc(12px + env(safe-area-inset-left))',
-    paddingRight: 'calc(12px + env(safe-area-inset-right))',
-    paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
+    padding: '18px 14px',
+    paddingTop: 'calc(18px + env(safe-area-inset-top))',
+    paddingLeft: 'calc(14px + env(safe-area-inset-left))',
+    paddingRight: 'calc(14px + env(safe-area-inset-right))',
+    paddingBottom: 'calc(18px + env(safe-area-inset-bottom))',
   },
   brandWrap: {
     minWidth: 0,
@@ -1718,7 +1910,7 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     fontSize: '18px',
     color: '#FFFFFF',
-    boxShadow: '0 8px 20px rgba(193, 18, 31, 0.25)',
+    boxShadow: '0 12px 32px rgba(193, 18, 31, 0.35)',
     flexShrink: 0,
   },
   title: {
@@ -2160,6 +2352,8 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '11px',
     fontWeight: 700,
     whiteSpace: 'nowrap',
+    border: '1px solid',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
   },
   select: {
     width: '100%',
@@ -2430,7 +2624,7 @@ const styles: Record<string, CSSProperties> = {
     borderBottom: '1px solid rgba(0,0,0,0.08)',
   },
   primaryActionButton: {
-    background: '#111827',
+    background: '#C1121F',
     color: '#FFFFFF',
     border: 'none',
     padding: '14px 16px',
@@ -2440,7 +2634,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '15px',
     minHeight: '48px',
     transition: 'all 0.2s ease',
-    boxShadow: '0 4px 12px rgba(17, 24, 39, 0.15)',
+    boxShadow: '0 8px 20px rgba(193, 18, 31, 0.25)',
   },
   dangerActionButton: {
     background: '#C1121F',
@@ -2597,6 +2791,137 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 199,
+  },
+  addTicketModal: {
+    position: 'fixed',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: '90%',
+    maxWidth: '500px',
+    background: '#FFFFFF',
+    borderRadius: '12px',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+    zIndex: 200,
+    maxHeight: '90vh',
+    overflow: 'auto',
+    paddingTop: 'env(safe-area-inset-top)',
+    paddingBottom: 'env(safe-area-inset-bottom)',
+  },
+  addTicketModalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px',
+    borderBottom: '1px solid #E5E7EB',
+    position: 'sticky',
+    top: 0,
+    background: '#FFFFFF',
+    zIndex: 1,
+  },
+  addTicketModalTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#111827',
+    margin: 0,
+  },
+  addTicketModalClose: {
+    background: 'none',
+    border: 'none',
+    fontSize: '20px',
+    color: '#6B7280',
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addTicketForm: {
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  },
+  formGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  formLabel: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#111827',
+  },
+  formInput: {
+    padding: '10px 12px',
+    borderRadius: '6px',
+    border: '1px solid #D1D5DB',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
+  },
+  formSelect: {
+    padding: '10px 12px',
+    borderRadius: '6px',
+    border: '1px solid #D1D5DB',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
+    background: '#FFFFFF',
+    cursor: 'pointer',
+  },
+  formTextarea: {
+    padding: '10px 12px',
+    borderRadius: '6px',
+    border: '1px solid #D1D5DB',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
+    minHeight: '100px',
+    resize: 'vertical',
+  },
+  formError: {
+    padding: '10px 12px',
+    background: '#FEE2E2',
+    color: '#DC2626',
+    borderRadius: '6px',
+    fontSize: '13px',
+  },
+  formActions: {
+    display: 'flex',
+    gap: '10px',
+    justifyContent: 'flex-end',
+    marginTop: '8px',
+  },
+  formCancelButton: {
+    padding: '10px 16px',
+    background: '#F3F4F6',
+    color: '#111827',
+    border: '1px solid #D1D5DB',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+  },
+  formSubmitButton: {
+    padding: '10px 16px',
+    background: '#C1121F',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(193, 18, 31, 0.2)',
   },
 }
 
