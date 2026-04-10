@@ -167,7 +167,7 @@ export default function HomePage() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [showQrSection, setShowQrSection] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
-  const [copyMessage, setCopyMessage] = useState('')
+
   const [activeKpi, setActiveKpi] = useState<'ALL' | 'NEW' | 'ASSIGNED' | 'CLOSED'>('ALL')
   const [selectedProjectCode, setSelectedProjectCode] = useState<string>('ALL')
 
@@ -211,11 +211,7 @@ export default function HomePage() {
     setMenuOpen(false)
   }, [activeSource])
 
-  useEffect(() => {
-    if (!copyMessage) return
-    const timer = window.setTimeout(() => setCopyMessage(''), 1800)
-    return () => window.clearTimeout(timer)
-  }, [copyMessage])
+
 
   useEffect(() => {
     const channel = supabase
@@ -715,9 +711,9 @@ export default function HomePage() {
   async function copyText(value: string, label = 'Copied') {
     try {
       await navigator.clipboard.writeText(value)
-      setCopyMessage(label)
+      toast.success(label)
     } catch {
-      alert('Copy failed')
+      toast.error('Copy failed')
     }
   }
 
@@ -920,7 +916,14 @@ export default function HomePage() {
       }
 
       const result = await response.json()
-      toast.success(`Ticket #${result.ticketNumber} created successfully`)
+      
+      // Check if ticket was created but images failed
+      if (result.imageUploadWarning) {
+        toast.success(`Ticket #${result.ticketNumber} created successfully`)
+        toast.error(result.imageUploadWarning)
+      } else {
+        toast.success(`Ticket #${result.ticketNumber} created successfully`)
+      }
       
       // Reset form and close modal
       setAddTicketForm({
@@ -1035,7 +1038,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {copyMessage && <div style={styles.copyToast}>{copyMessage}</div>}
+
 
           {menuOpen && isMobile && (
             <div style={styles.mobileMenuCard}>
@@ -1930,19 +1933,6 @@ const styles: Record<string, CSSProperties> = {
   },
   subtitleMobile: {
     fontSize: '13px',
-  },
-  copyToast: {
-    position: 'fixed',
-    top: 14,
-    left: '50%',
-    transform: 'translateX(-50%)',
-    background: '#111827',
-    color: '#FFFFFF',
-    padding: '10px 14px',
-    borderRadius: '999px',
-    zIndex: 100,
-    fontSize: '13px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
   },
   hamburgerButton: {
     width: '48px',

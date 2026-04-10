@@ -69,7 +69,13 @@ async function uploadAttachments(
         })
 
       if (uploadError) {
-        console.error(`❌ Failed to upload file ${file.name}:`, uploadError)
+        console.error(`❌ Failed to upload file ${file.name} to storage:`, {
+          error: uploadError,
+          filePath,
+          ticketId,
+          fileSize: file.size,
+          mimeType: file.type,
+        })
         failCount++
         continue
       }
@@ -81,13 +87,20 @@ async function uploadAttachments(
           ticket_id: ticketId,
           file_name: file.name,
           file_url: filePath,
+          file_size: file.size,
           mime_type: file.type,
           attachment_type: 'web_upload',
         })
 
       if (dbError) {
-        console.error(`❌ Failed to create attachment record for ${file.name}:`, dbError)
-        // Try to delete the uploaded file
+        console.error(`❌ Failed to create attachment record for ${file.name}:`, {
+          error: dbError.message,
+          code: dbError.code,
+          details: dbError.details,
+          ticketId,
+          filePath,
+        })
+        // Try to delete the uploaded file to avoid orphaned storage
         await supabaseAdmin.storage.from('ticket-attachments').remove([filePath])
         failCount++
         continue

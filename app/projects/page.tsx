@@ -320,7 +320,7 @@ export default function ProjectsPage() {
   async function copyText(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value)
-      toast.success(`${label} copied`)
+      toast.success(label)
     } catch {
       toast.error('Copy failed')
     }

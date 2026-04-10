@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
+import { toast } from '@/lib/error-handler'
 
 type ProjectRow = {
   id: string
@@ -25,7 +26,7 @@ export default function QrPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [copyMessage, setCopyMessage] = useState('')
+
   const [isMobile, setIsMobile] = useState(false)
   const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -63,18 +64,14 @@ export default function QrPage() {
     loadProjects()
   }, [])
 
-  useEffect(() => {
-    if (!copyMessage) return
-    const timer = window.setTimeout(() => setCopyMessage(''), 1800)
-    return () => window.clearTimeout(timer)
-  }, [copyMessage])
+
 
   async function copyText(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value)
-      setCopyMessage(label)
+      toast.success(label)
     } catch {
-      alert('Copy failed')
+      toast.error('Copy failed')
     }
   }
 
@@ -231,8 +228,6 @@ export default function QrPage() {
               </button>
             </div>
           </div>
-
-          {copyMessage && <div style={styles.copyToast}>{copyMessage}</div>}
 
           <div style={styles.statsGrid}>
             <div style={styles.statCard}>
@@ -507,12 +502,6 @@ export default function QrPage() {
                 </a>
               </div>
             </div>
-
-            {copyMessage && (
-              <div style={styles.drawerCopyToast}>
-                <span>✓ {copyMessage}</span>
-              </div>
-            )}
           </div>
         </>
       )}
@@ -651,19 +640,6 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
     display: 'inline-flex',
     alignItems: 'center',
-  },
-  copyToast: {
-    position: 'fixed',
-    top: 16,
-    left: '50%',
-    transform: 'translateX(-50%)',
-    background: '#111827',
-    color: '#FFFFFF',
-    padding: '10px 14px',
-    borderRadius: '999px',
-    zIndex: 100,
-    fontSize: '13px',
-    boxShadow: '0 12px 30px rgba(0,0,0,0.18)',
   },
   statsGrid: {
     display: 'grid',
@@ -1029,22 +1005,6 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     transition: 'all 0.2s ease',
-  },
-  drawerCopyToast: {
-    position: 'absolute',
-    bottom: '20px',
-    left: '24px',
-    right: '24px',
-    background: '#10B981',
-    color: '#FFFFFF',
-    padding: '12px 16px',
-    borderRadius: '10px',
-    fontSize: '14px',
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    animation: 'slideUp 0.3s ease',
   },
   mobileTopRow: {
     display: 'flex',
