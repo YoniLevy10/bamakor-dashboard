@@ -509,14 +509,7 @@ export default function TicketsPage() {
               </div>
             </div>
 
-            {isMobile && (
-              <button
-                onClick={() => setSelectedTicket({ id: 'new', ticket_number: 0, status: 'NEW', created_at: new Date().toISOString(), reporter_phone: '', description: '', assigned_worker_id: null, closed_at: null, project_code: '', project_name: '' } as TicketRow)}
-                style={styles.mobileAddButton}
-              >
-                + New Ticket
-              </button>
-            )}
+
           </div>
 
           <div style={styles.statsGrid}>
@@ -1057,18 +1050,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '16px',
     color: '#6B7280',
   },
-  mobileAddButton: {
-    background: '#C41E3A',
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: '10px',
-    padding: '10px 14px',
-    fontSize: '14px',
-    fontWeight: 700,
-    cursor: 'pointer',
-    minHeight: '44px',
-    transition: 'all 0.2s ease',
-  },
+
   mobileLink: {
     textDecoration: 'none',
     color: '#111827',

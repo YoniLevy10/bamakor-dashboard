@@ -54,7 +54,7 @@ type TicketWithProjects = TicketRow & {
 const statusOptions = ['ALL', 'NEW', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED'] as const
 const editableStatusOptions = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED'] as const
 
-const WHATSAPP_NUMBER = '972500000000'
+const WHATSAPP_NUMBER = '972559740732'
 
 function MobileTicketCard({
   ticket,
