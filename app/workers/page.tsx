@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
+import { toast, asyncHandler } from '@/lib/error-handler'
+import { validateRequired, validatePhoneNumber, validateEmail } from '@/lib/validators'
 
 type WorkerRow = {
   id: string
@@ -22,6 +24,20 @@ type TicketRow = {
   priority?: string | null
   project_code?: string
   project_name?: string
+}
+
+type RawTicketWithProjects = {
+  id: string
+  ticket_number: number
+  status: string
+  priority?: string | null
+  projects?: {
+    project_code?: string
+    name?: string
+  } | {
+    project_code?: string
+    name?: string
+  }[]
 }
 
 type ClientRow = {
@@ -70,29 +86,6 @@ export default function WorkersPage() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  useEffect(() => {
-    initializePage()
-  }, [])
-
-  useEffect(() => {
-    if (!successMessage) return
-    const timer = window.setTimeout(() => setSuccessMessage(''), 1800)
-    return () => window.clearTimeout(timer)
-  }, [successMessage])
-
-  async function initializePage() {
-    setLoading(true)
-    setError('')
-    try {
-      const fetchedClientId = await loadClientId()
-      await loadWorkers(fetchedClientId)
-    } catch (err: any) {
-      setError(err.message || 'Failed to load workers')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   async function loadClientId() {
     const { data, error } = await supabase
       .from('clients')
@@ -127,6 +120,35 @@ export default function WorkersPage() {
     setWorkers((data as WorkerRow[]) || [])
   }
 
+  async function initializePage() {
+    setLoading(true)
+    setError('')
+    await asyncHandler(
+      async () => {
+        const fetchedClientId = await loadClientId()
+        await loadWorkers(fetchedClientId)
+        return true
+      },
+      {
+        context: 'Failed to load workers',
+        showErrorToast: true,
+        onError: (err) => setError(err),
+      }
+    )
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    initializePage()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!successMessage) return
+    const timer = window.setTimeout(() => setSuccessMessage(''), 1800)
+    return () => window.clearTimeout(timer)
+  }, [successMessage])
+
   function openCreateDrawer() {
     setEditingWorker(null)
     setForm(emptyForm)
@@ -160,8 +182,17 @@ export default function WorkersPage() {
   }
 
   function validateForm() {
-    if (!form.full_name.trim()) return 'Full name is required'
-    if (!form.phone.trim()) return 'Phone is required'
+    const nameError = validateRequired(form.full_name, 'Full name')
+    if (nameError) return nameError.message
+
+    const phoneError = validatePhoneNumber(form.phone, 'Phone')
+    if (phoneError) return phoneError.message
+
+    if (form.email) {
+      const emailError = validateEmail(form.email, 'Email')
+      if (emailError) return emailError.message
+    }
+
     if (!clientId) return 'Client ID not found'
     return ''
   }
@@ -169,64 +200,73 @@ export default function WorkersPage() {
   async function saveWorker() {
     const validationError = validateForm()
     if (validationError) {
-      alert(validationError)
+      toast.error(validationError)
       return
     }
 
     setSaving(true)
     setError('')
 
-    try {
-      const payload = {
-        full_name: form.full_name.trim(),
-        phone: form.phone.trim(),
-        email: form.email.trim() || null,
-        role: form.role.trim() || null,
-        is_active: form.is_active,
-        client_id: clientId,
+    await asyncHandler(
+      async () => {
+        const payload = {
+          full_name: form.full_name.trim(),
+          phone: form.phone.trim(),
+          email: form.email.trim() || null,
+          role: form.role.trim() || null,
+          is_active: form.is_active,
+          client_id: clientId,
+        }
+
+        if (editingWorker) {
+          const { error } = await supabase
+            .from('workers')
+            .update(payload)
+            .eq('id', editingWorker.id)
+
+          if (error) throw error
+          toast.success('Worker updated')
+        } else {
+          const { error } = await supabase
+            .from('workers')
+            .insert(payload)
+
+          if (error) throw error
+          toast.success('Worker created')
+        }
+
+        await loadWorkers()
+        closeDrawer()
+        return true
+      },
+      {
+        context: 'Failed to save worker',
+        showErrorToast: true,
       }
+    )
 
-      if (editingWorker) {
-        const { error } = await supabase
-          .from('workers')
-          .update(payload)
-          .eq('id', editingWorker.id)
-
-        if (error) throw error
-        setSuccessMessage('Worker updated')
-      } else {
-        const { error } = await supabase
-          .from('workers')
-          .insert(payload)
-
-        if (error) throw error
-        setSuccessMessage('Worker created')
-      }
-
-      await loadWorkers()
-      closeDrawer()
-    } catch (err: any) {
-      setError(err.message || 'Failed to save worker')
-      alert(err.message || 'Failed to save worker')
-    } finally {
-      setSaving(false)
-    }
+    setSaving(false)
   }
 
   async function toggleWorkerStatus(worker: WorkerRow) {
-    try {
-      const { error } = await supabase
-        .from('workers')
-        .update({ is_active: !worker.is_active })
-        .eq('id', worker.id)
+    await asyncHandler(
+      async () => {
+        const { error } = await supabase
+          .from('workers')
+          .update({ is_active: !worker.is_active })
+          .eq('id', worker.id)
 
-      if (error) throw error
+        if (error) throw error
 
-      setSuccessMessage(worker.is_active ? 'Worker deactivated' : 'Worker activated')
-      await loadWorkers()
-    } catch (err: any) {
-      alert(err.message || 'Failed to update worker status')
-    }
+        toast.success(worker.is_active ? 'Worker deactivated' : 'Worker activated')
+        await loadWorkers()
+        return true
+      },
+      {
+        context: 'Failed to update worker status',
+        showErrorToast: true,
+      }
+    )
   }
 
   async function deleteWorker(worker: WorkerRow) {
@@ -236,26 +276,28 @@ export default function WorkersPage() {
 
     if (!confirmed) return
 
-    try {
-      const { error } = await supabase
-        .from('workers')
-        .delete()
-        .eq('id', worker.id)
+    await asyncHandler(
+      async () => {
+        const { error } = await supabase
+          .from('workers')
+          .delete()
+          .eq('id', worker.id)
 
-      if (error) throw error
+        if (error) throw error
 
-      setSuccessMessage('Worker deleted')
-      await loadWorkers()
+        toast.success('Worker deleted')
+        await loadWorkers()
 
-      if (editingWorker?.id === worker.id) {
-        closeDrawer()
+        if (editingWorker?.id === worker.id) {
+          closeDrawer()
+        }
+        return true
+      },
+      {
+        context: 'Failed to delete worker',
+        showErrorToast: true,
       }
-    } catch (err: any) {
-      alert(
-        err.message ||
-          'Failed to delete worker. If this worker is already linked to tickets, deactivate them instead.'
-      )
-    }
+    )
   }
 
   async function openDetailDrawer(worker: WorkerRow) {
@@ -272,10 +314,11 @@ export default function WorkersPage() {
 
   async function fetchWorkerTickets(workerId: string) {
     setLoadingWorkerTickets(true)
-    try {
-      const { data, error } = await supabase
-        .from('tickets')
-        .select(`
+    await asyncHandler(
+      async () => {
+        const { data, error } = await supabase
+          .from('tickets')
+          .select(`
           id,
           ticket_number,
           status,
@@ -285,28 +328,46 @@ export default function WorkersPage() {
             name
           )
         `)
-        .eq('assigned_worker_id', workerId)
-        .order('created_at', { ascending: false })
-        .limit(10)
+          .eq('assigned_worker_id', workerId)
+          .order('created_at', { ascending: false })
+          .limit(10)
 
-      if (error) throw error
+        if (error) throw error
 
-      const mapped = (data || []).map((ticket: any) => ({
-        id: ticket.id,
-        ticket_number: ticket.ticket_number,
-        status: ticket.status,
-        priority: ticket.priority,
-        project_code: ticket.projects?.project_code || 'N/A',
-        project_name: ticket.projects?.name || 'Unknown',
-      }))
+        const mapped = (data || []).map((ticket: RawTicketWithProjects) => {
+          // Handle projects as either single object or array
+          let projectCode = 'N/A'
+          let projectName = 'Unknown'
+          
+          if (ticket.projects) {
+            if (Array.isArray(ticket.projects)) {
+              projectCode = ticket.projects[0]?.project_code || 'N/A'
+              projectName = ticket.projects[0]?.name || 'Unknown'
+            } else {
+              projectCode = ticket.projects.project_code || 'N/A'
+              projectName = ticket.projects.name || 'Unknown'
+            }
+          }
+          
+          return {
+            id: ticket.id,
+            ticket_number: ticket.ticket_number,
+            status: ticket.status,
+            priority: ticket.priority,
+            project_code: projectCode,
+            project_name: projectName,
+          }
+        })
 
-      setWorkerTickets(mapped)
-    } catch (err: any) {
-      console.error('Failed to load worker tickets:', err.message)
-      setWorkerTickets([])
-    } finally {
-      setLoadingWorkerTickets(false)
-    }
+        setWorkerTickets(mapped)
+        return true
+      },
+      {
+        context: 'Failed to load worker tickets',
+        showErrorToast: false,
+      }
+    )
+    setLoadingWorkerTickets(false)
   }
 
   function viewWorkerTickets(workerId: string) {
@@ -360,12 +421,12 @@ export default function WorkersPage() {
             </div>
 
             <nav style={styles.sidebarNav}>
-              <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
-              <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
-              <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
-              <a href="/workers" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Workers</a>
-              <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
-              <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
+              <Link href="/" style={styles.sidebarNavLink}>Dashboard</Link>
+              <Link href="/tickets" style={styles.sidebarNavLink}>Tickets</Link>
+              <Link href="/projects" style={styles.sidebarNavLink}>Projects</Link>
+              <Link href="/workers" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Workers</Link>
+              <Link href="/qr" style={styles.sidebarNavLink}>QR Codes</Link>
+              <Link href="/summary" style={styles.sidebarNavLink}>Summary</Link>
             </nav>
 
             <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>

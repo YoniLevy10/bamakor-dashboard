@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
+import { toast, asyncHandler } from '@/lib/error-handler'
+import { validateRequired } from '@/lib/validators'
 
 type ProjectRow = {
   id: string
@@ -64,36 +66,6 @@ export default function ProjectsPage() {
   const [projectTickets, setProjectTickets] = useState<TicketRow[]>([])
   const [loadingTickets, setLoadingTickets] = useState(false)
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
-
-  useEffect(() => {
-    initializePage()
-  }, [])
-
-  useEffect(() => {
-    if (!successMessage) return
-    const timer = window.setTimeout(() => setSuccessMessage(''), 1800)
-    return () => window.clearTimeout(timer)
-  }, [successMessage])
-
-  async function initializePage() {
-    setLoading(true)
-    setError('')
-    try {
-      await loadClientId()
-      await loadProjects()
-    } catch (err: any) {
-      setError(err.message || 'Failed to load projects')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   async function loadClientId() {
     const { data, error } = await supabase
       .from('clients')
@@ -122,6 +94,43 @@ export default function ProjectsPage() {
 
     setProjects((data as ProjectRow[]) || [])
   }
+
+  async function initializePage() {
+    setLoading(true)
+    setError('')
+    await asyncHandler(
+      async () => {
+        await loadClientId()
+        await loadProjects()
+        return true
+      },
+      {
+        context: 'Failed to load projects',
+        showErrorToast: true,
+        onError: (err) => setError(err),
+      }
+    )
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 900)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  useEffect(() => {
+    initializePage()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+
+  useEffect(() => {
+    if (!successMessage) return
+    const timer = window.setTimeout(() => setSuccessMessage(''), 1800)
+    return () => window.clearTimeout(timer)
+  }, [successMessage])
 
   function openCreateDrawer() {
     setEditingProject(null)
@@ -162,22 +171,25 @@ export default function ProjectsPage() {
 
   async function fetchProjectTickets(projectId: string) {
     setLoadingTickets(true)
-    try {
-      const { data, error } = await supabase
-        .from('tickets')
-        .select('id, ticket_number, status, priority')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: false })
+    await asyncHandler(
+      async () => {
+        const { data, error } = await supabase
+          .from('tickets')
+          .select('id, ticket_number, status, priority')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false })
 
-      if (error) throw error
+        if (error) throw error
 
-      setProjectTickets((data as TicketRow[]) || [])
-    } catch (err: any) {
-      console.error('Failed to load tickets:', err.message)
-      setProjectTickets([])
-    } finally {
-      setLoadingTickets(false)
-    }
+        setProjectTickets((data as TicketRow[]) || [])
+        return true
+      },
+      {
+        context: 'Failed to load project tickets',
+        showErrorToast: false,
+      }
+    )
+    setLoadingTickets(false)
   }
 
   function navigateToProjectTickets(projectCode: string) {
@@ -192,8 +204,12 @@ export default function ProjectsPage() {
   }
 
   function validateForm() {
-    if (!form.name.trim()) return 'Project name is required'
-    if (!form.project_code.trim()) return 'Project code is required'
+    const nameError = validateRequired(form.name, 'Project name')
+    if (nameError) return nameError.message
+
+    const codeError = validateRequired(form.project_code, 'Project code')
+    if (codeError) return codeError.message
+
     if (!clientId) return 'Client ID not found'
     return ''
   }
@@ -201,64 +217,73 @@ export default function ProjectsPage() {
   async function saveProject() {
     const validationError = validateForm()
     if (validationError) {
-      alert(validationError)
+      toast.error(validationError)
       return
     }
 
     setSaving(true)
     setError('')
 
-    try {
-      const payload = {
-        name: form.name.trim(),
-        project_code: form.project_code.trim().toUpperCase(),
-        address: form.address.trim() || null,
-        qr_identifier: form.qr_identifier.trim() || null,
-        is_active: form.is_active,
-        client_id: editingProject?.client_id || clientId,
+    await asyncHandler(
+      async () => {
+        const payload = {
+          name: form.name.trim(),
+          project_code: form.project_code.trim().toUpperCase(),
+          address: form.address.trim() || null,
+          qr_identifier: form.qr_identifier.trim() || null,
+          is_active: form.is_active,
+          client_id: editingProject?.client_id || clientId,
+        }
+
+        if (editingProject) {
+          const { error } = await supabase
+            .from('projects')
+            .update(payload)
+            .eq('id', editingProject.id)
+
+          if (error) throw error
+          toast.success('Project updated')
+        } else {
+          const { error } = await supabase
+            .from('projects')
+            .insert(payload)
+
+          if (error) throw error
+          toast.success('Project created')
+        }
+
+        await loadProjects()
+        closeDrawer()
+        return true
+      },
+      {
+        context: 'Failed to save project',
+        showErrorToast: true,
       }
+    )
 
-      if (editingProject) {
-        const { error } = await supabase
-          .from('projects')
-          .update(payload)
-          .eq('id', editingProject.id)
-
-        if (error) throw error
-        setSuccessMessage('Project updated')
-      } else {
-        const { error } = await supabase
-          .from('projects')
-          .insert(payload)
-
-        if (error) throw error
-        setSuccessMessage('Project created')
-      }
-
-      await loadProjects()
-      closeDrawer()
-    } catch (err: any) {
-      setError(err.message || 'Failed to save project')
-      alert(err.message || 'Failed to save project')
-    } finally {
-      setSaving(false)
-    }
+    setSaving(false)
   }
 
   async function toggleProjectStatus(project: ProjectRow) {
-    try {
-      const { error } = await supabase
-        .from('projects')
-        .update({ is_active: !project.is_active })
-        .eq('id', project.id)
+    await asyncHandler(
+      async () => {
+        const { error } = await supabase
+          .from('projects')
+          .update({ is_active: !project.is_active })
+          .eq('id', project.id)
 
-      if (error) throw error
+        if (error) throw error
 
-      setSuccessMessage(project.is_active ? 'Project deactivated' : 'Project activated')
-      await loadProjects()
-    } catch (err: any) {
-      alert(err.message || 'Failed to update project status')
-    }
+        toast.success(project.is_active ? 'Project deactivated' : 'Project activated')
+        await loadProjects()
+        return true
+      },
+      {
+        context: 'Failed to update project status',
+        showErrorToast: true,
+      }
+    )
   }
 
   async function deleteProject(project: ProjectRow) {
@@ -268,34 +293,36 @@ export default function ProjectsPage() {
 
     if (!confirmed) return
 
-    try {
-      const { error } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', project.id)
+    await asyncHandler(
+      async () => {
+        const { error } = await supabase
+          .from('projects')
+          .delete()
+          .eq('id', project.id)
 
-      if (error) throw error
+        if (error) throw error
 
-      setSuccessMessage('Project deleted')
-      await loadProjects()
+        toast.success('Project deleted')
+        await loadProjects()
 
-      if (editingProject?.id === project.id) {
-        closeDrawer()
+        if (editingProject?.id === project.id) {
+          closeDrawer()
+        }
+        return true
+      },
+      {
+        context: 'Failed to delete project',
+        showErrorToast: true,
       }
-    } catch (err: any) {
-      alert(
-        err.message ||
-          'Failed to delete project. If this project is linked to tickets, deactivate it instead.'
-      )
-    }
+    )
   }
 
   async function copyText(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value)
-      setSuccessMessage(label)
+      toast.success(`${label} copied`)
     } catch {
-      alert('Copy failed')
+      toast.error('Copy failed')
     }
   }
 
@@ -354,12 +381,12 @@ export default function ProjectsPage() {
             </div>
 
             <nav style={styles.sidebarNav}>
-              <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
-              <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
-              <a href="/projects" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Projects</a>
-              <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
-              <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
-              <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
+              <Link href="/" style={styles.sidebarNavLink}>Dashboard</Link>
+              <Link href="/tickets" style={styles.sidebarNavLink}>Tickets</Link>
+              <Link href="/projects" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Projects</Link>
+              <Link href="/workers" style={styles.sidebarNavLink}>Workers</Link>
+              <Link href="/qr" style={styles.sidebarNavLink}>QR Codes</Link>
+              <Link href="/summary" style={styles.sidebarNavLink}>Summary</Link>
             </nav>
 
             <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>

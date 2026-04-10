@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
+import { toast, asyncHandler } from '@/lib/error-handler'
 
 type TicketRow = {
   id: string
@@ -40,6 +41,10 @@ type AttachmentRow = {
   created_at: string
 }
 
+type AttachmentWithUrl = AttachmentRow & {
+  signed_url: string | null
+}
+
 type WorkerRow = {
   id: string
   full_name: string
@@ -68,7 +73,7 @@ export default function TicketsPage() {
   const [draftPriority, setDraftPriority] = useState<string>('')
   const [draftStatus, setDraftStatus] = useState<string>('')
   const [savingTicket, setSavingTicket] = useState(false)
-  const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentRow[]>([])
+  const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentWithUrl[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
 
@@ -102,10 +107,11 @@ export default function TicketsPage() {
     setLoading(true)
     setError('')
 
-    try {
-      const { data: ticketsData, error: ticketsError } = await supabase
-        .from('tickets')
-        .select(`
+    await asyncHandler(
+      async () => {
+        const { data: ticketsData, error: ticketsError } = await supabase
+          .from('tickets')
+          .select(`
           id,
           ticket_number,
           project_id,
@@ -122,85 +128,92 @@ export default function TicketsPage() {
             project_code
           )
         `)
-        .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false })
 
-      if (ticketsError) throw ticketsError
+        if (ticketsError) throw ticketsError
 
-      const { data: workersData, error: workersError } = await supabase
-        .from('workers')
-        .select('id, full_name, phone, email, role, is_active')
-        .order('full_name', { ascending: true })
+        const { data: workersData, error: workersError } = await supabase
+          .from('workers')
+          .select('id, full_name, phone, email, role, is_active')
+          .order('full_name', { ascending: true })
 
-      if (workersError) throw workersError
+        if (workersError) throw workersError
 
-      const normalizedTickets: TicketRow[] = ((ticketsData as TicketRow[]) || []).map((ticket) => {
-        const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
+        const normalizedTickets: TicketRow[] = ((ticketsData as TicketRow[]) || []).map((ticket) => {
+          const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
 
-        return {
-          ...ticket,
-          project_code: project?.project_code || '',
-          project_name: project?.name || '',
-        }
-      })
+          return {
+            ...ticket,
+            project_code: project?.project_code || '',
+            project_name: project?.name || '',
+          }
+        })
 
-      setTickets(normalizedTickets)
-      setWorkers((workersData as WorkerRow[]) || [])
-    } catch (err: any) {
-      setError(err.message || 'Failed to load tickets')
-      setTickets([])
-      setWorkers([])
-    } finally {
-      setLoading(false)
-    }
+        setTickets(normalizedTickets)
+        setWorkers((workersData as WorkerRow[]) || [])
+        return true
+      },
+      {
+        context: 'Failed to load tickets and workers',
+        showErrorToast: true,
+        onError: (err) => setError(err),
+      }
+    )
+
+    setLoading(false)
   }
 
   async function assignWorker(ticketId: string, workerId: string) {
     if (!workerId) return
 
     setActionLoadingId(ticketId)
-    try {
-      const response = await fetch('/api/assign-ticket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticket_id: ticketId,
-          worker_id: workerId,
-        }),
-      })
+    await asyncHandler(
+      async () => {
+        const response = await fetch('/api/assign-ticket', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ticket_id: ticketId,
+            worker_id: workerId,
+          }),
+        })
 
-      const result = await response.json()
+        const result = await response.json()
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to assign worker')
-      }
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to assign worker')
+        }
 
-      await fetchData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to assign worker')
-    } finally {
-      setActionLoadingId(null)
-    }
+        toast.success('Worker assigned')
+        await fetchData()
+        return true
+      },
+      { context: 'Failed to assign worker', showErrorToast: true }
+    )
+    setActionLoadingId(null)
   }
 
   async function closeTicket(ticketId: string) {
     setActionLoadingId(ticketId)
-    try {
-      const { error } = await supabase
-        .from('tickets')
-        .update({
-          status: 'CLOSED',
-          closed_at: new Date().toISOString(),
-        })
-        .eq('id', ticketId)
+    await asyncHandler(
+      async () => {
+        const { error } = await supabase
+          .from('tickets')
+          .update({
+            status: 'CLOSED',
+            closed_at: new Date().toISOString(),
+          })
+          .eq('id', ticketId)
 
-      if (error) throw error
+        if (error) throw error
 
-      await fetchData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to close ticket')
-    } finally {
-      setActionLoadingId(null)
-    }
+        toast.success('Ticket closed')
+        await fetchData()
+        return true
+      },
+      { context: 'Failed to close ticket', showErrorToast: true }
+    )
+    setActionLoadingId(null)
   }
 
   function openTicket(ticket: TicketRow) {
@@ -228,7 +241,7 @@ export default function TicketsPage() {
 
       const { data, error } = await supabase
         .from('ticket_attachments')
-        .select('id, ticket_id, file_name, file_url, mime_type, created_at')
+        .select('id, ticket_id, file_name, file_url, file_size, mime_type, created_at')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: false })
 
@@ -250,7 +263,7 @@ export default function TicketsPage() {
         
         // Generate signed URLs for each attachment for reliable access
         const attachmentsWithUrls = await Promise.all(
-          (data || []).map(async (attachment: any) => {
+          (data || []).map(async (attachment: AttachmentRow) => {
             try {
               // STABILITY: Validate file_url before URL generation
               if (!attachment.file_url) {
@@ -304,7 +317,7 @@ export default function TicketsPage() {
     }
   }
 
-  function getImageUrl(attachment: any): string {
+  function getImageUrl(attachment: AttachmentWithUrl): string {
     // Use signed URL if available (most reliable)
     if (attachment.signed_url) {
       return attachment.signed_url
@@ -320,34 +333,6 @@ export default function TicketsPage() {
     setDraftStatus('')
     setSelectedTicketAttachments([])
     setSelectedImageUrl(null)
-  }
-
-  async function updatePriority(ticketId: string, priority: string) {
-    setSavingTicket(true)
-    try {
-      const response = await fetch('/api/update-ticket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticket_id: ticketId,
-          priority: priority,
-          status: draftStatus,
-        }),
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to update ticket')
-      }
-
-      setDraftPriority(priority)
-      await fetchData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to update ticket')
-    } finally {
-      setSavingTicket(false)
-    }
   }
 
   async function saveTicketChanges() {
@@ -373,8 +358,9 @@ export default function TicketsPage() {
 
       await fetchData()
       closeDrawer()
-    } catch (err: any) {
-      alert(err.message || 'Failed to save changes')
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save changes'
+      toast.error(errorMessage)
     } finally {
       setSavingTicket(false)
     }

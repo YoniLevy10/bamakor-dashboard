@@ -32,23 +32,6 @@ export default function QrPage() {
 
   const qrRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
-
-  useEffect(() => {
-    loadProjects()
-  }, [])
-
-  useEffect(() => {
-    if (!copyMessage) return
-    const timer = window.setTimeout(() => setCopyMessage(''), 1800)
-    return () => window.clearTimeout(timer)
-  }, [copyMessage])
-
   async function loadProjects() {
     setLoading(true)
     setError('')
@@ -68,6 +51,23 @@ export default function QrPage() {
     setProjects((data as ProjectRow[]) || [])
     setLoading(false)
   }
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  useEffect(() => {
+    loadProjects()
+  }, [])
+
+  useEffect(() => {
+    if (!copyMessage) return
+    const timer = window.setTimeout(() => setCopyMessage(''), 1800)
+    return () => window.clearTimeout(timer)
+  }, [copyMessage])
 
   async function copyText(value: string, label: string) {
     try {
@@ -132,6 +132,7 @@ export default function QrPage() {
     const ready = projects.filter((p) => Boolean(buildWhatsAppLink(p))).length
 
     return { total, active, inactive, ready }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects])
 
   function navigateToProject(projectCode: string) {

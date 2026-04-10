@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { parseIncomingWhatsAppMessage } from '@/lib/whatsapp-parser'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
@@ -9,6 +10,13 @@ import {
 } from '@/lib/whatsapp-media'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
+
+type ProjectRow = {
+  id: string
+  name: string
+  project_code: string
+  address?: string | null
+}
 
 function parseStartCode(text: string) {
   const match = text.trim().toUpperCase().match(/^START_(BMK\d+)(?:_(.+))?$/i)
@@ -22,7 +30,7 @@ function parseStartCode(text: string) {
 }
 
 // Search for projects by free-text building/address
-async function searchProjectsByBuilding(searchText: string, supabaseAdmin: any) {
+async function searchProjectsByBuilding(searchText: string, supabaseAdmin: SupabaseClient) {
   const trimmed = searchText.trim()
 
   // Require minimum 2 characters to search
@@ -44,7 +52,7 @@ async function searchProjectsByBuilding(searchText: string, supabaseAdmin: any) 
 
   // Filter projects by name, address, or code match (never expose full list)
   const matches = (projects || [])
-    .filter((p: any) =>
+    .filter((p: ProjectRow) =>
       p.name?.toLowerCase().includes(lowerSearch) ||
       p.address?.toLowerCase().includes(lowerSearch) ||
       p.project_code?.toLowerCase().includes(lowerSearch)
@@ -57,8 +65,8 @@ async function searchProjectsByBuilding(searchText: string, supabaseAdmin: any) 
 // Create pending selection state for multi-match scenario
 async function createPendingSelection(
   phoneNumber: string,
-  candidateProjects: any[],
-  supabaseAdmin: any
+  candidateProjects: ProjectRow[],
+  supabaseAdmin: SupabaseClient
 ) {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
 
@@ -78,7 +86,7 @@ async function createPendingSelection(
 }
 
 // Get pending selection for a phone number
-async function getPendingSelection(phoneNumber: string, supabaseAdmin: any) {
+async function getPendingSelection(phoneNumber: string, supabaseAdmin: SupabaseClient) {
   const { data, error } = await supabaseAdmin
     .from('pending_selections')
     .select('id, candidate_projects, created_at, expires_at')
@@ -105,7 +113,7 @@ async function getPendingSelection(phoneNumber: string, supabaseAdmin: any) {
 }
 
 // Clear pending selection for a phone number
-async function clearPendingSelection(phoneNumber: string, supabaseAdmin: any) {
+async function clearPendingSelection(phoneNumber: string, supabaseAdmin: SupabaseClient) {
   const { error } = await supabaseAdmin
     .from('pending_selections')
     .delete()
@@ -719,7 +727,7 @@ export async function POST(req: NextRequest) {
 
       // Build and send numbered list
       let matchList = 'מצאנו כמה בניינים תואמים:\n\n'
-      searchResults.forEach((project: any, index: number) => {
+      searchResults.forEach((project: ProjectRow, index: number) => {
         const addressText = project.address ? ` (${project.address})` : ''
         matchList += `${index + 1}. ${project.name}${addressText}\n`
       })

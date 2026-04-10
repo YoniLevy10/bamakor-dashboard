@@ -6,7 +6,7 @@ type WhatsAppTemplateComponent = {
   }>
 }
 
-async function sendRawWhatsAppPayload(payload: any) {
+async function sendRawWhatsAppPayload(payload: Record<string, unknown>) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
 
@@ -96,8 +96,8 @@ export async function sendWhatsAppTextWithTemplateFallback(
 ) {
   try {
     return await sendWhatsAppTextMessage(to, body)
-  } catch (error: any) {
-    const errorText = String(error?.message || '')
+  } catch (error: unknown) {
+    const errorText = String((error instanceof Error ? error.message : error) || '')
 
     const is24HourWindowError =
       errorText.includes('131047') ||

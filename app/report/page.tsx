@@ -1,9 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { toast, asyncHandler, validateResponse } from '@/lib/error-handler'
+import { validateRequired, validateMinLength } from '@/lib/validators'
 
 type ProjectRow = {
   id: string
@@ -33,14 +35,21 @@ function ReportPageContent() {
 
   useEffect(() => {
     async function loadProjects() {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('id, name, project_code')
-        .order('project_code', { ascending: true })
+      await asyncHandler(
+        async () => {
+          const { data, error } = await supabase
+            .from('projects')
+            .select('id, name, project_code')
+            .order('project_code', { ascending: true })
 
-      if (!error && data) {
-        setProjects((data as ProjectRow[]) || [])
-      }
+          if (error) throw new Error(error.message)
+          setProjects((data as ProjectRow[]) || [])
+        },
+        {
+          context: 'Failed to load buildings',
+          showErrorToast: true,
+        }
+      )
     }
 
     loadProjects()
@@ -57,12 +66,19 @@ function ReportPageContent() {
     )
   }, [searchInput, projects])
 
+  const prevSearchResultsRef = useRef<ProjectRow[] | null>(null)
+
   // Auto-select if exactly 1 result
   useEffect(() => {
-    if (searchResults.length === 1) {
+    if (
+      searchResults.length === 1 &&
+      prevSearchResultsRef.current?.length !== 1
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedProjectCode(searchResults[0].project_code)
       setShowDropdown(false)
     }
+    prevSearchResultsRef.current = searchResults
   }, [searchResults])
 
   const canSubmit = useMemo(() => {
@@ -105,59 +121,71 @@ function ReportPageContent() {
     setErrorMessage('')
     setImageUploadError('')
 
-    if (!selectedProjectCode) {
-      setErrorMessage('Please select a building.')
+    // Validation
+    const projectError = validateRequired(selectedProjectCode || '', 'Building')
+    if (projectError) {
+      setErrorMessage(projectError.message)
       return
     }
 
-    if (description.trim().length < 3) {
-      setErrorMessage('Please enter a short description of the issue.')
+    const descError = validateMinLength(description, 3, 'Description')
+    if (descError) {
+      setErrorMessage(descError.message)
       return
     }
 
     setLoading(true)
 
-    try {
-      const formData = new FormData()
-      formData.append('project_code', selectedProjectCode)
-      formData.append('description', description.trim())
-      formData.append('reporter_name', reporterName.trim() || '')
-      formData.append('source', 'web_form')
+    const result = await asyncHandler(
+      async () => {
+        const formData = new FormData()
+        formData.append('project_code', selectedProjectCode)
+        formData.append('description', description.trim())
+        formData.append('reporter_name', reporterName.trim() || '')
+        formData.append('source', 'web_form')
 
-      // Add selected image files
-      selectedFiles.forEach((file) => {
-        formData.append('attachments', file)
-      })
+        // Add selected image files
+        selectedFiles.forEach((file) => {
+          formData.append('attachments', file)
+        })
 
-      const response = await fetch('/api/create-ticket', {
-        method: 'POST',
-        body: formData,
-      })
+        const response = await fetch('/api/create-ticket', {
+          method: 'POST',
+          body: formData,
+        })
 
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create ticket')
+        await validateResponse(response, 'Failed to submit issue')
+        return await response.json()
+      },
+      {
+        context: 'Failed to submit issue',
+        showErrorToast: false,
+        onError: (error) => {
+          setErrorMessage(error)
+        },
       }
+    )
 
-      let successMsg = `The issue was submitted successfully. Ticket number: ${result.ticketNumber}`
-      
+    if (result) {
+      const successMsg = `✓ Issue submitted successfully. Ticket #${result.ticketNumber}`
+
       // Show warning if some images failed but ticket was created
       if (result.imageUploadWarning) {
-        successMsg += '\n⚠️ ' + result.imageUploadWarning
+        toast.warning(result.imageUploadWarning)
       }
 
       setSuccessMessage(successMsg)
+      toast.success('Issue submitted successfully')
+
+      // Reset form
       setDescription('')
       setReporterName('')
       setSelectedProjectCode('')
       setSearchInput('')
       setSelectedFiles([])
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Something went wrong.')
-    } finally {
-      setLoading(false)
     }
+
+    setLoading(false)
   }
 
   const selectedProject = selectedProjectCode

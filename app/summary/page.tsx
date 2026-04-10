@@ -18,6 +18,19 @@ type TicketRow = {
   closed_at: string | null
 }
 
+type RawTicketRow = {
+  id: string
+  ticket_number: number
+  project_id?: string
+  projects?: { project_code?: string; name?: string } | { project_code?: string; name?: string }[]
+  reporter_phone: string
+  description: string
+  status: string
+  assigned_worker_id: string | null
+  created_at: string
+  closed_at: string | null
+}
+
 type ProjectRow = {
   id: string
   name: string
@@ -91,7 +104,7 @@ export default function SummaryPage() {
       if (workersError) throw workersError
 
       const formattedTickets: TicketRow[] =
-        (ticketsData || []).map((row: any) => ({
+        (ticketsData || []).map((row: RawTicketRow) => ({
           id: row.id,
           ticket_number: row.ticket_number,
           project_id: row.project_id,
@@ -108,20 +121,21 @@ export default function SummaryPage() {
       setTickets(formattedTickets)
       setProjects((projectsData as ProjectRow[]) || [])
       setWorkers((workersData as WorkerRow[]) || [])
-    } catch (err: any) {
-      setError(err.message || 'Failed to load summary')
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load summary'
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
   }
 
-  const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfWeek = new Date(startOfToday)
-  startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay())
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-
   const summary = useMemo(() => {
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const startOfWeek = new Date(startOfToday)
+    startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay())
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
     const todayOpened = tickets.filter((t) => new Date(t.created_at) >= startOfToday).length
     const todayClosed = tickets.filter((t) => t.closed_at && new Date(t.closed_at) >= startOfToday).length
 
@@ -220,21 +234,6 @@ export default function SummaryPage() {
     }
   }
 
-  function getPriorityStyle(priority?: string): CSSProperties {
-    switch ((priority || '').toUpperCase()) {
-      case 'URGENT':
-      case 'HIGH':
-        return { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }
-      case 'MEDIUM':
-      case 'NORMAL':
-        return { background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }
-      case 'LOW':
-        return { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }
-      default:
-        return { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }
-    }
-  }
-
   return (
     <main style={styles.page}>
       <div
@@ -254,12 +253,12 @@ export default function SummaryPage() {
             </div>
 
             <nav style={styles.sidebarNav}>
-              <a href="/" style={styles.sidebarNavLink}>Dashboard</a>
-              <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
-              <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
-              <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
-              <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
-              <a href="/summary" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Summary</a>
+              <Link href="/" style={styles.sidebarNavLink}>Dashboard</Link>
+              <Link href="/tickets" style={styles.sidebarNavLink}>Tickets</Link>
+              <Link href="/projects" style={styles.sidebarNavLink}>Projects</Link>
+              <Link href="/workers" style={styles.sidebarNavLink}>Workers</Link>
+              <Link href="/qr" style={styles.sidebarNavLink}>QR Codes</Link>
+              <Link href="/summary" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Summary</Link>
             </nav>
 
             <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>

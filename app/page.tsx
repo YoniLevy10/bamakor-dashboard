@@ -1,7 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
+import { toast, asyncHandler } from '@/lib/error-handler'
 
 type TicketRow = {
   id: string
@@ -34,14 +36,20 @@ type ProjectRow = {
   project_code: string
 }
 
-const tabs = [
-  { key: 'all', label: 'All Tickets', source: 'all' },
-  { key: 'BMK1', label: 'BMK1 - קוואדרה', source: 'project_bmk1_tickets' },
-  { key: 'BMK2', label: 'BMK2 - צוותא', source: 'project_bmk2_tickets' },
-  { key: 'BMK3', label: 'BMK3 - ארנונה', source: 'project_bmk3_tickets' },
-  { key: 'BMK4', label: 'BMK4 - רחביה', source: 'project_bmk4_tickets' },
-  { key: 'BMK5', label: 'BMK5 - קטמון הישנה', source: 'project_bmk5_tickets' },
-] as const
+type AttachmentRow = {
+  id: string
+  ticket_id: string
+  file_name: string
+  file_url: string | null
+  file_size?: number | null
+  mime_type: string
+  created_at: string
+  signed_url?: string | null
+}
+
+type TicketWithProjects = TicketRow & {
+  projects?: Array<{ project_code: string; name: string }> | { project_code: string; name: string }
+}
 
 const statusOptions = ['ALL', 'NEW', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED'] as const
 const editableStatusOptions = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED'] as const
@@ -142,7 +150,6 @@ function MobileTicketCard({
 }
 
 export default function HomePage() {
-  const [activeTab, setActiveTab] = useState('all')
   const [tickets, setTickets] = useState<TicketRow[]>([])
   const [allTickets, setAllTickets] = useState<TicketRow[]>([])
   const [projects, setProjects] = useState<ProjectRow[]>([])
@@ -167,13 +174,13 @@ export default function HomePage() {
   const [draftDescription, setDraftDescription] = useState('')
   const [draftStatus, setDraftStatus] = useState('NEW')
   const [draftWorkerId, setDraftWorkerId] = useState('')
-  const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<any[]>([])
+  const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentRow[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
 
   const activeSource = useMemo(() => {
-    return tabs.find((t) => t.key === activeTab)?.source || 'all'
-  }, [activeTab])
+    return 'all'
+  }, [])
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -226,38 +233,56 @@ export default function HomePage() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [activeSource, selectedTicket?.id])
+  }, [activeSource, selectedTicket])
 
   async function loadWorkers() {
-    const { data, error } = await supabase
-      .from('workers')
-      .select('id, full_name')
-      .order('full_name', { ascending: true })
+    await asyncHandler(
+      async () => {
+        const { data, error } = await supabase
+          .from('workers')
+          .select('id, full_name')
+          .order('full_name', { ascending: true })
 
-    if (!error && data) {
-      const map: Record<string, string> = {}
-      data.forEach((worker) => {
-        map[worker.id] = worker.full_name
-      })
-      setWorkersMap(map)
-    }
+        if (error) throw error
+
+        if (data) {
+          const map: Record<string, string> = {}
+          data.forEach((worker) => {
+            map[worker.id] = worker.full_name
+          })
+          setWorkersMap(map)
+        }
+        return true
+      },
+      { context: 'Failed to load workers', showErrorToast: false }
+    )
   }
 
   async function loadProjects() {
-    const { data, error } = await supabase
-      .from('projects')
-      .select('id, name, project_code')
-      .order('project_code', { ascending: true })
+    await asyncHandler(
+      async () => {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('id, name, project_code')
+          .order('project_code', { ascending: true })
 
-    if (!error && data) {
-      setProjects(data as ProjectRow[])
-    }
+        if (error) throw error
+
+        if (data) {
+          setProjects(data as ProjectRow[])
+        }
+        return true
+      },
+      { context: 'Failed to load projects', showErrorToast: false }
+    )
   }
 
   async function loadAllTickets() {
-    const { data, error } = await supabase
-      .from('tickets')
-      .select(`
+    await asyncHandler(
+      async () => {
+        const { data, error } = await supabase
+          .from('tickets')
+          .select(`
         id,
         ticket_number,
         project_id,
@@ -272,37 +297,42 @@ export default function HomePage() {
           name
         )
       `)
-      .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false })
 
-    if (!error && data) {
-      const formatted: TicketRow[] =
-        data?.map((row: any) => ({
-          id: row.id,
-          ticket_number: row.ticket_number,
-          project_id: row.project_id,
-          project_code: Array.isArray(row.projects) ? row.projects?.[0]?.project_code || '' : row.projects?.project_code || '',
-          project_name: Array.isArray(row.projects) ? row.projects?.[0]?.name || '' : row.projects?.name || '',
-          reporter_phone: row.reporter_phone,
-          description: row.description,
-          status: row.status,
-          assigned_worker_id: row.assigned_worker_id,
-          created_at: row.created_at,
-          closed_at: row.closed_at,
-        })) || []
+        if (error) throw error
 
-      setAllTickets(formatted)
-    }
+        const formatted: TicketRow[] =
+          data?.map((row: TicketWithProjects) => ({
+            id: row.id,
+            ticket_number: row.ticket_number,
+            project_id: row.project_id,
+            project_code: Array.isArray(row.projects) ? row.projects?.[0]?.project_code || '' : row.projects?.project_code || '',
+            project_name: Array.isArray(row.projects) ? row.projects?.[0]?.name || '' : row.projects?.name || '',
+            reporter_phone: row.reporter_phone,
+            description: row.description,
+            status: row.status,
+            assigned_worker_id: row.assigned_worker_id,
+            created_at: row.created_at,
+            closed_at: row.closed_at,
+          })) || []
+
+        setAllTickets(formatted)
+        return true
+      },
+      { context: 'Failed to load tickets', showErrorToast: false }
+    )
   }
 
   async function loadTickets(source: string) {
     setLoading(true)
     setError('')
 
-    try {
-      if (source === 'all') {
-        const { data, error } = await supabase
-          .from('tickets')
-          .select(`
+    await asyncHandler(
+      async () => {
+        if (source === 'all') {
+          const { data, error } = await supabase
+            .from('tickets')
+            .select(`
             id,
             ticket_number,
             project_id,
@@ -317,42 +347,46 @@ export default function HomePage() {
               name
             )
           `)
-          .order('created_at', { ascending: false })
+            .order('created_at', { ascending: false })
 
-        if (error) throw error
+          if (error) throw error
 
-        const formatted: TicketRow[] =
-          data?.map((row: any) => ({
-            id: row.id,
-            ticket_number: row.ticket_number,
-            project_id: row.project_id,
-            project_code: Array.isArray(row.projects) ? row.projects?.[0]?.project_code || '' : row.projects?.project_code || '',
-            project_name: Array.isArray(row.projects) ? row.projects?.[0]?.name || '' : row.projects?.name || '',
-            reporter_phone: row.reporter_phone,
-            description: row.description,
-            status: row.status,
-            assigned_worker_id: row.assigned_worker_id,
-            created_at: row.created_at,
-            closed_at: row.closed_at,
-          })) || []
+          const formatted: TicketRow[] =
+            data?.map((row: TicketWithProjects) => ({
+              id: row.id,
+              ticket_number: row.ticket_number,
+              project_id: row.project_id,
+              project_code: Array.isArray(row.projects) ? row.projects?.[0]?.project_code || '' : row.projects?.project_code || '',
+              project_name: Array.isArray(row.projects) ? row.projects?.[0]?.name || '' : row.projects?.name || '',
+              reporter_phone: row.reporter_phone,
+              description: row.description,
+              status: row.status,
+              assigned_worker_id: row.assigned_worker_id,
+              created_at: row.created_at,
+              closed_at: row.closed_at,
+            })) || []
 
-        setTickets(formatted)
-      } else {
-        const { data, error } = await supabase
-          .from(source)
-          .select('*')
-          .order('created_at', { ascending: false })
+          setTickets(formatted)
+        } else {
+          const { data, error } = await supabase
+            .from(source)
+            .select('*')
+            .order('created_at', { ascending: false })
 
-        if (error) throw error
+          if (error) throw error
 
-        setTickets((data as TicketRow[]) || [])
+          setTickets((data as TicketRow[]) || [])
+        }
+        return true
+      },
+      {
+        context: 'Failed to load tickets',
+        showErrorToast: false,
+        onError: (err) => setError(err),
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load tickets')
-      setTickets([])
-    } finally {
-      setLoading(false)
-    }
+    )
+
+    setLoading(false)
   }
 
   async function loadTicketLogs(ticketId: string) {
@@ -440,97 +474,115 @@ export default function HomePage() {
 
   async function assignWorker(ticketId: string, workerId: string) {
     if (!workerId) {
-      await supabase.from('tickets').update({ assigned_worker_id: null }).eq('id', ticketId)
-      await refreshData()
+      await asyncHandler(
+        async () => {
+          await supabase.from('tickets').update({ assigned_worker_id: null }).eq('id', ticketId)
+          await refreshData()
+          return true
+        },
+        { context: 'Failed to unassign worker', showErrorToast: true }
+      )
       return
     }
 
-    try {
-      const response = await fetch('/api/assign-ticket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticket_id: ticketId, worker_id: workerId }),
-      })
+    await asyncHandler(
+      async () => {
+        const response = await fetch('/api/assign-ticket', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticket_id: ticketId, worker_id: workerId }),
+        })
 
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || 'Failed to assign worker')
-      }
+        if (!response.ok) {
+          const result = await response.json()
+          throw new Error(result.error || 'Failed to assign worker')
+        }
 
-      await refreshData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to assign worker')
-    }
+        toast.success('Worker assigned')
+        await refreshData()
+        return true
+      },
+      { context: 'Failed to assign worker', showErrorToast: true }
+    )
   }
 
   async function updateTicketStatus(ticketId: string, nextStatus: string) {
-    try {
-      const payload: any = { status: nextStatus }
-      if (nextStatus === 'CLOSED') payload.closed_at = new Date().toISOString()
-      if (nextStatus !== 'CLOSED') payload.closed_at = null
+    await asyncHandler(
+      async () => {
+        const payload: Record<string, string | null> = { status: nextStatus }
+        if (nextStatus === 'CLOSED') payload.closed_at = new Date().toISOString()
+        if (nextStatus !== 'CLOSED') payload.closed_at = null
 
-      const { error } = await supabase
-        .from('tickets')
-        .update(payload)
-        .eq('id', ticketId)
+        const { error } = await supabase
+          .from('tickets')
+          .update(payload)
+          .eq('id', ticketId)
 
-      if (error) throw error
+        if (error) throw error
 
-      await refreshData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to update status')
-    }
+        toast.success(`Ticket marked as ${nextStatus}`)
+        await refreshData()
+        return true
+      },
+      { context: 'Failed to update status', showErrorToast: true }
+    )
   }
 
   async function saveSelectedTicket() {
     if (!selectedTicket) return
     setSavingTicket(true)
 
-    try {
-      const payload: any = {
-        description: draftDescription,
-        status: draftStatus,
-        assigned_worker_id: draftWorkerId || null,
-      }
+    await asyncHandler(
+      async () => {
+        const payload: Record<string, string | null> = {
+          description: draftDescription,
+          status: draftStatus,
+          assigned_worker_id: draftWorkerId || null,
+        }
 
-      if (draftStatus === 'CLOSED') {
-        payload.closed_at = selectedTicket.closed_at || new Date().toISOString()
-      } else {
-        payload.closed_at = null
-      }
+        if (draftStatus === 'CLOSED') {
+          payload.closed_at = selectedTicket.closed_at || new Date().toISOString()
+        } else {
+          payload.closed_at = null
+        }
 
-      const { error } = await supabase
-        .from('tickets')
-        .update(payload)
-        .eq('id', selectedTicket.id)
+        const { error } = await supabase
+          .from('tickets')
+          .update(payload)
+          .eq('id', selectedTicket.id)
 
-      if (error) throw error
+        if (error) throw error
 
-      await refreshData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to save ticket')
-    } finally {
-      setSavingTicket(false)
-    }
+        toast.success('Ticket saved')
+        await refreshData()
+        return true
+      },
+      { context: 'Failed to save ticket', showErrorToast: true }
+    )
+
+    setSavingTicket(false)
   }
 
   async function closeTicket(ticketId: string) {
-    try {
-      const response = await fetch('/api/close-ticket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticket_id: ticketId }),
-      })
+    await asyncHandler(
+      async () => {
+        const response = await fetch('/api/close-ticket', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticket_id: ticketId }),
+        })
 
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || 'Failed to close ticket')
-      }
+        if (!response.ok) {
+          const result = await response.json()
+          throw new Error(result.error || 'Failed to close ticket')
+        }
 
-      await refreshData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to close ticket')
-    }
+        toast.success('Ticket closed')
+        await refreshData()
+        return true
+      },
+      { context: 'Failed to close ticket', showErrorToast: true }
+    )
   }
 
   function openTicket(ticket: TicketRow) {
@@ -585,7 +637,7 @@ export default function HomePage() {
         
         // Generate signed URLs for each attachment for reliable access
         const attachmentsWithUrls = await Promise.all(
-          (data || []).map(async (attachment: any) => {
+          (data || []).map(async (attachment: AttachmentRow) => {
             try {
               // STABILITY: Validate file_url before URL generation
               if (!attachment.file_url) {
@@ -639,7 +691,7 @@ export default function HomePage() {
     }
   }
 
-  function getImageUrl(attachment: any): string {
+  function getImageUrl(attachment: AttachmentRow): string {
     // Use signed URL if available (most reliable)
     if (attachment.signed_url) {
       return attachment.signed_url
@@ -689,7 +741,7 @@ export default function HomePage() {
       headers.join(','),
       ...rows.map((row) =>
         headers
-          .map((header) => `"${String((row as any)[header] ?? '').replace(/"/g, '""')}"`)
+          .map((header) => `"${String((row as Record<string, unknown>)[header] ?? '').replace(/"/g, '""')}"`)
           .join(',')
       ),
     ].join('\n')
@@ -698,7 +750,7 @@ export default function HomePage() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', `bamakor-${activeTab}-tickets.csv`)
+    link.setAttribute('download', `bamakor-all-tickets.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -837,11 +889,11 @@ export default function HomePage() {
             </div>
 
             <nav style={styles.sidebarNav}>
-              <a href="/" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Dashboard</a>
-              <a href="/tickets" style={styles.sidebarNavLink}>Tickets</a>
-              <a href="/projects" style={styles.sidebarNavLink}>Projects</a>
-              <a href="/workers" style={styles.sidebarNavLink}>Workers</a>
-              <a href="/qr" style={styles.sidebarNavLink}>QR Codes</a>
+              <Link href="/" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Dashboard</Link>
+              <Link href="/tickets" style={styles.sidebarNavLink}>Tickets</Link>
+              <Link href="/projects" style={styles.sidebarNavLink}>Projects</Link>
+              <Link href="/workers" style={styles.sidebarNavLink}>Workers</Link>
+              <Link href="/qr" style={styles.sidebarNavLink}>QR Codes</Link>
               <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
             </nav>
 
@@ -882,7 +934,7 @@ export default function HomePage() {
                       ...(isMobile ? styles.subtitleMobile : {}),
                     }}
                   >
-                    Welcome back. Here's what's happening today.
+                    Welcome back. Here&apos;s what&apos;s happening today.
                   </p>
                 </div>
               </div>
@@ -911,21 +963,21 @@ export default function HomePage() {
               <div style={styles.mobileMenuTitle}>Navigation</div>
 
              <div style={styles.mobileMenuList}>
-  <a href="/" style={{ ...styles.mobileMenuLink, ...styles.mobileMenuItemActive }}>
+  <Link href="/" style={{ ...styles.mobileMenuLink, ...styles.mobileMenuItemActive }}>
     Dashboard
-  </a>
-  <a href="/tickets" style={styles.mobileMenuLink}>
+  </Link>
+  <Link href="/tickets" style={styles.mobileMenuLink}>
     Tickets
-  </a>
-  <a href="/projects" style={styles.mobileMenuLink}>
+  </Link>
+  <Link href="/projects" style={styles.mobileMenuLink}>
     Projects
-  </a>
-  <a href="/workers" style={styles.mobileMenuLink}>
+  </Link>
+  <Link href="/workers" style={styles.mobileMenuLink}>
     Workers
-  </a>
-  <a href="/qr" style={styles.mobileMenuLink}>
+  </Link>
+  <Link href="/qr" style={styles.mobileMenuLink}>
     QR Codes
-  </a>
+  </Link>
   <a href="/summary" style={styles.mobileMenuLink}>
     Summary
   </a>
@@ -1353,13 +1405,14 @@ export default function HomePage() {
                 <div style={{ fontSize: '13px', color: '#6B7280' }}>Loading images...</div>
               ) : selectedTicketAttachments.length > 0 ? (
                 <div style={styles.attachmentGrid}>
-                  {selectedTicketAttachments.map((attachment: any) => (
+                  {selectedTicketAttachments.map((attachment: AttachmentRow) => (
                     <button
                       key={attachment.id}
                       onClick={() => setSelectedImageUrl(getImageUrl(attachment))}
                       style={styles.attachmentThumbnail}
                       title={attachment.file_name}
                     >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={getImageUrl(attachment)}
                         alt={attachment.file_name}
@@ -1519,6 +1572,7 @@ export default function HomePage() {
                 <button onClick={() => setSelectedImageUrl(null)} style={styles.imageModalClose}>
                   ✕
                 </button>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={selectedImageUrl} alt="Full view" style={styles.imageModalImg} />
               </div>
             </>

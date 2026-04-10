@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
 function parseStartCode(message: string) {
@@ -12,8 +13,18 @@ function parseStartCode(message: string) {
   }
 }
 
+type TicketRequestBody = {
+  message?: unknown
+  phone?: unknown
+  description?: unknown
+  reporter_name?: unknown
+  source?: unknown
+  project_code?: unknown
+  building_number?: unknown
+}
+
 async function uploadAttachments(
-  supabaseAdmin: any,
+  supabaseAdmin: SupabaseClient,
   ticketId: string,
   files: File[]
 ): Promise<{ success: number; failed: number; warning?: string }> {
@@ -49,7 +60,7 @@ async function uploadAttachments(
       const arrayBuffer = await file.arrayBuffer()
       const uint8Array = new Uint8Array(arrayBuffer)
 
-      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      const { error: uploadError } = await supabaseAdmin.storage
         .from('ticket-attachments')
         .upload(filePath, uint8Array, {
           contentType: file.type,
@@ -114,7 +125,7 @@ export async function POST(req: Request) {
     
     // Check if request has FormData (multipart) or JSON
     const contentType = req.headers.get('content-type') || ''
-    let body: any
+    let body: TicketRequestBody
     let files: File[] = []
 
     if (contentType.includes('multipart/form-data')) {

@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     }
 
     // Prepare update payload
-    const updatePayload: any = {}
+    const updatePayload: Record<string, unknown> = {}
     if (priority !== undefined && priority !== null) {
       updatePayload.priority = priority
     }
@@ -61,10 +61,11 @@ export async function POST(req: Request) {
       success: true,
       data: updatedTicket,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating ticket:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: errorMessage },
       { status: 500 }
     )
   }
