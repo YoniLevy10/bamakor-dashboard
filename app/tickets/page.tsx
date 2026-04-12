@@ -499,30 +499,30 @@ export default function TicketsPage() {
   function getStatusStyle(status: string): CSSProperties {
     switch (status) {
       case 'NEW':
-        return { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }
+        return { background: '#FEF08A', color: '#713F12', border: '1px solid #FBBF24' }
       case 'ASSIGNED':
-        return { background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }
+        return { background: '#BFDBFE', color: '#1E40AF', border: '1px solid #60A5FA' }
       case 'IN_PROGRESS':
-        return { background: '#EEF2FF', color: '#4F46E5', border: '1px solid #C7D2FE' }
+        return { background: '#BFDBFE', color: '#1E40AF', border: '1px solid #60A5FA' }
       case 'WAITING_PARTS':
-        return { background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }
+        return { background: '#FED7AA', color: '#92400E', border: '1px solid #FDBA74' }
       case 'CLOSED':
-        return { background: '#ECFDF5', color: '#16A34A', border: '1px solid #BBF7D0' }
+        return { background: '#BBF7D0', color: '#065F46', border: '1px solid #6EE7B7' }
       default:
-        return { background: '#F3F4F6', color: '#4B5563', border: '1px solid #E5E7EB' }
+        return { background: '#E5E7EB', color: '#374151', border: '1px solid #D1D5DB' }
     }
   }
 
   function getPriorityStyle(priority?: string | null): CSSProperties {
     switch ((priority || '').toUpperCase()) {
       case 'HIGH':
-        return { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }
+        return { background: '#FECACA', color: '#7F1D1D', border: '1px solid #F87171' }
       case 'MEDIUM':
-        return { background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }
+        return { background: '#FED7AA', color: '#92400E', border: '1px solid #FDBA74' }
       case 'LOW':
-        return { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }
+        return { background: '#E5E7EB', color: '#374151', border: '1px solid #D1D5DB' }
       default:
-        return { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }
+        return { background: '#E5E7EB', color: '#374151', border: '1px solid #D1D5DB' }
     }
   }
 

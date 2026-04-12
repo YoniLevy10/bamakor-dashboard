@@ -833,15 +833,15 @@ export default function HomePage() {
   function getStatusStyle(status: string): CSSProperties {
     switch (status) {
       case 'NEW':
-        return { background: '#FEF3C7', color: '#92400E' }
+        return { background: '#FEF08A', color: '#713F12', borderColor: '#FBBF24' }
       case 'ASSIGNED':
-        return { background: '#FEE2E2', color: '#991B1B' }
+        return { background: '#FECACA', color: '#7F1D1D', borderColor: '#F87171' }
       case 'IN_PROGRESS':
-        return { background: '#E5E7EB', color: '#374151' }
+        return { background: '#BFDBFE', color: '#1E40AF', borderColor: '#60A5FA' }
       case 'CLOSED':
-        return { background: '#DCFCE7', color: '#166534' }
+        return { background: '#BBF7D0', color: '#065F46', borderColor: '#6EE7B7' }
       default:
-        return { background: '#E5E7EB', color: '#374151' }
+        return { background: '#E5E7EB', color: '#374151', borderColor: '#D1D5DB' }
     }
   }
 
@@ -850,11 +850,11 @@ export default function HomePage() {
       status === 'NEW'
         ? { background: '#FFFFFF' }
         : status === 'ASSIGNED'
-        ? { background: '#FFF5F5' }
+        ? { background: '#FFF7F7' }
         : status === 'IN_PROGRESS'
-        ? { background: '#FAFAFA' }
+        ? { background: '#F7FAFF' }
         : status === 'CLOSED'
-        ? { background: '#F0FDF4' }
+        ? { background: '#F6FDF9' }
         : { background: '#FFFFFF' }
 
     if (selectedTicket?.id === ticketId) {
