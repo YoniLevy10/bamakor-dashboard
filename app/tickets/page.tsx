@@ -1146,7 +1146,7 @@ function formatDate(value: string) {
 const styles: Record<string, CSSProperties> = {
   page: {
     minHeight: '100dvh',
-    overflow: 'clip',
+    overflow: 'visible',
     background: '#F5F5F7',
     color: '#1F2937',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
@@ -1164,9 +1164,6 @@ const styles: Record<string, CSSProperties> = {
   mainArea: {
     padding: '24px',
     paddingTop: 'calc(24px + env(safe-area-inset-top))',
-    height: '100%',
-    overflow: 'auto',
-    overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
     boxSizing: 'border-box',
   },

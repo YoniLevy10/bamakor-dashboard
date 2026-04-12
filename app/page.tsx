@@ -1443,6 +1443,131 @@ export default function HomePage() {
         </div>
       </div>
 
+      {showAddTicketModal && (
+        <>
+          <div style={styles.modalOverlay} onClick={() => setShowAddTicketModal(false)} />
+          <div style={styles.addTicketModal}>
+            <div style={styles.addTicketModalHeader}>
+              <h3 style={styles.addTicketModalTitle}>Create New Ticket</h3>
+              <button
+                onClick={() => setShowAddTicketModal(false)}
+                style={styles.addTicketModalClose}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTicket} style={styles.addTicketForm}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Project *</label>
+                <select
+                  value={addTicketForm.project_code}
+                  onChange={(e) =>
+                    setAddTicketForm({
+                      ...addTicketForm,
+                      project_code: e.target.value,
+                    })
+                  }
+                  style={styles.formSelect}
+                >
+                  <option value="">Select a project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.project_code}>
+                      {p.project_code} - {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Description *</label>
+                <textarea
+                  value={addTicketForm.description}
+                  onChange={(e) =>
+                    setAddTicketForm({
+                      ...addTicketForm,
+                      description: e.target.value,
+                    })
+                  }
+                  placeholder="Enter ticket description (min 3 characters)"
+                  style={styles.formTextarea}
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Reporter Name</label>
+                <input
+                  type="text"
+                  value={addTicketForm.reporter_name}
+                  onChange={(e) =>
+                    setAddTicketForm({
+                      ...addTicketForm,
+                      reporter_name: e.target.value,
+                    })
+                  }
+                  placeholder="Enter reporter name"
+                  style={styles.formInput}
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Reporter Phone</label>
+                <input
+                  type="tel"
+                  value={addTicketForm.reporter_phone}
+                  onChange={(e) =>
+                    setAddTicketForm({
+                      ...addTicketForm,
+                      reporter_phone: e.target.value,
+                    })
+                  }
+                  placeholder="Enter phone number"
+                  style={styles.formInput}
+                />
+              </div>
+
+              {addTicketError && (
+                <div style={styles.formError}>{addTicketError}</div>
+              )}
+
+              <div style={styles.formActions}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddTicketModal(false)}
+                  style={styles.formCancelButton}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addingTicket}
+                  style={{
+                    ...styles.formSubmitButton,
+                    opacity: addingTicket ? 0.6 : 1,
+                    cursor: addingTicket ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {addingTicket ? 'Creating...' : 'Create Ticket'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
+
+      {selectedImageUrl && (
+        <>
+          <div onClick={() => setSelectedImageUrl(null)} style={styles.imageModalOverlay} />
+          <div style={styles.imageModal}>
+            <button onClick={() => setSelectedImageUrl(null)} style={styles.imageModalClose}>
+              ✕
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={selectedImageUrl} alt="Full view" style={styles.imageModalImg} />
+          </div>
+        </>
+      )}
+
       {selectedTicket && (
         <>
           <div 
@@ -1660,132 +1785,6 @@ export default function HomePage() {
             </div>
             </div>
           </div>
-
-          {selectedImageUrl && (
-            <>
-              <div onClick={() => setSelectedImageUrl(null)} style={styles.imageModalOverlay} />
-              <div style={styles.imageModal}>
-                <button onClick={() => setSelectedImageUrl(null)} style={styles.imageModalClose}>
-                  ✕
-                </button>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedImageUrl} alt="Full view" style={styles.imageModalImg} />
-              </div>
-            </>
-          )}
-
-          {/* Add Ticket Modal */}
-          {showAddTicketModal && (
-            <>
-              <div style={styles.modalOverlay} onClick={() => setShowAddTicketModal(false)} />
-              <div style={styles.addTicketModal}>
-                <div style={styles.addTicketModalHeader}>
-                  <h3 style={styles.addTicketModalTitle}>Create New Ticket</h3>
-                  <button
-                    onClick={() => setShowAddTicketModal(false)}
-                    style={styles.addTicketModalClose}
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <form onSubmit={handleCreateTicket} style={styles.addTicketForm}>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Project *</label>
-                    <select
-                      value={addTicketForm.project_code}
-                      onChange={(e) =>
-                        setAddTicketForm({
-                          ...addTicketForm,
-                          project_code: e.target.value,
-                        })
-                      }
-                      style={styles.formSelect}
-                    >
-                      <option value="">Select a project</option>
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.project_code}>
-                          {p.project_code} - {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Description *</label>
-                    <textarea
-                      value={addTicketForm.description}
-                      onChange={(e) =>
-                        setAddTicketForm({
-                          ...addTicketForm,
-                          description: e.target.value,
-                        })
-                      }
-                      placeholder="Enter ticket description (min 3 characters)"
-                      style={styles.formTextarea}
-                    />
-                  </div>
-
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Reporter Name</label>
-                    <input
-                      type="text"
-                      value={addTicketForm.reporter_name}
-                      onChange={(e) =>
-                        setAddTicketForm({
-                          ...addTicketForm,
-                          reporter_name: e.target.value,
-                        })
-                      }
-                      placeholder="Enter reporter name"
-                      style={styles.formInput}
-                    />
-                  </div>
-
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Reporter Phone</label>
-                    <input
-                      type="tel"
-                      value={addTicketForm.reporter_phone}
-                      onChange={(e) =>
-                        setAddTicketForm({
-                          ...addTicketForm,
-                          reporter_phone: e.target.value,
-                        })
-                      }
-                      placeholder="Enter phone number"
-                      style={styles.formInput}
-                    />
-                  </div>
-
-                  {addTicketError && (
-                    <div style={styles.formError}>{addTicketError}</div>
-                  )}
-
-                  <div style={styles.formActions}>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddTicketModal(false)}
-                      style={styles.formCancelButton}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={addingTicket}
-                      style={{
-                        ...styles.formSubmitButton,
-                        opacity: addingTicket ? 0.6 : 1,
-                        cursor: addingTicket ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      {addingTicket ? 'Creating...' : 'Create Ticket'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </>
-          )}
         </>
       )}
     </main>
@@ -1797,7 +1796,7 @@ const styles: Record<string, CSSProperties> = {
     minHeight: '100dvh',
     width: '100%',
     maxWidth: '100%',
-    overflow: 'clip',
+    overflow: 'visible',
     background: '#F5F5F7',
     color: '#1F2937',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
@@ -1880,9 +1879,6 @@ const styles: Record<string, CSSProperties> = {
     maxWidth: '100%',
     minWidth: 0,
     boxSizing: 'border-box',
-    height: '100%',
-    overflow: 'auto',
-    overscrollBehavior: 'contain',
     WebkitOverflowScrolling: 'touch',
     paddingTop: 'calc(24px + env(safe-area-inset-top))',
     paddingLeft: 'calc(24px + env(safe-area-inset-left))',
