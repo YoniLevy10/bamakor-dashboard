@@ -1262,17 +1262,20 @@ const styles: Record<string, CSSProperties> = {
     flexDirection: 'column',
     overflow: 'hidden',
   },
-  drawerHeader: {
-    background: '#FFFFFF',
-    padding: '18px',
+   drawerHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: '16px',
-    borderBottom: '1px solid #EFEFF1',
+    padding: '16px',
+    paddingTop: 'calc(16px + env(safe-area-inset-top))',
+    paddingLeft: 'calc(16px + env(safe-area-inset-left))',
+    paddingRight: 'calc(16px + env(safe-area-inset-right))',
+    background: '#FFFFFF',
+    borderBottom: '1px solid rgba(15,23,42,0.06)',
     flex: '0 0 auto',
-    zIndex: 10,
   },
+
   drawerTitle: {
     fontSize: '22px',
     fontWeight: 800,

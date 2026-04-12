@@ -1911,6 +1911,8 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     gap: '8px',
     flexWrap: 'wrap',
+    minWidth: 0,
+    rowGap: '12px',
   },
   brandRow: {
     display: 'flex',
@@ -2805,6 +2807,7 @@ const styles: Record<string, CSSProperties> = {
     bottom: 0,
     background: 'rgba(0, 0, 0, 0.5)',
     zIndex: 199,
+    pointerEvents: 'auto',
   },
   addTicketModal: {
     position: 'fixed',

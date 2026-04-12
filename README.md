@@ -1,103 +1,167 @@
 # Bamakor Dashboard
 
-A comprehensive ticket management system for Bamakor projects with WhatsApp integration, worker assignment, and real-time notifications.
+A ticket management system for construction and maintenance projects with WhatsApp integration, worker assignment, and real-time updates.
 
-## Overview
+## What It Does
 
-The Bamakor Dashboard is a full-stack application for managing construction and maintenance tickets. It supports:
+Bamakor Dashboard enables field teams to report issues and track their resolution:
 
-- **Web Form Integration**: Report issues directly from web forms
-- **WhatsApp Integration**: Create tickets via WhatsApp with QR code scanning
-- **Worker Assignment**: Assign tickets to team members and notify via WhatsApp
-- **Image Attachments**: Support for photos and document uploads
-- **Audit Logging**: Complete activity tracking for compliance
-- **Project Management**: Organize tickets by project with customizable workflows
+- **WhatsApp Entry Point**: Users send `START_[PROJECT_CODE]` to initiate ticket creation
+- **Web Dashboard**: Managers view, filter, assign, and close tickets
+- **Project Management**: Define projects and assign workers
+- **Ticket Attachments**: Support for images/documents with signed URL access
+- **Real-time Updates**: Live ticket list synced via Supabase subscriptions
+- **Worker Management**: Assign field workers, track assignments, notify via WhatsApp
+- **Audit Trail**: Complete log of all ticket status changes
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14+ (React, TypeScript)
-- **Backend**: Next.js API Routes (serverless)
+- **Frontend**: Next.js 16 (React 19, TypeScript, inline CSS)
+- **Backend**: Next.js API Routes (serverless, TypeScript)
 - **Database**: Supabase (PostgreSQL)
 - **Storage**: Supabase Storage (file attachments)
-- **External APIs**: WhatsApp Business API
-- **Deployment**: Vercel
+- **Messaging**: WhatsApp Business API (session-based)
+- **Deployment**: Vercel (Next.js optimized)
 
-## Getting Started
+## Key Pages & Routes
+
+### Dashboard (`/`)
+- KPI summary (Total, Open, Assigned, Closed)
+- Filter tickets by status and project
+- Quick access to QR code management
+- Mobile-friendly card layout for narrow viewports
+
+### Tickets (`/tickets`)
+- Full ticket management interface
+- Advanced filtering (status, priority, project, worker)
+- Create new tickets with project, description, reporter info
+- Inline worker assignment and status updates
+- Detail drawer with attachments, history, and metadata
+
+### Projects (`/projects`)
+- CRUD operations for project definitions
+- Project codes (e.g., BMK001, BMK002)
+- Project names and addresses
+- Project activation/deactivation
+
+### Workers (`/workers`)
+- Worker directory management
+- Phone and email validation
+- Worker activation/deactivation
+- View tickets assigned to each worker
+
+### QR Codes (`/qr`)
+- Generate WhatsApp links for each project
+- Copy WhatsApp start codes (`START_[PROJECT_CODE]`)
+- QR code generation for easy project access
+
+## Core Architecture
+
+### Frontend Features
+- **Real-time Updates**: Supabase subscriptions for live ticket changes
+- **Mobile-First**: Responsive design for mobile field workers
+- **Type Safety**: Full TypeScript throughout
+- **Error Handling**: User-friendly toast notifications with fallback to error toasts
+- **Loading States**: All async operations disable buttons and show progress
+
+### Backend API Routes
+- `POST /api/create-ticket` - Create from WhatsApp or web form
+- `POST /api/assign-ticket` - Assign worker to ticket
+- `POST /api/update-ticket` - Update priority/status
+- `POST /api/close-ticket` - Mark ticket as resolved
+- `POST /api/webhook/whatsapp` - WhatsApp webhook receiver
+
+### WhatsApp Flow
+1. User sends `START_[PROJECT_CODE]` to WhatsApp number
+2. Webhook receives message, creates/activates session
+3. System creates ticket with phone number and project
+4. User can message additional details or attach images
+5. Worker receives assignment notification via WhatsApp
+6. Status updates sent to reporter as confirmations
+
+## Setup Instructions
 
 ### Prerequisites
-
 - Node.js 18+
-- npm or yarn
-- Supabase account with database
-- WhatsApp Business account with API access
+- Supabase account (PostgreSQL database + Storage)
+- WhatsApp Business API access (Meta Business account required)
 
-### Environment Setup
+### Installation
 
-1. **Clone Repository**
-   ```bash
-   git clone <repository-url>
-   cd bamakor-dashboard
-   ```
-
-2. **Install Dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables**
-   Create `.env.local`:
-   ```
-   # Supabase (public - OK in browser)
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-
-   # Supabase (secret - server-side only)
-   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-   # WhatsApp
-   WHATSAPP_PHONE_NUMBER_ID=your-phone-number-id
-   WHATSAPP_ACCESS_TOKEN=your-access-token
-   WHATSAPP_VERIFY_TOKEN=your-verify-token
-   ```
-
-4. **Run Development Server**
-   ```bash
-   npm run dev
-   ```
-
-   Open [http://localhost:3000](http://localhost:3000) to see the dashboard.
-
-### Database Setup
-
-Tables required (auto-created by Supabase migrations):
-
-- `projects` - Project definitions
-- `tickets` - Main ticket records
-- `workers` - Team member information
-- `sessions` - WhatsApp session tracking
-- `ticket_logs` - Audit trail
-- `ticket_attachments` - File metadata
-- `pending_selections` - Multi-match state
-
-## API Documentation
-
-### Create Ticket
-
-**POST** `/api/create-ticket`
-
-Supports two modes:
-
-**Web Form Mode** (project_code provided):
-```json
-{
-  "project_code": "BMK001",
-  "description": "Broken window in lobby",
-  "reporter_name": "John Doe",
-  "source": "web_form"
-}
+1. **Clone and Install**
+```bash
+git clone <repository-url>
+cd bamakor-dashboard
+npm install
 ```
 
-**WhatsApp Mode** (phone + message):
+2. **Environment Variables** (`.env.local`)
+```bash
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# WhatsApp Business API
+WHATSAPP_PHONE_NUMBER_ID=your-phone-id
+WHATSAPP_ACCESS_TOKEN=your-token
+WHATSAPP_VERIFY_TOKEN=your-verify-token
+```
+
+3. **Database Tables**
+Required tables (create in Supabase):
+- `projects` (id, name, project_code, address, created_at)
+- `tickets` (id, ticket_number, project_id, description, status, assigned_worker_id, created_at, closed_at)
+- `workers` (id, full_name, phone, email, role, is_active, created_at)
+- `sessions` (id, phone_number, project_id, active_ticket_id, is_active, last_activity_at)
+- `ticket_logs` (id, ticket_id, action_type, old_value, new_value, performed_by, created_at)
+- `ticket_attachments` (id, ticket_id, file_name, file_url, mime_type, created_at)
+- `pending_selections` (id, phone_number, option_text, expires_at)
+
+4. **Run Development**
+```bash
+npm run dev
+```
+Visit [http://localhost:3000](http://localhost:3000)
+
+## Current Status
+
+### ✅ Implemented & Working
+- Type safety: Full TypeScript, no `any` types
+- Error handling: All async operations wrapped with toast notifications
+- Loading states: Buttons disable during operations, show progress text
+- Mobile support: Responsive layout for all pages
+- Real-time updates: Live ticket list via Supabase subscriptions
+- Dashboard: KPI cards, project carousel, ticket filtering
+- Tickets page: Advanced filtering, worker assignment, drawer detail view
+- WhatsApp integration: Session management, ticket creation, image attachments
+- Worker notifications: Assignment confirmations via WhatsApp
+- Audit trail: Complete ticket history logging
+
+### ✅ Mobile Flow Status
+**FIXED**: Dashboard "New Ticket" button now works on mobile (removed modal overlay blocking issue)
+- Dashboard mobile view: KPI cards (2x2 grid), ticket cards
+- Tickets mobile view: Full-width card list with quick assign/close buttons
+- Both pages now have fully functional forms on mobile (< 900px)
+
+### 🔍 Known Limitations
+
+**WhatsApp Messaging Window**
+- Free-form text messages only work within 24 hours of user's last message
+- After 24 hours: System automatically falls back to pre-approved template messages
+- This is WhatsApp's intentional API policy, not a system bug
+- Users must respond to re-engage the 24-hour window
+
+**Database**
+- No automated cleanup jobs (pending selections expire but aren't auto-deleted)
+- No database constraints (UNIQUE, NOT NULL) enforced at schema level
+- No Row Level Security (RLS) policies configured
+
+**Client-Side Limitations**
+- No retry logic for failed network requests
+- No request deduplication at server level
+- No rate limiting on API endpoints
+- ESLint warnings for Next.js Image optimization (optional)
 ```json
 {
   "phone": "+1234567890",
@@ -141,200 +205,105 @@ Sends WhatsApp notification to assigned worker.
 }
 ```
 
-Marks ticket as closed and clears active sessions.
+## Development
 
-### WhatsApp Webhook
-
-**POST** `/api/webhook/whatsapp`
-
-Receives incoming WhatsApp messages, handles:
-- QR code scanning (START_PROJECT_CODE)
-- Ticket creation flow
-- Image attachments
-- Follow-up messages
-
-## Available Scripts
-
+### Scripts
 ```bash
-# Development
-npm run dev              # Start dev server
-npm run build            # Build for production
-npm run start            # Start production server
+npm run dev       # Start development server on localhost:3000
+npm run build     # Build for production
+npm start         # Start production server
 
-# Quality Checks
-npm run lint             # Run ESLint
-npm run type-check       # Run TypeScript type checking
-
-# Formatting (optional)
-npm run format           # Format with Prettier
+npm run lint      # Run ESLint checks
 ```
 
-## Error Handling
-
-### Robust Error Handling
-
-All API routes implement:
-- Input validation with explicit error messages
-- Database error handling with context logging
-- External service graceful degradation (WhatsApp)
-- Environment configuration validation
-- Development vs. production error details
-
-### Error Response Format
-
-```json
-{
-  "error": "User-friendly error message",
-  "code": "ERROR_CODE",
-  "timestamp": "2024-01-01T12:00:00Z",
-  "details": "Detailed error (development only)"
-}
-```
-
-## Logging
-
-### Log Format
-
-The application uses emoji-prefixed logging for clarity:
-
-- ✅ Success operations
-- ❌ Errors
-- ⚠️ Warnings (non-blocking failures)
-- ℹ️ Info
-- 🔄 Processing states
-
-Example:
-```
-✅ Session created: abc123
-❌ Failed to send WhatsApp notification
-⚠️ Image upload failed but ticket created
-```
-
-## Production Deployment
-
-### Quick Deploy to Vercel
-
-1. Push code to GitHub
-2. Import project in Vercel
-3. Add environment variables
-4. Deploy
-
-Detailed instructions: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
-
-### Production Checklist
-
-Before deploying to production, verify:
-- All environment variables set in Vercel
-- WhatsApp webhook URL configured
-- Database backups enabled
-- Error monitoring setup (recommended)
-
-See [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md)
-
-## Project Structure
-
+### Project Structure
 ```
 app/
-  ├── api/                 # API routes
+  ├── page.tsx                    # Dashboard
+  ├── tickets/page.tsx            # Tickets list & management
+  ├── projects/page.tsx           # Project CRUD
+  ├── workers/page.tsx            # Worker management
+  ├── qr/page.tsx                 # QR code generator
+  ├── summary/page.tsx            # Summary reports
+  ├── api/                        # Backend API routes
+  │   ├── create-ticket/
   │   ├── assign-ticket/
   │   ├── close-ticket/
-  │   ├── create-ticket/
+  │   ├── update-ticket/
   │   └── webhook/whatsapp/
-  ├── page.tsx            # Dashboard UI
-  └── layout.tsx          # Layout wrapper
+  └── components/                 # Reusable components
+      ├── ToastContainer.tsx
+      └── LoadingButton.tsx
 
 lib/
-  ├── supabase.ts         # Client Supabase instance
-  ├── supabase-admin.ts   # Server Supabase admin
-  ├── whatsapp-send.ts    # WhatsApp send utilities
-  ├── whatsapp-parser.ts  # WhatsApp parse utilities
-  ├── api-error-handler.ts # Error handling utilities
-  └── env-validation.ts   # Environment validation
-
-public/                   # Static assets
+  ├── supabase.ts                 # Client-side Supabase
+  ├── supabase-admin.ts           # Admin Supabase (server)
+  ├── error-handler.ts            # Error handling & toasts
+  ├── validators.ts               # Input validation
+  ├── whatsapp-send.ts            # WhatsApp message sending
+  ├── whatsapp-parser.ts          # Parse incoming messages
+  ├── whatsapp-media.ts           # Handle media downloads
+  ├── logging.ts                  # Logging utility
+  └── retry-logic.ts              # Retry mechanism
 ```
 
-## Security
+### Building & Deploying
 
-### Secrets Management
+**Development:**
+```bash
+npm run dev
+```
 
-- Never commit `.env.local` to repository
-- Use Vercel environment variables for secrets
-- Service role key only on server-side
-- Anon key safe for browser (public)
+**Production Build:**
+```bash
+npm run build
+npm start
+```
 
-### Database Security
-
-- Row-level security (RLS) enforced
-- Authentication required for data access
-- Audit logging for compliance
-- Foreign key constraints
-
-### API Security
-
-- Input validation on all endpoints
-- No sensitive data in error details (production)
-- HTTPS enforced (Vercel automatic)
-
-## Monitoring & Maintenance
-
-### Recommended Tools
-
-- **Error Tracking**: Sentry, LogRocket
-- **Analytics**: Vercel Analytics, Mixpanel
-- **Uptime Monitoring**: Uptime.com, StatusCake
-- **Database Monitoring**: Supabase dashboard
-
-### Regular Tasks
-
-- Weekly: Review error logs
-- Monthly: Check database performance
-- Quarterly: Update dependencies
-
+**Deployment to Vercel:**
+1. Connect GitHub repo to Vercel
+2. Add environment variables in Vercel dashboard
+3. Set WhatsApp webhook URL: `https://[your-domain].vercel.app/api/webhook/whatsapp`
+4. Deploy
 ## Troubleshooting
 
 ### Common Issues
 
-**WhatsApp integration not working**
-- Verify webhook URL in WhatsApp dashboard
-- Check verify token matches exactly
-- View WhatsApp Business logs
+**"WhatsApp message send failed"**
+- Check access token hasn't expired
+- Verify phone number format (include country code)
+- Ensure template has been approved (if using templates)
 
-**Database connection errors**
-- Verify environment variables
-- Check Supabase project status
-- Review RLS policies
+**"Session not found"**
+- User may have started a new session with a different project
+- Database session record may have been deleted
+- Create a new ticket by sending START code again
 
-**Build errors**
-- Run `npm install` to update dependencies
-- Check `npm run type-check` for TS errors
-- Review build logs in Vercel dashboard
+**"Attachment upload failed"**
+- File size may exceed limit (check Supabase Storage settings)
+- Network timeout - retry the operation
+- Storage bucket permissions issue
 
-More troubleshooting: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#troubleshooting)
+**"Mobile button not working"**
+- Ensure viewport width < 900px for mobile view
+- Check browser console for JavaScript errors
+- Clear browser cache and reload
 
-## Contributing
+## Performance Notes
 
-1. Create a feature branch (`git checkout -b feature/amazing-feature`)
-2. Commit changes (`git commit -m 'Add amazing feature'`)
-3. Push to branch (`git push origin feature/amazing-feature`)
-4. Open a Pull Request
+- Images lazy-loaded with signed URLs
+- Real-time updates via Supabase broadcast
+- Ticket list paginated for large datasets (frontend only - no API pagination)
+- Modal rendering optimized to avoid unnecessary re-renders
 
-## Support
-
-For issues or questions:
-- Check existing GitHub issues
-- Review deployment guide
-- Check Vercel logs
-- Contact Bamakor team
-
+- Weekly: Review error logs
 ## License
 
-[Add appropriate license]
+MIT License - See LICENSE file for details
 
-## References
+## Contact
 
-- [Next.js Deployment](https://nextjs.org/docs/deployment)
-- [Supabase Documentation](https://supabase.com/docs)
-- [WhatsApp Business API](https://www.whatsapp.com/business/developers)
-- [Vercel Documentation](https://vercel.com/docs)
-
+For questions or support:
+- Check GitHub issues
+- Review code comments for implementation details
+- Consult Supabase and WhatsApp API documentation
