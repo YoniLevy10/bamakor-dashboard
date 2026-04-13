@@ -872,8 +872,8 @@ export async function POST(req: NextRequest) {
       } else if (projectForNotification?.manager_phone) {
         // CURRENT CHANNEL: SMS for manager notifications
         console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket)')
-        const buildingLine = buildingNumber ? `🏢 בניין: ${buildingNumber}\n` : ''
-        const smsMessage = `🚨 נפתחה תקלה חדשה\n\n📍 פרויקט: ${projectForNotification.name}\n${buildingLine}🆔 תקלה: #${createdTicket.ticket_number}\n📝 תיאור: ${textBody || 'ללא פירוט'}\n📞 מדווח: ${from}\n\n— Bamakor`
+        const buildingLine = buildingNumber ? `בניין: ${buildingNumber}\n` : ''
+        const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${textBody || 'ללא פירוט'}\nמדווח: ${from}\nכניסה למערכת:\nhttps://bamakor.vercel.app/tickets\nBamakor`
         
         const smsSent = await sendManagerSMS(projectForNotification.manager_phone, smsMessage)
         
