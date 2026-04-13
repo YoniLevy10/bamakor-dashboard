@@ -237,6 +237,18 @@ export async function uploadWhatsAppMediaToStorage(
 
 /**
  * Create attachment record in database
+ * 
+ * Production schema columns for ticket_attachments:
+ * - id (auto)
+ * - ticket_id (required)
+ * - attachment_type (required)
+ * - file_url (required)
+ * - mime_type (required)
+ * - whatsapp_media_id (optional)
+ * - created_at (auto)
+ * - file_name (required)
+ * 
+ * NOTE: file_size does NOT exist in production schema
  */
 export async function createAttachmentRecord(
   supabaseAdmin: SupabaseClient,
@@ -263,36 +275,37 @@ export async function createAttachmentRecord(
       return false
     }
 
-    console.log(`⏳ STEP_1_START: Creating attachment record in database`, {
+    console.log(`⏳ DB_INSERT_START: Creating attachment record in database`, {
       ticketId,
       fileName,
       mimeType,
       attachmentType,
       fileSize,
-      hasMediaId: !!mediaId,
+      mediaId: mediaId || null,
     })
 
-    // Build payload with only expected columns based on create-ticket usage
-    // NOTE: whatsapp_media_id may not exist in schema - only include if column exists
-    const payload: Record<string, unknown> = {
+    // Build payload matching exact production schema
+    // Production columns: ticket_id, file_name, file_url, mime_type, attachment_type, whatsapp_media_id
+    // NOTE: file_size is NOT in the production schema - removed
+    const payload = {
       ticket_id: ticketId,
       file_name: fileName,
       file_url: filePath,
-      file_size: fileSize,
       mime_type: mimeType,
       attachment_type: attachmentType,
+      whatsapp_media_id: mediaId || null,
     }
 
-    // Only add whatsapp_media_id if it has a value AND we know the column exists
-    // (This field may not be in the production schema)
-    if (mediaId) {
-      payload.whatsapp_media_id = mediaId
-    }
-
-    console.log(`ℹ️ Attempting database insert with payload:`, {
-      columns: Object.keys(payload),
-      ticketId,
-      attachmentType,
+    console.log(`ℹ️ DB_INSERT_PAYLOAD: Columns to insert:`, {
+      schema: Object.keys(payload),
+      values: {
+        ticket_id: ticketId,
+        file_name: fileName,
+        file_url: filePath,
+        mime_type: mimeType,
+        attachment_type: attachmentType,
+        whatsapp_media_id: mediaId || 'null',
+      },
     })
 
     const { error: dbError } = await supabaseAdmin
@@ -318,7 +331,7 @@ export async function createAttachmentRecord(
         errorCode,
         errorDetails: String(errorDetails).substring(0, 300),
         errorHint: String(errorHint).substring(0, 300),
-        payloadColumns: Object.keys(payload),
+        attemptedColumns: Object.keys(payload),
         isColumnMissing,
         isUniqueViolation,
         isConstraintViolation,
@@ -327,42 +340,26 @@ export async function createAttachmentRecord(
       })
 
       if (isColumnMissing) {
-        console.error(`⚠️ DB_INSERT_DIAGNOSIS: Schema mismatch - one of these columns may not exist:`, 
-          Object.keys(payload).join(', '))
-        // Try fallback insert without optional fields
-        if (mediaId) {
-          console.log(`ℹ️ Attempting fallback insert WITHOUT whatsapp_media_id column...`)
-          const fallbackPayload = { ...payload }
-          delete fallbackPayload.whatsapp_media_id
-
-          const { error: fallbackError } = await supabaseAdmin
-            .from('ticket_attachments')
-            .insert(fallbackPayload)
-
-          if (fallbackError) {
-            console.error('❌ DB_INSERT_FAILURE: Fallback insert also failed', {
-              ticketId,
-              fallbackError: String(fallbackError),
-            })
-            return false
-          } else {
-            console.log(`✅ DB_INSERT_SUCCESS: Fallback insert succeeded (without whatsapp_media_id)`)
-            return true
-          }
-        }
+        console.error(`⚠️ DB_INSERT_DIAGNOSIS: Column missing or schema mismatch`, {
+          attemptedColumns: Object.keys(payload),
+          productionColumns: ['id', 'ticket_id', 'attachment_type', 'file_url', 'mime_type', 'whatsapp_media_id', 'created_at', 'file_name'],
+        })
       }
 
       if (isConstraintViolation) {
-        console.error(`⚠️ DB_INSERT_DIAGNOSIS: Constraint violation - check foreign keys and NOT NULL constraints`)
+        console.error(`⚠️ DB_INSERT_DIAGNOSIS: Constraint violation - check foreign keys and NOT NULL constraints`, {
+          attemptedColumns: Object.keys(payload),
+        })
       }
 
       return false
     }
 
-    console.log(`✅ STEP_1_SUCCESS: Attachment record created in database`, {
+    console.log(`✅ DB_INSERT_SUCCESS: Attachment record created in database`, {
       ticketId,
       fileName,
       fileSize,
+      columns: Object.keys(payload),
     })
     return true
   } catch (err) {
