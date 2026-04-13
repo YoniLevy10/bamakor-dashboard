@@ -1,62 +1,137 @@
 /**
  * 019SMS notification service for internal staff
  * 
- * REQUIRED ENVIRONMENT VARIABLES:
- * - SMS_019_USERNAME: 019SMS account username (for API authentication)
- * - SMS_019_PASSWORD: 019SMS account password (for API authentication)
- * 
  * ARCHITECTURE:
  * - Residents: WhatsApp (conversation flow) - UNCHANGED
  * - Workers: SMS via 019SMS (internal notifications)
  * - Manager: SMS via 019SMS (internal notifications)
  * 
- * SMS Sender Number (for internal staff only): 972559899132
- * WhatsApp Number (for residents): Unchanged (WHATSAPP_PHONE_NUMBER env var)
+ * REQUIRED ENVIRONMENT VARIABLES:
+ * - SMS_019_API_TOKEN: Bearer token for API authentication
+ * - SMS_019_USERNAME: Account username (used in XML payload)
+ * - SMS_019_SENDER: Source identifier (max 11 chars, no +, numeric + letters only)
+ * 
+ * OFFICIAL 019SMS API:
+ * - Endpoint: POST https://019sms.co.il/api
+ * - Auth: Bearer token in Authorization header
+ * - Format: XML request and response
+ * - Success: status code 0 in response
+ * - Phone format: 5xxxxxxx or 05xxxxxxx (Israeli format)
  * 
  * This module handles outbound SMS to internal staff ONLY via 019SMS.
  * Resident communication remains on WhatsApp via Meta/Facebook.
  */
 
 // 019SMS Configuration
-const SMS_019_ENDPOINT = 'https://api.019sms.co.il/Send'
+const SMS_019_ENDPOINT = 'https://019sms.co.il/api'
+const SMS_019_API_TOKEN = process.env.SMS_019_API_TOKEN
 const SMS_019_USERNAME = process.env.SMS_019_USERNAME
-const SMS_019_PASSWORD = process.env.SMS_019_PASSWORD
-const SMS_019_SENDER = '972559899132' // Staff notification sender number
+const SMS_019_SENDER = process.env.SMS_019_SENDER || '972559899132'
 
 /**
- * Normalize phone number for 019SMS
- * Ensures format compatibility with Israeli phone numbers
+ * Normalize phone number to 019SMS format
+ * Required format: 5xxxxxxx or 05xxxxxxx (Israeli phone numbers)
  * 
- * Handles:
- * - Leading +972 → 972
- * - Leading 08 → 972-8
+ * Converts:
+ * - +972... → 05... (removes country code, adds leading 0)
+ * - 972... → 05... (converts 972 prefix to 05)
+ * - 08/09... → 05... (converts to standard format)
  * - Removes spaces and dashes
+ * 
+ * Result: Always 8 digits with leading 0 (05xxxxxxx format)
  */
 function normalizePhoneNumber(phoneNumber: string): string {
   if (!phoneNumber) return ''
   
   let normalized = phoneNumber.replace(/\s|-/g, '') // Remove spaces and dashes
   
-  // Convert 05/08/09 format to 972 format
-  if (normalized.startsWith('05')) {
-    normalized = '972' + normalized.substring(1)
-  } else if (normalized.startsWith('08')) {
-    normalized = '972' + normalized.substring(1)
-  } else if (normalized.startsWith('09')) {
-    normalized = '972' + normalized.substring(1)
-  }
-  
-  // Remove leading +
+  // Remove leading + if present
   if (normalized.startsWith('+')) {
     normalized = normalized.substring(1)
+  }
+  
+  // Convert 972 country code to 0 prefix
+  if (normalized.startsWith('972')) {
+    normalized = '0' + normalized.substring(3)
+  }
+  
+  // Ensure format is 05xxxxxxx or 05xxxxxxxx (8-9 digits after 0)
+  // Handle edge cases like 08 or 09 by converting to 05
+  if (normalized.startsWith('08') || normalized.startsWith('09')) {
+    normalized = '05' + normalized.substring(2)
+  }
+  
+  // Validate format: must start with 05 and have 8+ digits total
+  if (!/^05\d{7,}$/.test(normalized)) {
+    return '' // Invalid format
   }
   
   return normalized
 }
 
 /**
+ * Parse XML response from 019SMS API
+ * Response format:
+ * <sms>
+ *   <status>0</status>
+ *   <message>SMS will be sent</message>
+ *   <shipment_id>xxxxx</shipment_id>
+ * </sms>
+ */
+function parseXMLResponse(xmlText: string): { status: number; message: string; shipmentId: string } {
+  try {
+    // Extract status code
+    const statusMatch = xmlText.match(/<status>(\d+)<\/status>/)
+    const status = statusMatch ? parseInt(statusMatch[1]) : -1
+
+    // Extract message
+    const messageMatch = xmlText.match(/<message>(.+?)<\/message>/)
+    const message = messageMatch ? messageMatch[1] : ''
+
+    // Extract shipment ID
+    const shipmentMatch = xmlText.match(/<shipment_id>(.+?)<\/shipment_id>/)
+    const shipmentId = shipmentMatch ? shipmentMatch[1] : ''
+
+    return { status, message, shipmentId }
+  } catch {
+    return { status: -1, message: 'Failed to parse response', shipmentId: '' }
+  }
+}
+
+/**
+ * Build XML payload for 019SMS API
+ * Per docs: https://docs.019sms.co.il/sms/send-sms.html
+ * 
+ * Required fields:
+ * - username: account username
+ * - source: sender ID (phone or string, max 11 chars, numeric/letters only, no +)
+ * - destinations: contains phone elements
+ * - phone: recipient in format 5xxxxxxx or 05xxxxxxx
+ * - message: SMS text (max 1005 chars)
+ */
+function buildSMSPayload(username: string, source: string, destination: string, smsMessage: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<sms>
+    <user>
+        <username>${username}</username>
+    </user>
+    <source>${source}</source>
+    <destinations>
+        <phone>${destination}</phone>
+    </destinations>
+    <message>${smsMessage}</message>
+</sms>`
+}
+
+/**
  * Send SMS to worker via 019SMS
  * Used when: Worker is assigned to a ticket
+ * 
+ * API Spec:
+ * - Endpoint: POST https://019sms.co.il/api
+ * - Auth: Bearer token in Authorization header
+ * - Format: XML
+ * - Success: status 0
  */
 export async function sendWorkerSMS(
   phoneNumber: string,
@@ -75,65 +150,67 @@ export async function sendWorkerSMS(
 
     const isProduction = process.env.NODE_ENV === 'production'
 
-    // Development mode: log only if no credentials
-    if (!isProduction && (!SMS_019_USERNAME || !SMS_019_PASSWORD)) {
+    // Development mode: log only if no token
+    if (!isProduction && !SMS_019_API_TOKEN) {
       console.log('📱 SMS_DEVELOPMENT: Not sending SMS in development mode (missing credentials)')
       console.log('📱 SMS_WORKER_RECIPIENT:', phoneNumber)
       console.log('📱 SMS_WORKER_MESSAGE_LENGTH:', message.length)
       return true
     }
 
-    // Production mode: require credentials
-    if (!SMS_019_USERNAME || !SMS_019_PASSWORD) {
-      console.error('❌ SMS_SEND_FAILURE: 019SMS credentials not configured (SMS_019_USERNAME or SMS_019_PASSWORD missing)')
+    // Production mode: require token
+    if (!SMS_019_API_TOKEN) {
+      console.error('❌ SMS_SEND_FAILURE: 019SMS token not configured (SMS_019_API_TOKEN missing)')
+      return false
+    }
+
+    if (!SMS_019_USERNAME) {
+      console.error('❌ SMS_SEND_FAILURE: 019SMS username not configured (SMS_019_USERNAME missing)')
       return false
     }
 
     const normalizedPhone = normalizePhoneNumber(phoneNumber)
     if (!normalizedPhone) {
-      console.error('❌ SMS_SEND_FAILURE: phoneNumber could not be normalized', { originalPhone: phoneNumber })
+      console.error('❌ SMS_SEND_FAILURE: phoneNumber could not be normalized to 019SMS format', { 
+        originalPhone: phoneNumber,
+        hint: 'Expected format: 5xxxxxxx or 05xxxxxxx'
+      })
       return false
     }
 
     console.log('📱 SMS_SEND_START: Sending SMS to worker via 019SMS', {
       normalizedPhone,
-      sender: SMS_019_SENDER,
+      source: SMS_019_SENDER,
       messageLength: message.length,
-      charset: 'utf-8',
     })
 
-    // 019SMS API request
+    const payload = buildSMSPayload(SMS_019_USERNAME, SMS_019_SENDER, normalizedPhone, message)
+
     const response = await fetch(SMS_019_ENDPOINT, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/xml',
+        'Authorization': `Bearer ${SMS_019_API_TOKEN}`,
       },
-      body: new URLSearchParams({
-        UserName: SMS_019_USERNAME,
-        Password: SMS_019_PASSWORD,
-        To: normalizedPhone,
-        From: SMS_019_SENDER,
-        Text: message,
-      }).toString(),
+      body: payload,
     })
 
     const responseText = await response.text()
+    const { status, message: responseMessage, shipmentId } = parseXMLResponse(responseText)
 
     if (!response.ok) {
-      console.error('❌ SMS_SEND_FAILURE: 019SMS API returned non-200 status', {
-        status: response.status,
+      console.error('❌ SMS_SEND_FAILURE: 019SMS API returned non-200 HTTP status', {
+        httpStatus: response.status,
         statusText: response.statusText,
-        responseBody: responseText.substring(0, 300),
         normalizedPhone,
       })
       return false
     }
 
-    // 019SMS returns "OK" on success
-    if (responseText.trim() !== 'OK') {
-      console.error('❌ SMS_SEND_FAILURE: 019SMS returned unexpected response', {
-        status: response.status,
-        responseBody: responseText.substring(0, 300),
+    if (status !== 0) {
+      console.error('❌ SMS_SEND_FAILURE: 019SMS API returned non-zero status code', {
+        status,
+        message: responseMessage,
         normalizedPhone,
       })
       return false
@@ -141,15 +218,14 @@ export async function sendWorkerSMS(
 
     console.log('✅ SMS_WORKER_SENT: SMS sent successfully to worker via 019SMS', {
       normalizedPhone,
-      sender: SMS_019_SENDER,
-      messageLength: message.length,
+      shipmentId,
+      source: SMS_019_SENDER,
     })
 
     return true
   } catch (err) {
     console.error('❌ SMS_SEND_FAILURE: Unexpected error sending worker SMS', {
       error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
     })
     return false
   }
@@ -158,6 +234,12 @@ export async function sendWorkerSMS(
 /**
  * Send SMS to manager via 019SMS
  * Used when: New ticket created, important status changes
+ * 
+ * API Spec:
+ * - Endpoint: POST https://019sms.co.il/api
+ * - Auth: Bearer token in Authorization header
+ * - Format: XML
+ * - Success: status 0
  */
 export async function sendManagerSMS(
   phoneNumber: string,
@@ -176,65 +258,67 @@ export async function sendManagerSMS(
 
     const isProduction = process.env.NODE_ENV === 'production'
 
-    // Development mode: log only if no credentials
-    if (!isProduction && (!SMS_019_USERNAME || !SMS_019_PASSWORD)) {
+    // Development mode: log only if no token
+    if (!isProduction && !SMS_019_API_TOKEN) {
       console.log('📱 SMS_DEVELOPMENT: Not sending SMS in development mode (missing credentials)')
       console.log('📱 SMS_MANAGER_RECIPIENT:', phoneNumber)
       console.log('📱 SMS_MANAGER_MESSAGE_LENGTH:', message.length)
       return true
     }
 
-    // Production mode: require credentials
-    if (!SMS_019_USERNAME || !SMS_019_PASSWORD) {
-      console.error('❌ SMS_SEND_FAILURE: 019SMS credentials not configured (SMS_019_USERNAME or SMS_019_PASSWORD missing)')
+    // Production mode: require token
+    if (!SMS_019_API_TOKEN) {
+      console.error('❌ SMS_SEND_FAILURE: 019SMS token not configured (SMS_019_API_TOKEN missing)')
+      return false
+    }
+
+    if (!SMS_019_USERNAME) {
+      console.error('❌ SMS_SEND_FAILURE: 019SMS username not configured (SMS_019_USERNAME missing)')
       return false
     }
 
     const normalizedPhone = normalizePhoneNumber(phoneNumber)
     if (!normalizedPhone) {
-      console.error('❌ SMS_SEND_FAILURE: phoneNumber could not be normalized', { originalPhone: phoneNumber })
+      console.error('❌ SMS_SEND_FAILURE: phoneNumber could not be normalized to 019SMS format', { 
+        originalPhone: phoneNumber,
+        hint: 'Expected format: 5xxxxxxx or 05xxxxxxx'
+      })
       return false
     }
 
     console.log('📱 SMS_SEND_START: Sending SMS to manager via 019SMS', {
       normalizedPhone,
-      sender: SMS_019_SENDER,
+      source: SMS_019_SENDER,
       messageLength: message.length,
-      charset: 'utf-8',
     })
 
-    // 019SMS API request
+    const payload = buildSMSPayload(SMS_019_USERNAME, SMS_019_SENDER, normalizedPhone, message)
+
     const response = await fetch(SMS_019_ENDPOINT, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/xml',
+        'Authorization': `Bearer ${SMS_019_API_TOKEN}`,
       },
-      body: new URLSearchParams({
-        UserName: SMS_019_USERNAME,
-        Password: SMS_019_PASSWORD,
-        To: normalizedPhone,
-        From: SMS_019_SENDER,
-        Text: message,
-      }).toString(),
+      body: payload,
     })
 
     const responseText = await response.text()
+    const { status, message: responseMessage, shipmentId } = parseXMLResponse(responseText)
 
     if (!response.ok) {
-      console.error('❌ SMS_SEND_FAILURE: 019SMS API returned non-200 status', {
-        status: response.status,
+      console.error('❌ SMS_SEND_FAILURE: 019SMS API returned non-200 HTTP status', {
+        httpStatus: response.status,
         statusText: response.statusText,
-        responseBody: responseText.substring(0, 300),
         normalizedPhone,
       })
       return false
     }
 
-    // 019SMS returns "OK" on success
-    if (responseText.trim() !== 'OK') {
-      console.error('❌ SMS_SEND_FAILURE: 019SMS returned unexpected response', {
-        status: response.status,
-        responseBody: responseText.substring(0, 300),
+    if (status !== 0) {
+      console.error('❌ SMS_SEND_FAILURE: 019SMS API returned non-zero status code', {
+        status,
+        message: responseMessage,
         normalizedPhone,
       })
       return false
@@ -242,32 +326,29 @@ export async function sendManagerSMS(
 
     console.log('✅ SMS_MANAGER_SENT: SMS sent successfully to manager via 019SMS', {
       normalizedPhone,
-      sender: SMS_019_SENDER,
-      messageLength: message.length,
+      shipmentId,
+      source: SMS_019_SENDER,
     })
 
     return true
   } catch (err) {
     console.error('❌ SMS_SEND_FAILURE: Unexpected error sending manager SMS', {
       error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
     })
     return false
   }
 }
 
 /**
- * Legacy WhatsApp notification helper (ARCHIVED)
+ * Legacy WhatsApp staff notifications (ARCHIVED)
  * 
- * WARN: Do not use this for new notifications.
- * Once WhatsApp templates are approved by Meta, this can reference the new template system.
+ * Do not use this for new notifications.
+ * SMS is the primary channel for staff (workers + manager).
  * 
- * Current status: ARCHIVED - SMS via 019SMS is primary channel for staff
- * Future status: Will be restored when WhatsApp templates are available
+ * Resident communication remains on WhatsApp via Meta/Facebook.
  */
 export const WHATSAPP_STAFF_NOTIFICATIONS_ARCHIVED = {
   reason: 'WhatsApp templates not yet approved by Meta',
   status: 'disabled',
-  reactivationPlan: 'Restore when template_ids are available in environment',
   currentChannel: 'SMS_019',
 }
