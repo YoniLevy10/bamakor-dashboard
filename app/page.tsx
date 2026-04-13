@@ -9,16 +9,16 @@ import {
   MobileHeader, 
   MobileMenu, 
   PageHeader, 
-  KpiCard, 
-  Card, 
   Button, 
-  StatusBadge, 
-  SearchInput,
-  FilterTabs,
-  Drawer,
-  EmptyState,
   theme 
 } from './components/ui'
+import { DashboardStats } from './components/dashboard/DashboardStats'
+import { ProjectFilterSection } from './components/dashboard/ProjectFilterSection'
+import { QrManagementSection } from './components/dashboard/QrManagementSection'
+import { TicketsList } from './components/tickets/TicketsList'
+import { TicketDetailDrawer } from './components/tickets/TicketDetailDrawer'
+import { AddTicketModal } from './components/tickets/AddTicketModal'
+import { ImageLightbox } from './components/shared/ImageLightbox'
 
 type TicketRow = {
   id: string
@@ -844,425 +844,98 @@ export default function HomePage() {
           />
         )}
 
-        {/* KPI Cards */}
-        <div style={{
-          ...styles.kpiGrid,
-          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-        }}>
-          <KpiCard
-            label="Total Tickets"
-            value={stats.total}
-            active={activeKpi === 'ALL'}
-            onClick={() => setActiveKpi('ALL')}
-          />
-          <KpiCard
-            label="Open"
-            value={stats.open}
-            active={activeKpi === 'NEW'}
-            onClick={() => setActiveKpi('NEW')}
-          />
-          <KpiCard
-            label="Assigned"
-            value={stats.assigned}
-            active={activeKpi === 'ASSIGNED'}
-            onClick={() => setActiveKpi('ASSIGNED')}
-          />
-          <KpiCard
-            label="Closed"
-            value={stats.closed}
-            active={activeKpi === 'CLOSED'}
-            onClick={() => setActiveKpi('CLOSED')}
-          />
-        </div>
+        {/* Dashboard Stats */}
+        <DashboardStats
+          stats={stats}
+          activeKpi={activeKpi}
+          onKpiChange={setActiveKpi}
+          isMobile={isMobile}
+        />
 
-        {/* Projects Section */}
-        <Card
-          title="Projects"
-          subtitle="Filter tickets by project"
-          actions={
-            <Button variant="ghost" size="sm" onClick={() => setSelectedProjectCode('ALL')}>
-              Show All
-            </Button>
-          }
-          style={{ marginBottom: '20px' }}
-        >
-          <div style={styles.projectScroll}>
-            {projectCounts.map((project) => (
-              <button
-                key={project.id}
-                onClick={() => setSelectedProjectCode(project.project_code)}
-                style={{
-                  ...styles.projectChip,
-                  ...(selectedProjectCode === project.project_code ? styles.projectChipActive : {}),
-                }}
-              >
-                <div style={styles.projectChipName}>{project.name}</div>
-                <div style={styles.projectChipCode}>{project.project_code}</div>
-                <div style={styles.projectChipCount}>
-                  {project.open > 0 && (
-                    <span style={styles.projectChipOpenCount}>{project.open}</span>
-                  )}
-                  {project.total}
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
+        {/* Projects Filter */}
+        <ProjectFilterSection
+          projectCounts={projectCounts}
+          selectedProjectCode={selectedProjectCode}
+          onProjectSelect={setSelectedProjectCode}
+        />
 
         {/* QR Management Section */}
         {showQrSection && (
-          <Card
-            title="QR Management"
-            subtitle="Copy project links and generate QR codes"
-            style={{ marginBottom: '20px' }}
-          >
-            <div style={styles.qrGrid}>
-              {projects.map((project) => {
-                const startCode = `START_${project.project_code}`
-                const whatsappLink = buildWhatsappLink(project.project_code)
-
-                return (
-                  <div key={project.id} style={styles.qrCard}>
-                    <div style={styles.qrCardHeader}>
-                      <span style={styles.qrCardCode}>{project.project_code}</span>
-                      <span style={styles.qrCardName}>{project.name}</span>
-                    </div>
-                    <div style={styles.qrCardMeta}>
-                      <div style={styles.qrMetaLabel}>Start Code</div>
-                      <div style={styles.qrMetaValue}>{startCode}</div>
-                    </div>
-                    <div style={styles.qrCardActions}>
-                      <Button variant="secondary" size="sm" onClick={() => copyText(startCode, 'Code copied')}>
-                        Copy Code
-                      </Button>
-                      <Button variant="secondary" size="sm" onClick={() => copyText(whatsappLink, 'Link copied')}>
-                        Copy Link
-                      </Button>
-                      <a href={whatsappLink} target="_blank" rel="noreferrer" style={styles.qrOpenLink}>
-                        Open
-                      </a>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </Card>
+          <QrManagementSection
+            projects={projects}
+            onCopyText={copyText}
+          />
         )}
 
         {/* Tickets List */}
-        <Card
-          title="All Tickets"
-          subtitle="Live operational view connected to Supabase"
-          noPadding
-        >
-          <div style={styles.filtersRow}>
-            <SearchInput
-              value={searchTerm}
-              onChange={setSearchTerm}
-              placeholder="Search tickets..."
-              style={{ maxWidth: isMobile ? '100%' : '320px' }}
-            />
-            <FilterTabs
-              options={statusOptions.map(s => ({ value: s, label: s === 'ALL' ? 'All' : s.replace('_', ' ') }))}
-              value={statusFilter}
-              onChange={setStatusFilter}
-            />
-          </div>
-
-          {loading && (
-            <div style={styles.loadingState}>
-              <div style={styles.loadingSpinner} />
-              <span>Loading tickets...</span>
-            </div>
-          )}
-
-          {error && (
-            <div style={styles.errorState}>
-              <span>{error}</span>
-              <Button variant="secondary" size="sm" onClick={() => loadTickets(activeSource)}>
-                Retry
-              </Button>
-            </div>
-          )}
-
-          {!loading && !error && filteredTickets.length === 0 && (
-            <EmptyState
-              title="No tickets found"
-              description="Try adjusting your filters or create a new ticket."
-              action={
-                <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
-                  Create Ticket
-                </Button>
-              }
-            />
-          )}
-
-          {!loading && !error && filteredTickets.length > 0 && (
-            <div style={styles.ticketList}>
-              {filteredTickets.map((ticket) => (
-                <div
-                  key={ticket.id}
-                  onClick={() => openTicket(ticket)}
-                  style={{
-                    ...styles.ticketRow,
-                    ...(selectedTicket?.id === ticket.id ? styles.ticketRowActive : {}),
-                  }}
-                >
-                  <div style={styles.ticketRowMain}>
-                    <div style={styles.ticketNumber}>#{ticket.ticket_number}</div>
-                    <div style={styles.ticketProject}>{ticket.project_code || 'N/A'}</div>
-                    <StatusBadge status={ticket.status} size="sm" />
-                  </div>
-                  <div style={styles.ticketDescription}>{ticket.description || '-'}</div>
-                  <div style={styles.ticketMeta}>
-                    <span>{ticket.reporter_phone}</span>
-                    <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
-                    <span>{workersMap[ticket.assigned_worker_id || ''] || 'Unassigned'}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+        <TicketsList
+          tickets={tickets}
+          filteredTickets={filteredTickets}
+          loading={loading}
+          error={error}
+          searchTerm={searchTerm}
+          statusFilter={statusFilter}
+          onSearchChange={setSearchTerm}
+          onStatusFilterChange={setStatusFilter}
+          onTicketClick={openTicket}
+          onCreateClick={() => setShowAddTicketModal(true)}
+          onRetry={() => loadTickets(activeSource)}
+          selectedTicketId={selectedTicket?.id}
+          workersMap={workersMap}
+          isMobile={isMobile}
+        />
       </div>
 
       {/* Ticket Detail Drawer */}
-      <Drawer
-        open={!!selectedTicket}
-        onClose={closeDrawer}
-        title={`Ticket #${selectedTicket?.ticket_number}`}
-        subtitle={selectedTicket?.project_name || selectedTicket?.project_code}
+      <TicketDetailDrawer
+        selectedTicket={selectedTicket}
         isMobile={isMobile}
-      >
-        {selectedTicket && (
-          <div style={styles.drawerContent}>
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Status</div>
-              <select
-                value={draftStatus}
-                onChange={(e) => setDraftStatus(e.target.value)}
-                style={styles.drawerSelect}
-              >
-                {editableStatusOptions.map((status) => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Assigned Worker</div>
-              <select
-                value={draftWorkerId}
-                onChange={(e) => setDraftWorkerId(e.target.value)}
-                style={styles.drawerSelect}
-              >
-                <option value="">Unassigned</option>
-                {Object.entries(workersMap).map(([id, name]) => (
-                  <option key={id} value={id}>{name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Description</div>
-              <textarea
-                value={draftDescription}
-                onChange={(e) => setDraftDescription(e.target.value)}
-                style={styles.drawerTextarea}
-                rows={4}
-              />
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Reporter Phone</div>
-              <div style={styles.drawerValue}>{selectedTicket.reporter_phone}</div>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Created</div>
-              <div style={styles.drawerValue}>
-                {new Date(selectedTicket.created_at).toLocaleString()}
-              </div>
-            </div>
-
-            {/* Attachments */}
-            {selectedTicketAttachments.length > 0 && (
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Attachments</div>
-                <div style={styles.attachmentGrid}>
-                  {selectedTicketAttachments.map((attachment) => (
-                    <button
-                      key={attachment.id}
-                      onClick={() => setSelectedImageUrl(getImageUrl(attachment))}
-                      style={styles.attachmentThumb}
-                    >
-                      {attachment.mime_type.startsWith('image/') ? (
-                        <img
-                          src={getImageUrl(attachment)}
-                          alt={attachment.file_name}
-                          style={styles.attachmentImg}
-                          crossOrigin="anonymous"
-                        />
-                      ) : (
-                        <div style={styles.attachmentFile}>{attachment.file_name}</div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Actions */}
-            <div style={styles.drawerActions}>
-              <Button
-                variant="primary"
-                onClick={saveSelectedTicket}
-                loading={savingTicket}
-                style={{ width: '100%' }}
-              >
-                Save Changes
-              </Button>
-              {selectedTicket.status !== 'CLOSED' && (
-                <Button
-                  variant="danger"
-                  onClick={() => closeTicket(selectedTicket.id)}
-                  style={{ width: '100%' }}
-                >
-                  Close Ticket
-                </Button>
-              )}
-            </div>
-
-            {/* History */}
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>History</div>
-              {drawerLoading ? (
-                <div style={styles.loadingState}>Loading...</div>
-              ) : ticketLogs.length === 0 ? (
-                <div style={styles.emptyLogs}>No history available</div>
-              ) : (
-                <div style={styles.logsList}>
-                  {ticketLogs.map((log) => (
-                    <div key={log.id} style={styles.logItem}>
-                      <div style={styles.logHeader}>
-                        <span style={styles.logAction}>{formatLogTitle(log.action_type)}</span>
-                        <span style={styles.logTime}>
-                          {new Date(log.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      {log.notes && <div style={styles.logNotes}>{log.notes}</div>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </Drawer>
+        draftDescription={draftDescription}
+        draftWorkerId={draftWorkerId}
+        draftStatus={draftStatus}
+        selectedTicketAttachments={selectedTicketAttachments}
+        ticketLogs={ticketLogs}
+        drawerLoading={drawerLoading}
+        savingTicket={savingTicket}
+        workersMap={workersMap}
+        onClose={closeDrawer}
+        onDescriptionChange={setDraftDescription}
+        onWorkerChange={setDraftWorkerId}
+        onStatusChange={setDraftStatus}
+        onSave={saveSelectedTicket}
+        onSelectImage={setSelectedImageUrl}
+        onCloseTicket={() => closeTicket(selectedTicket?.id || '')}
+        getImageUrl={getImageUrl}
+      />
 
       {/* Add Ticket Modal */}
-      {showAddTicketModal && (
-        <>
-          <div style={styles.modalOverlay} onClick={() => setShowAddTicketModal(false)} />
-          <div style={styles.modal}>
-            <div style={styles.modalHeader}>
-              <h2 style={styles.modalTitle}>Create New Ticket</h2>
-              <button onClick={() => setShowAddTicketModal(false)} style={styles.modalClose}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 6 6 18" />
-                  <path d="m6 6 12 12" />
-                </svg>
-              </button>
-            </div>
-            <form onSubmit={handleCreateTicket} style={styles.modalForm}>
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Project</label>
-                <select
-                  value={addTicketForm.project_code}
-                  onChange={(e) => setAddTicketForm({ ...addTicketForm, project_code: e.target.value })}
-                  style={styles.formSelect}
-                >
-                  <option value="">Select a project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.project_code}>
-                      {p.name} ({p.project_code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Description</label>
-                <textarea
-                  value={addTicketForm.description}
-                  onChange={(e) => setAddTicketForm({ ...addTicketForm, description: e.target.value })}
-                  placeholder="Describe the issue..."
-                  style={styles.formTextarea}
-                  rows={4}
-                />
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Reporter Name (optional)</label>
-                <input
-                  type="text"
-                  value={addTicketForm.reporter_name}
-                  onChange={(e) => setAddTicketForm({ ...addTicketForm, reporter_name: e.target.value })}
-                  placeholder="Enter name"
-                  style={styles.formInput}
-                />
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Reporter Phone (optional)</label>
-                <input
-                  type="tel"
-                  value={addTicketForm.reporter_phone}
-                  onChange={(e) => setAddTicketForm({ ...addTicketForm, reporter_phone: e.target.value })}
-                  placeholder="Enter phone number"
-                  style={styles.formInput}
-                />
-              </div>
-
-              {addTicketError && (
-                <div style={styles.formError}>{addTicketError}</div>
-              )}
-
-              <div style={styles.modalActions}>
-                <Button
-                  variant="secondary"
-                  onClick={() => setShowAddTicketModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  loading={addingTicket}
-                  onClick={() => handleCreateTicket({ preventDefault: () => {} } as React.FormEvent)}
-                >
-                  Create Ticket
-                </Button>
-              </div>
-            </form>
-          </div>
-        </>
-      )}
+      <AddTicketModal
+        open={showAddTicketModal}
+        onClose={() => setShowAddTicketModal(false)}
+        projects={projects}
+        projectCode={addTicketForm.project_code}
+        description={addTicketForm.description}
+        reporterName={addTicketForm.reporter_name}
+        reporterPhone={addTicketForm.reporter_phone}
+        error={addTicketError}
+        loading={addingTicket}
+        onProjectCodeChange={(value) =>
+          setAddTicketForm({ ...addTicketForm, project_code: value })
+        }
+        onDescriptionChange={(value) =>
+          setAddTicketForm({ ...addTicketForm, description: value })
+        }
+        onReporterNameChange={(value) =>
+          setAddTicketForm({ ...addTicketForm, reporter_name: value })
+        }
+        onReporterPhoneChange={(value) =>
+          setAddTicketForm({ ...addTicketForm, reporter_phone: value })
+        }
+        onSubmit={handleCreateTicket}
+      />
 
       {/* Image Lightbox */}
-      {selectedImageUrl && (
-        <>
-          <div style={styles.lightboxOverlay} onClick={() => setSelectedImageUrl(null)} />
-          <div style={styles.lightbox}>
-            <button onClick={() => setSelectedImageUrl(null)} style={styles.lightboxClose}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
-            </button>
-            <img src={selectedImageUrl} alt="Attachment" style={styles.lightboxImg} crossOrigin="anonymous" />
-          </div>
-        </>
-      )}
+      <ImageLightbox imageUrl={selectedImageUrl} onClose={() => setSelectedImageUrl(null)} />
 
       {/* Mobile Actions */}
       {isMobile && (
@@ -1285,449 +958,6 @@ const styles: Record<string, CSSProperties> = {
     padding: '24px',
     paddingBottom: '100px',
   },
-  kpiGrid: {
-    display: 'grid',
-    gap: '16px',
-    marginBottom: '24px',
-  },
-  projectScroll: {
-    display: 'flex',
-    gap: '12px',
-    overflowX: 'auto',
-    paddingBottom: '8px',
-    WebkitOverflowScrolling: 'touch',
-  },
-  projectChip: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: '4px',
-    padding: '14px 18px',
-    borderRadius: theme.radius.lg,
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    cursor: 'pointer',
-    minWidth: '160px',
-    flexShrink: 0,
-    transition: 'all 0.15s ease',
-  },
-  projectChipActive: {
-    borderColor: theme.colors.primary,
-    background: theme.colors.primaryMuted,
-  },
-  projectChipName: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-    whiteSpace: 'nowrap',
-  },
-  projectChipCode: {
-    fontSize: '12px',
-    color: theme.colors.primary,
-    fontWeight: 500,
-  },
-  projectChipCount: {
-    fontSize: '12px',
-    color: theme.colors.textMuted,
-    display: 'flex',
-    gap: '6px',
-    marginTop: '4px',
-  },
-  projectChipOpenCount: {
-    color: theme.colors.warning,
-    fontWeight: 600,
-  },
-  qrGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '16px',
-  },
-  qrCard: {
-    padding: '16px',
-    borderRadius: theme.radius.md,
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-  },
-  qrCardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '12px',
-  },
-  qrCardCode: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: theme.colors.primary,
-  },
-  qrCardName: {
-    fontSize: '13px',
-    color: theme.colors.textSecondary,
-  },
-  qrCardMeta: {
-    marginBottom: '12px',
-  },
-  qrMetaLabel: {
-    fontSize: '11px',
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom: '4px',
-  },
-  qrMetaValue: {
-    fontSize: '13px',
-    color: theme.colors.textPrimary,
-    fontFamily: 'monospace',
-  },
-  qrCardActions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  qrOpenLink: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '6px 12px',
-    borderRadius: theme.radius.md,
-    background: theme.colors.primary,
-    color: theme.colors.textInverse,
-    fontSize: '13px',
-    fontWeight: 500,
-    textDecoration: 'none',
-  },
-  filtersRow: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '12px',
-    padding: '16px 20px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  loadingState: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '12px',
-    padding: '48px 20px',
-    color: theme.colors.textMuted,
-    fontSize: '14px',
-  },
-  loadingSpinner: {
-    width: '20px',
-    height: '20px',
-    border: `2px solid ${theme.colors.border}`,
-    borderTopColor: theme.colors.primary,
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  errorState: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '16px',
-    padding: '48px 20px',
-    color: theme.colors.error,
-    fontSize: '14px',
-  },
-  ticketList: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  ticketRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    padding: '16px 20px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-    cursor: 'pointer',
-    transition: 'background 0.15s ease',
-  },
-  ticketRowActive: {
-    background: theme.colors.primaryMuted,
-    borderLeftColor: theme.colors.primary,
-    borderLeftWidth: '3px',
-    borderLeftStyle: 'solid',
-  },
-  ticketRowMain: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  ticketNumber: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-  },
-  ticketProject: {
-    fontSize: '13px',
-    color: theme.colors.primary,
-    fontWeight: 500,
-  },
-  ticketDescription: {
-    fontSize: '14px',
-    color: theme.colors.textSecondary,
-    lineHeight: 1.5,
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-  },
-  ticketMeta: {
-    display: 'flex',
-    gap: '16px',
-    fontSize: '12px',
-    color: theme.colors.textMuted,
-  },
-  drawerContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  drawerSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  drawerLabel: {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  drawerValue: {
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-  },
-  drawerSelect: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  drawerTextarea: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '12px 14px',
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    resize: 'vertical',
-    minHeight: '100px',
-    lineHeight: 1.5,
-  },
-  drawerActions: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    paddingTop: '12px',
-    borderTop: `1px solid ${theme.colors.border}`,
-  },
-  attachmentGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-    gap: '10px',
-  },
-  attachmentThumb: {
-    width: '100%',
-    aspectRatio: '1',
-    borderRadius: theme.radius.md,
-    overflow: 'hidden',
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    cursor: 'pointer',
-    padding: 0,
-  },
-  attachmentImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  attachmentFile: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    fontSize: '11px',
-    color: theme.colors.textMuted,
-    padding: '8px',
-    textAlign: 'center',
-    wordBreak: 'break-word',
-  },
-  emptyLogs: {
-    fontSize: '13px',
-    color: theme.colors.textMuted,
-    padding: '16px 0',
-  },
-  logsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  logItem: {
-    padding: '12px',
-    borderRadius: theme.radius.md,
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-  },
-  logHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '4px',
-  },
-  logAction: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-  },
-  logTime: {
-    fontSize: '11px',
-    color: theme.colors.textMuted,
-  },
-  logNotes: {
-    fontSize: '13px',
-    color: theme.colors.textSecondary,
-    lineHeight: 1.4,
-  },
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0, 0, 0, 0.7)',
-    zIndex: 100,
-  },
-  modal: {
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '90%',
-    maxWidth: '480px',
-    background: theme.colors.surface,
-    borderRadius: theme.radius.xl,
-    border: `1px solid ${theme.colors.border}`,
-    zIndex: 101,
-    maxHeight: '90vh',
-    overflow: 'auto',
-  },
-  modalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  modalTitle: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-    margin: 0,
-  },
-  modalClose: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    borderRadius: theme.radius.sm,
-    background: 'transparent',
-    border: 'none',
-    color: theme.colors.textMuted,
-    cursor: 'pointer',
-  },
-  modalForm: {
-    padding: '20px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  formLabel: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: theme.colors.textSecondary,
-  },
-  formSelect: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  formInput: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-  },
-  formTextarea: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '12px 14px',
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    resize: 'vertical',
-    minHeight: '100px',
-    lineHeight: 1.5,
-  },
-  formError: {
-    padding: '10px 12px',
-    background: theme.colors.errorMuted,
-    color: theme.colors.error,
-    borderRadius: theme.radius.md,
-    fontSize: '13px',
-  },
-  modalActions: {
-    display: 'flex',
-    gap: '10px',
-    justifyContent: 'flex-end',
-    marginTop: '8px',
-  },
-  lightboxOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0, 0, 0, 0.9)',
-    zIndex: 200,
-  },
-  lightbox: {
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    zIndex: 201,
-    maxWidth: '90vw',
-    maxHeight: '90vh',
-  },
-  lightboxClose: {
-    position: 'absolute',
-    top: '-40px',
-    right: 0,
-    background: 'transparent',
-    border: 'none',
-    color: '#fff',
-    cursor: 'pointer',
-  },
-  lightboxImg: {
-    maxWidth: '90vw',
-    maxHeight: '85vh',
-    objectFit: 'contain',
-    borderRadius: theme.radius.lg,
-  },
   mobileBottomActions: {
     position: 'fixed',
     bottom: 0,
@@ -1741,3 +971,4 @@ const styles: Record<string, CSSProperties> = {
     gap: '10px',
   },
 }
+  
