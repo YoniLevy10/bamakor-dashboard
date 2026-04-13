@@ -143,6 +143,59 @@ function isNumericSelection(text: string): number | null {
   return null
 }
 
+// Expire temporary WhatsApp session flow state if inactive
+// Sessions without tickets expire after 20 minutes (incomplete flow)
+// Sessions with active tickets expire after 30 minutes (follow-up context)
+// This does NOT close actual tickets - only clears temporary session state
+async function expireInactiveSessions(supabaseAdmin: SupabaseClient) {
+  const now = new Date()
+  
+  // Threshold 1: Sessions without tickets (incomplete flow) - 20 minutes
+  const incompleteThreshold = new Date(now.getTime() - 20 * 60 * 1000)
+  
+  // Threshold 2: Sessions with tickets (follow-up context) - 30 minutes
+  const followUpThreshold = new Date(now.getTime() - 30 * 60 * 1000)
+
+  try {
+    // Expire incomplete sessions (no active_ticket_id) after 20 minutes
+    const { error: incompleteError } = await supabaseAdmin
+      .from('sessions')
+      .update({
+        is_active: false,
+        updated_at: now.toISOString(),
+      })
+      .eq('is_active', true)
+      .is('active_ticket_id', null)
+      .lt('last_activity_at', incompleteThreshold.toISOString())
+
+    if (incompleteError) {
+      console.error('⚠️ Error expiring incomplete sessions:', incompleteError)
+    } else {
+      console.log('✅ Expired incomplete WhatsApp sessions (no ticket, 20min+ inactive)')
+    }
+
+    // Expire follow-up sessions (with active_ticket_id) after 30 minutes
+    const { error: followUpError } = await supabaseAdmin
+      .from('sessions')
+      .update({
+        is_active: false,
+        active_ticket_id: null,
+        updated_at: now.toISOString(),
+      })
+      .eq('is_active', true)
+      .not('active_ticket_id', 'is', null)
+      .lt('last_activity_at', followUpThreshold.toISOString())
+
+    if (followUpError) {
+      console.error('⚠️ Error expiring follow-up sessions:', followUpError)
+    } else {
+      console.log('✅ Expired follow-up WhatsApp sessions (with ticket, 30min+ inactive)')
+    }
+  } catch (error) {
+    console.error('⚠️ Unexpected error in expireInactiveSessions:', error)
+  }
+}
+
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
   const mode = searchParams.get('hub.mode')
@@ -182,6 +235,9 @@ export async function POST(req: NextRequest) {
     console.log('✅ WEBHOOK DB VERSION ACTIVE')
     console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
     logger.debug('WEBHOOK', 'Full webhook payload', { requestId, payload: body })
+
+    // Expire temporary WhatsApp session state if inactive
+    await expireInactiveSessions(supabaseAdmin)
 
     const parsedMessage = parseIncomingWhatsAppMessage(body)
 
