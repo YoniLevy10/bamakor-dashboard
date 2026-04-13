@@ -240,8 +240,30 @@ export default function HomePage() {
       )
       .subscribe()
 
+    // Refresh on window focus for data freshness
+    const handleFocus = async () => {
+      console.log('🔄 Window focus detected - refreshing data')
+      await Promise.all([loadTickets(activeSource), loadAllTickets()])
+      if (selectedTicket) {
+        await loadTicketLogs(selectedTicket.id)
+      }
+    }
+
+    // Background refresh every 10 minutes to catch any missed realtime updates
+    const backgroundRefreshInterval = setInterval(async () => {
+      console.log('🔄 Background refresh (10min) - keeping data fresh')
+      await Promise.all([loadTickets(activeSource), loadAllTickets()])
+      if (selectedTicket) {
+        await loadTicketLogs(selectedTicket.id)
+      }
+    }, 10 * 60 * 1000) // 10 minutes
+
+    window.addEventListener('focus', handleFocus)
+
     return () => {
       supabase.removeChannel(channel)
+      window.removeEventListener('focus', handleFocus)
+      clearInterval(backgroundRefreshInterval)
     }
   }, [activeSource, selectedTicket])
 

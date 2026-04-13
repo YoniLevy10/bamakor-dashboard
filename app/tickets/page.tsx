@@ -111,6 +111,25 @@ export default function TicketsPage() {
 
   useEffect(() => {
     fetchData()
+
+    // Refresh on window focus for data freshness
+    const handleFocus = async () => {
+      console.log('🔄 Window focus detected - refreshing tickets data')
+      await fetchData()
+    }
+
+    // Background refresh every 10 minutes to catch any missed updates
+    const backgroundRefreshInterval = setInterval(async () => {
+      console.log('🔄 Background refresh (10min) - keeping tickets data fresh')
+      await fetchData()
+    }, 10 * 60 * 1000) // 10 minutes
+
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      clearInterval(backgroundRefreshInterval)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
