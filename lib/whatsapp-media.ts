@@ -14,52 +14,118 @@ export async function downloadWhatsAppMedia(
     const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
 
     if (!accessToken) {
-      console.error('❌ Missing WHATSAPP_ACCESS_TOKEN')
+      console.error('❌ DOWNLOAD_FAILURE: Missing WHATSAPP_ACCESS_TOKEN environment variable')
       return null
     }
 
-    // Step 1: Get media URL from Meta
-    console.log(`📥 Fetching media URL for ID: ${mediaId}`)
-    const mediaUrlResponse = await fetch(
-      `https://graph.facebook.com/v23.0/${mediaId}`,
-      {
+    // Step 1: Get media URL from Meta Graph API
+    console.log(`📥 STEP_1_START: Fetching media URL from Meta (mediaId: ${mediaId})`)
+    let mediaUrlResponse
+    try {
+      mediaUrlResponse = await fetch(
+        `https://graph.facebook.com/v23.0/${mediaId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+    } catch (fetchErr) {
+      console.error('❌ DOWNLOAD_FAILURE: Network error during Meta API media URL request', {
+        mediaId,
+        error: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+      })
+      return null
+    }
+
+    if (!mediaUrlResponse.ok) {
+      let responseBody = ''
+      try {
+        responseBody = await mediaUrlResponse.text()
+      } catch (readErr) {
+        responseBody = `[Could not read response: ${readErr}]`
+      }
+      console.error('❌ DOWNLOAD_FAILURE: Meta API returned non-200 status on media URL fetch', {
+        mediaId,
+        status: mediaUrlResponse.status,
+        statusText: mediaUrlResponse.statusText,
+        responseBody: responseBody.substring(0, 500), // Truncate for logging
+      })
+      return null
+    }
+
+    let mediaData
+    try {
+      mediaData = await mediaUrlResponse.json()
+    } catch (parseErr) {
+      console.error('❌ DOWNLOAD_FAILURE: Failed to parse Meta API response as JSON', {
+        mediaId,
+        error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+      })
+      return null
+    }
+
+    const mediaUrl = mediaData?.url
+    if (!mediaUrl) {
+      console.error('❌ DOWNLOAD_FAILURE: Meta API response missing "url" field', {
+        mediaId,
+        receivedFields: Object.keys(mediaData || {}),
+        fullResponse: JSON.stringify(mediaData).substring(0, 300),
+      })
+      return null
+    }
+
+    console.log(`✅ STEP_1_SUCCESS: Got media URL from Meta`)
+
+    // Step 2: Download the actual media file
+    console.log(`⏳ STEP_2_START: Downloading media from URL`)
+    let fileResponse
+    try {
+      fileResponse = await fetch(mediaUrl, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-      }
-    )
-
-    if (!mediaUrlResponse.ok) {
-      console.error(`❌ Failed to fetch media URL:`, mediaUrlResponse.statusText)
+      })
+    } catch (fetchErr) {
+      console.error('❌ DOWNLOAD_FAILURE: Network error during media file download', {
+        mediaId,
+        error: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+      })
       return null
     }
-
-    const mediaData = await mediaUrlResponse.json()
-    const mediaUrl = mediaData.url
-
-    if (!mediaUrl) {
-      console.error('❌ No media URL in response')
-      return null
-    }
-
-    // Step 2: Download the actual media file
-    console.log(`📥 Downloading media from: ${mediaUrl}`)
-    const fileResponse = await fetch(mediaUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    })
 
     if (!fileResponse.ok) {
-      console.error(`❌ Failed to download media:`, fileResponse.statusText)
+      let responseBody = ''
+      try {
+        responseBody = await fileResponse.text()
+      } catch (readErr) {
+        responseBody = `[Could not read response: ${readErr}]`
+      }
+      console.error('❌ DOWNLOAD_FAILURE: Media URL returned non-200 status', {
+        mediaId,
+        status: fileResponse.status,
+        statusText: fileResponse.statusText,
+        responseBody: responseBody.substring(0, 500),
+      })
       return null
     }
 
-    const buffer = Buffer.from(await fileResponse.arrayBuffer())
+    let arrayBuffer
+    try {
+      arrayBuffer = await fileResponse.arrayBuffer()
+    } catch (readErr) {
+      console.error('❌ DOWNLOAD_FAILURE: Failed to read media file as buffer', {
+        mediaId,
+        error: readErr instanceof Error ? readErr.message : String(readErr),
+      })
+      return null
+    }
+
+    const buffer = Buffer.from(arrayBuffer)
     const contentType = fileResponse.headers.get('content-type') || getMimeType(mediaType)
     const fileName = `whatsapp_${mediaType}_${Date.now()}.${getExtension(mediaType)}`
 
-    console.log(`✅ Downloaded ${mediaType} (${buffer.length} bytes)`)
+    console.log(`✅ STEP_2_SUCCESS: Downloaded ${mediaType} (${buffer.length} bytes from Meta)`)
 
     return {
       buffer,
@@ -67,7 +133,10 @@ export async function downloadWhatsAppMedia(
       fileName,
     }
   } catch (err) {
-    console.error('❌ Error downloading WhatsApp media:', err)
+    console.error('❌ DOWNLOAD_FAILURE: Unexpected error during WhatsApp media download', {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    })
     return null
   }
 }
@@ -83,7 +152,7 @@ export async function uploadWhatsAppMediaToStorage(
 ): Promise<{ filePath: string; fileSize: number } | null> {
   try {
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('❌ Missing Supabase credentials for storage upload')
+      console.error('❌ UPLOAD_FAILURE: Missing Supabase credentials (NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)')
       return null
     }
 
@@ -95,7 +164,12 @@ export async function uploadWhatsAppMediaToStorage(
     const extension = fileName.split('.').pop() || 'dat'
     const filePath = `${ticketId}/${timestamp}-${randomStr}.${extension}`
 
-    console.log(`📤 Uploading to Supabase Storage bucket 'ticket-attachments': ${filePath}`)
+    console.log(`⏳ STEP_1_START: Uploading to Supabase Storage bucket 'ticket-attachments'`, {
+      ticketId,
+      filePath,
+      bufferSize: mediaBuffer.length,
+      mimeType,
+    })
 
     const { error: uploadError } = await supabase.storage
       .from('ticket-attachments')
@@ -105,26 +179,58 @@ export async function uploadWhatsAppMediaToStorage(
       })
 
     if (uploadError) {
-      const errorMsg = String(uploadError)
-      const isBucketError = errorMsg.includes('not found') || errorMsg.includes('Bucket')
+      const errorMessage = String(uploadError)
+      const errorCode = (uploadError as unknown as Record<string, unknown>)?.['code'] || 'UNKNOWN'
+      const errorDetails = (uploadError as unknown as Record<string, unknown>)?.['details'] || ''
+      
+      const isBucketError = errorMessage.includes('not found') || errorMessage.includes('Bucket')
+      const isPermissionError = errorMessage.includes('permission') || errorMessage.includes('auth')
+      const isQuotaError = errorMessage.includes('quota') || errorMessage.includes('limit')
+      
+      console.error('❌ UPLOAD_FAILURE: Supabase Storage upload failed', {
+        ticketId,
+        filePath,
+        bufferSize: mediaBuffer.length,
+        errorMessage,
+        errorCode,
+        errorDetails: String(errorDetails).substring(0, 300),
+        isBucketError,
+        isPermissionError,
+        isQuotaError,
+        fullError: JSON.stringify(uploadError).substring(0, 500),
+      })
       
       if (isBucketError) {
-        console.error('❌ CRITICAL: Storage bucket "ticket-attachments" not found in Supabase:', uploadError)
-        console.error('⚠️ Action required: Create "ticket-attachments" bucket in Supabase Storage dashboard')
-      } else {
-        console.error('❌ Failed to upload to Supabase Storage:', uploadError)
+        console.error('⚠️ UPLOAD_DIAGNOSIS: Bucket "ticket-attachments" not found or inaccessible')
       }
+      if (isPermissionError) {
+        console.error('⚠️ UPLOAD_DIAGNOSIS: Permission denied - check service role key permissions')
+      }
+      if (isQuotaError) {
+        console.error('⚠️ UPLOAD_DIAGNOSIS: Storage quota exceeded')
+      }
+      
       return null
     }
 
-    console.log(`✅ Media uploaded successfully: ${filePath}`)
+    console.log(`✅ STEP_1_SUCCESS: Successfully uploaded to Supabase Storage`, {
+      ticketId,
+      filePath,
+      fileSize: mediaBuffer.length,
+    })
 
     return {
       filePath,
       fileSize: mediaBuffer.length,
     }
   } catch (err) {
-    console.error('❌ Error uploading file to Supabase Storage:', err)
+    console.error('❌ UPLOAD_FAILURE: Unexpected error during Supabase Storage upload', {
+      ticketId,
+      fileName,
+      bufferSize: mediaBuffer.length,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    })
     return null
   }
 }
@@ -145,54 +251,126 @@ export async function createAttachmentRecord(
   try {
     // STABILITY: Validate required fields before database insert
     if (!ticketId) {
-      console.error('❌ Cannot create attachment: ticketId is missing')
+      console.error('❌ DB_INSERT_FAILURE: ticketId is missing or empty')
       return false
     }
     if (!filePath) {
-      console.error('❌ Cannot create attachment: file_url (filePath) is missing')
+      console.error('❌ DB_INSERT_FAILURE: file_url (filePath) is missing or empty')
       return false
     }
     if (!mimeType) {
-      console.error('❌ Cannot create attachment: mimeType is missing')
-      return false
-    }
-    if (!attachmentType) {
-      console.error('❌ Cannot create attachment: attachmentType is missing')
+      console.error('❌ DB_INSERT_FAILURE: mimeType is missing or empty')
       return false
     }
 
-    console.log(`📝 Creating attachment for ticket ${ticketId}: ${fileName} (${mimeType})`)
+    console.log(`⏳ STEP_1_START: Creating attachment record in database`, {
+      ticketId,
+      fileName,
+      mimeType,
+      attachmentType,
+      fileSize,
+      hasMediaId: !!mediaId,
+    })
+
+    // Build payload with only expected columns based on create-ticket usage
+    // NOTE: whatsapp_media_id may not exist in schema - only include if column exists
+    const payload: Record<string, unknown> = {
+      ticket_id: ticketId,
+      file_name: fileName,
+      file_url: filePath,
+      file_size: fileSize,
+      mime_type: mimeType,
+      attachment_type: attachmentType,
+    }
+
+    // Only add whatsapp_media_id if it has a value AND we know the column exists
+    // (This field may not be in the production schema)
+    if (mediaId) {
+      payload.whatsapp_media_id = mediaId
+    }
+
+    console.log(`ℹ️ Attempting database insert with payload:`, {
+      columns: Object.keys(payload),
+      ticketId,
+      attachmentType,
+    })
 
     const { error: dbError } = await supabaseAdmin
       .from('ticket_attachments')
-      .insert({
-        ticket_id: ticketId,
-        file_name: fileName,
-        file_url: filePath,
-        file_size: fileSize,
-        mime_type: mimeType,
-        attachment_type: attachmentType,
-        whatsapp_media_id: mediaId || null,
-      })
+      .insert(payload)
 
     if (dbError) {
-      console.error('❌ Database insert failed for ticket attachment:', {
+      const errorMessage = String(dbError?.message || String(dbError))
+      const errorCode = (dbError as unknown as Record<string, unknown>)?.['code'] || 'UNKNOWN'
+      const errorDetails = (dbError as unknown as Record<string, unknown>)?.['details'] || ''
+      const errorHint = (dbError as unknown as Record<string, unknown>)?.['hint'] || ''
+
+      // Analyze error to determine root cause
+      const isColumnMissing = errorMessage.includes('column') || errorMessage.includes('does not exist')
+      const isUniqueViolation = errorCode === '23505' || errorMessage.includes('unique')
+      const isConstraintViolation = errorMessage.includes('constraint') || errorCode === '23502'
+      const isPermissionDenied = errorMessage.includes('permission') || errorMessage.includes('auth')
+
+      console.error('❌ DB_INSERT_FAILURE: Database insert failed for ticket attachment', {
         ticketId,
         fileName,
-        error: dbError.message,
-        code: dbError.code,
-        details: dbError.details,
+        errorMessage,
+        errorCode,
+        errorDetails: String(errorDetails).substring(0, 300),
+        errorHint: String(errorHint).substring(0, 300),
+        payloadColumns: Object.keys(payload),
+        isColumnMissing,
+        isUniqueViolation,
+        isConstraintViolation,
+        isPermissionDenied,
+        fullError: JSON.stringify(dbError).substring(0, 500),
       })
+
+      if (isColumnMissing) {
+        console.error(`⚠️ DB_INSERT_DIAGNOSIS: Schema mismatch - one of these columns may not exist:`, 
+          Object.keys(payload).join(', '))
+        // Try fallback insert without optional fields
+        if (mediaId) {
+          console.log(`ℹ️ Attempting fallback insert WITHOUT whatsapp_media_id column...`)
+          const fallbackPayload = { ...payload }
+          delete fallbackPayload.whatsapp_media_id
+
+          const { error: fallbackError } = await supabaseAdmin
+            .from('ticket_attachments')
+            .insert(fallbackPayload)
+
+          if (fallbackError) {
+            console.error('❌ DB_INSERT_FAILURE: Fallback insert also failed', {
+              ticketId,
+              fallbackError: String(fallbackError),
+            })
+            return false
+          } else {
+            console.log(`✅ DB_INSERT_SUCCESS: Fallback insert succeeded (without whatsapp_media_id)`)
+            return true
+          }
+        }
+      }
+
+      if (isConstraintViolation) {
+        console.error(`⚠️ DB_INSERT_DIAGNOSIS: Constraint violation - check foreign keys and NOT NULL constraints`)
+      }
+
       return false
     }
 
-    console.log(`✅ Attachment record created for ticket: ${ticketId} (${fileName})`)
+    console.log(`✅ STEP_1_SUCCESS: Attachment record created in database`, {
+      ticketId,
+      fileName,
+      fileSize,
+    })
     return true
   } catch (err) {
-    console.error('❌ Error creating attachment record:', {
+    console.error('❌ DB_INSERT_FAILURE: Unexpected error creating attachment record', {
       ticketId,
       fileName,
       error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
     })
     return false
   }
