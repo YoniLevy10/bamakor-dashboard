@@ -5,35 +5,45 @@ import { usePathname } from 'next/navigation'
 import { useState, type ReactNode, type CSSProperties } from 'react'
 
 // ============================================================================
-// DESIGN TOKENS - Premium Dark Theme
+// DESIGN TOKENS - Refined Light Theme with Original Brand Colors
 // ============================================================================
 
 export const theme = {
   colors: {
-    background: '#0a0a0b',
-    surface: '#111113',
-    surfaceElevated: '#18181b',
-    surfaceHover: '#1f1f23',
-    surfaceActive: '#27272a',
-    border: '#27272a',
-    borderSubtle: '#1f1f23',
-    borderStrong: '#3f3f46',
-    textPrimary: '#fafafa',
-    textSecondary: '#a1a1aa',
-    textMuted: '#71717a',
-    textInverse: '#0a0a0b',
-    accent: '#f59e0b',
-    accentHover: '#fbbf24',
-    accentMuted: 'rgba(245, 158, 11, 0.15)',
-    accentText: '#fcd34d',
-    success: '#22c55e',
-    successMuted: 'rgba(34, 197, 94, 0.15)',
-    warning: '#f59e0b',
-    warningMuted: 'rgba(245, 158, 11, 0.15)',
-    error: '#ef4444',
-    errorMuted: 'rgba(239, 68, 68, 0.15)',
-    info: '#3b82f6',
-    infoMuted: 'rgba(59, 130, 246, 0.15)',
+    // Base
+    background: '#FFFFFF',
+    surface: '#FFFFFF',
+    surfaceElevated: '#FAFAFA',
+    surfaceHover: '#F5F5F5',
+    surfaceActive: '#F0F0F0',
+    muted: '#F9FAFB',
+    
+    // Borders
+    border: '#E5E7EB',
+    borderSubtle: '#F3F4F6',
+    borderStrong: '#D1D5DB',
+    
+    // Text
+    textPrimary: '#111827',
+    textSecondary: '#4B5563',
+    textMuted: '#6B7280',
+    textInverse: '#FFFFFF',
+    
+    // Primary - Original Brand Crimson
+    primary: '#C41E3A',
+    primaryHover: '#A91B32',
+    primaryMuted: 'rgba(196, 30, 58, 0.08)',
+    primaryText: '#C41E3A',
+    
+    // Status Colors
+    success: '#059669',
+    successMuted: '#ECFDF5',
+    warning: '#D97706',
+    warningMuted: '#FFFBEB',
+    error: '#DC2626',
+    errorMuted: '#FEF2F2',
+    info: '#2563EB',
+    infoMuted: '#EFF6FF',
   },
   radius: {
     sm: '6px',
@@ -42,10 +52,11 @@ export const theme = {
     xl: '16px',
   },
   shadows: {
-    sm: '0 1px 2px rgba(0, 0, 0, 0.4)',
-    md: '0 4px 12px rgba(0, 0, 0, 0.4)',
-    lg: '0 8px 24px rgba(0, 0, 0, 0.5)',
-    glow: '0 0 20px rgba(245, 158, 11, 0.15)',
+    xs: '0 1px 2px rgba(0, 0, 0, 0.04)',
+    sm: '0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)',
+    md: '0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04)',
+    lg: '0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04)',
+    card: '0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03)',
   },
 }
 
@@ -63,7 +74,7 @@ const navItems = [
 ]
 
 function NavIcon({ type, active }: { type: string; active?: boolean }) {
-  const color = active ? theme.colors.accent : theme.colors.textSecondary
+  const color = active ? theme.colors.primary : theme.colors.textMuted
   
   const icons: Record<string, ReactNode> = {
     grid: (
@@ -163,9 +174,9 @@ export function Sidebar() {
 
 const sidebarStyles: Record<string, CSSProperties> = {
   container: {
-    background: theme.colors.surface,
+    background: theme.colors.background,
     borderRight: `1px solid ${theme.colors.border}`,
-    padding: '20px 12px',
+    padding: '24px 16px',
     position: 'sticky',
     top: 0,
     height: '100vh',
@@ -181,21 +192,20 @@ const sidebarStyles: Record<string, CSSProperties> = {
     marginBottom: '32px',
   },
   logoBox: {
-    width: '36px',
-    height: '36px',
+    width: '40px',
+    height: '40px',
     borderRadius: theme.radius.lg,
-    background: `linear-gradient(135deg, ${theme.colors.accent} 0%, #d97706 100%)`,
+    background: theme.colors.primary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: theme.colors.textInverse,
     fontWeight: 700,
-    fontSize: '16px',
-    boxShadow: theme.shadows.glow,
+    fontSize: '18px',
     flexShrink: 0,
   },
   title: {
-    fontSize: '15px',
+    fontSize: '16px',
     fontWeight: 600,
     color: theme.colors.textPrimary,
     letterSpacing: '-0.01em',
@@ -203,7 +213,7 @@ const sidebarStyles: Record<string, CSSProperties> = {
   subtitle: {
     fontSize: '12px',
     color: theme.colors.textMuted,
-    marginTop: '1px',
+    marginTop: '2px',
   },
   nav: {
     display: 'flex',
@@ -214,8 +224,8 @@ const sidebarStyles: Record<string, CSSProperties> = {
   navLink: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    padding: '10px 12px',
+    gap: '12px',
+    padding: '12px 12px',
     borderRadius: theme.radius.md,
     color: theme.colors.textSecondary,
     textDecoration: 'none',
@@ -224,11 +234,11 @@ const sidebarStyles: Record<string, CSSProperties> = {
     transition: 'all 0.15s ease',
   },
   navLinkActive: {
-    background: theme.colors.accentMuted,
-    color: theme.colors.accent,
+    background: theme.colors.primaryMuted,
+    color: theme.colors.primary,
   },
   footer: {
-    padding: '12px 8px',
+    padding: '16px 8px',
     borderTop: `1px solid ${theme.colors.border}`,
     marginTop: 'auto',
   },
@@ -284,7 +294,7 @@ const mobileHeaderStyles: Record<string, CSSProperties> = {
     justifyContent: 'space-between',
     padding: '16px 20px',
     paddingTop: 'calc(16px + env(safe-area-inset-top))',
-    background: theme.colors.surface,
+    background: theme.colors.background,
     borderBottom: `1px solid ${theme.colors.border}`,
   },
   left: {
@@ -296,8 +306,8 @@ const mobileHeaderStyles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '36px',
-    height: '36px',
+    width: '40px',
+    height: '40px',
     borderRadius: theme.radius.md,
     background: theme.colors.surfaceElevated,
     color: theme.colors.textSecondary,
@@ -320,8 +330,8 @@ const mobileHeaderStyles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '36px',
-    height: '36px',
+    width: '40px',
+    height: '40px',
     borderRadius: theme.radius.md,
     background: 'transparent',
     color: theme.colors.textSecondary,
@@ -360,7 +370,7 @@ const pageHeaderStyles: Record<string, CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: '16px',
-    marginBottom: '24px',
+    marginBottom: '32px',
     flexWrap: 'wrap',
   },
   title: {
@@ -371,13 +381,13 @@ const pageHeaderStyles: Record<string, CSSProperties> = {
     letterSpacing: '-0.02em',
   },
   subtitle: {
-    fontSize: '14px',
+    fontSize: '15px',
     color: theme.colors.textMuted,
-    margin: '6px 0 0 0',
+    margin: '8px 0 0 0',
   },
   actions: {
     display: 'flex',
-    gap: '10px',
+    gap: '12px',
     flexWrap: 'wrap',
   },
 }
@@ -424,35 +434,38 @@ export function KpiCard({
 
 const kpiStyles: Record<string, CSSProperties> = {
   card: {
-    background: theme.colors.surface,
+    background: theme.colors.background,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.lg,
-    padding: '20px',
+    padding: '24px',
     textAlign: 'left',
     transition: 'all 0.15s ease',
     width: '100%',
+    boxShadow: theme.shadows.card,
   },
   cardActive: {
-    borderColor: theme.colors.accent,
-    background: theme.colors.accentMuted,
+    borderColor: theme.colors.primary,
+    background: theme.colors.primaryMuted,
   },
   label: {
     fontSize: '13px',
     color: theme.colors.textMuted,
     marginBottom: '8px',
     fontWeight: 500,
+    textTransform: 'uppercase',
+    letterSpacing: '0.02em',
   },
   value: {
-    fontSize: '32px',
+    fontSize: '36px',
     fontWeight: 600,
     color: theme.colors.textPrimary,
     letterSpacing: '-0.02em',
     lineHeight: 1,
   },
   trend: {
-    fontSize: '12px',
+    fontSize: '13px',
     fontWeight: 500,
-    marginTop: '8px',
+    marginTop: '12px',
   },
 }
 
@@ -480,13 +493,13 @@ export function Button({
 }) {
   const variantStyles: Record<string, CSSProperties> = {
     primary: {
-      background: theme.colors.accent,
+      background: theme.colors.primary,
       color: theme.colors.textInverse,
       border: 'none',
-      boxShadow: theme.shadows.glow,
+      boxShadow: theme.shadows.sm,
     },
     secondary: {
-      background: theme.colors.surfaceElevated,
+      background: theme.colors.background,
       color: theme.colors.textPrimary,
       border: `1px solid ${theme.colors.border}`,
     },
@@ -503,9 +516,9 @@ export function Button({
   }
   
   const sizeStyles: Record<string, CSSProperties> = {
-    sm: { padding: '6px 12px', fontSize: '13px', height: '32px' },
-    md: { padding: '10px 16px', fontSize: '14px', height: '40px' },
-    lg: { padding: '12px 20px', fontSize: '15px', height: '48px' },
+    sm: { padding: '8px 14px', fontSize: '13px', height: '36px' },
+    md: { padding: '10px 18px', fontSize: '14px', height: '42px' },
+    lg: { padding: '14px 24px', fontSize: '15px', height: '50px' },
   }
   
   return (
@@ -561,17 +574,17 @@ export function StatusBadge({
   status: string
   size?: 'sm' | 'md'
 }) {
-  const statusConfig: Record<string, { bg: string; text: string; border: string }> = {
-    NEW: { bg: theme.colors.warningMuted, text: theme.colors.warning, border: theme.colors.warning },
-    ASSIGNED: { bg: theme.colors.infoMuted, text: theme.colors.info, border: theme.colors.info },
-    IN_PROGRESS: { bg: theme.colors.infoMuted, text: theme.colors.info, border: theme.colors.info },
-    WAITING_PARTS: { bg: theme.colors.warningMuted, text: theme.colors.warning, border: theme.colors.warning },
-    CLOSED: { bg: theme.colors.successMuted, text: theme.colors.success, border: theme.colors.success },
-    ACTIVE: { bg: theme.colors.successMuted, text: theme.colors.success, border: theme.colors.success },
-    INACTIVE: { bg: theme.colors.errorMuted, text: theme.colors.error, border: theme.colors.error },
-    HIGH: { bg: theme.colors.errorMuted, text: theme.colors.error, border: theme.colors.error },
-    MEDIUM: { bg: theme.colors.warningMuted, text: theme.colors.warning, border: theme.colors.warning },
-    LOW: { bg: theme.colors.surfaceActive, text: theme.colors.textSecondary, border: theme.colors.borderStrong },
+  const statusConfig: Record<string, { bg: string; text: string; border?: string }> = {
+    NEW: { bg: theme.colors.warningMuted, text: theme.colors.warning },
+    ASSIGNED: { bg: theme.colors.infoMuted, text: theme.colors.info },
+    IN_PROGRESS: { bg: theme.colors.infoMuted, text: theme.colors.info },
+    WAITING_PARTS: { bg: theme.colors.warningMuted, text: theme.colors.warning },
+    CLOSED: { bg: theme.colors.successMuted, text: theme.colors.success },
+    ACTIVE: { bg: theme.colors.successMuted, text: theme.colors.success },
+    INACTIVE: { bg: theme.colors.errorMuted, text: theme.colors.error },
+    HIGH: { bg: theme.colors.errorMuted, text: theme.colors.error },
+    MEDIUM: { bg: theme.colors.warningMuted, text: theme.colors.warning },
+    LOW: { bg: theme.colors.surfaceElevated, text: theme.colors.textSecondary },
   }
   
   const config = statusConfig[status] || statusConfig.LOW
@@ -580,14 +593,13 @@ export function StatusBadge({
     <span style={{
       display: 'inline-flex',
       alignItems: 'center',
-      padding: size === 'sm' ? '3px 8px' : '4px 10px',
+      padding: size === 'sm' ? '4px 10px' : '6px 12px',
       borderRadius: '9999px',
       fontSize: size === 'sm' ? '11px' : '12px',
       fontWeight: 600,
-      letterSpacing: '0.01em',
+      letterSpacing: '0.02em',
       background: config.bg,
       color: config.text,
-      border: `1px solid ${config.border}`,
       textTransform: 'uppercase',
     }}>
       {status.replace('_', ' ')}
@@ -634,16 +646,17 @@ export function Card({
 
 const cardStyles: Record<string, CSSProperties> = {
   container: {
-    background: theme.colors.surface,
+    background: theme.colors.background,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.lg,
     overflow: 'hidden',
+    boxShadow: theme.shadows.card,
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: '20px',
+    padding: '20px 24px',
     borderBottom: `1px solid ${theme.colors.border}`,
     gap: '16px',
   },
@@ -662,7 +675,7 @@ const cardStyles: Record<string, CSSProperties> = {
     gap: '8px',
   },
   content: {
-    padding: '20px',
+    padding: '24px',
   },
 }
 
@@ -710,22 +723,22 @@ const inputStyles: Record<string, CSSProperties> = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    gap: '8px',
   },
   label: {
-    fontSize: '13px',
+    fontSize: '14px',
     fontWeight: 500,
     color: theme.colors.textSecondary,
   },
   input: {
-    background: theme.colors.surfaceElevated,
+    background: theme.colors.background,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
-    padding: '10px 14px',
+    padding: '12px 16px',
     fontSize: '14px',
     color: theme.colors.textPrimary,
     outline: 'none',
-    transition: 'border-color 0.15s ease',
+    transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
   },
   error: {
     fontSize: '12px',
@@ -773,23 +786,23 @@ const selectStyles: Record<string, CSSProperties> = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    gap: '8px',
   },
   label: {
-    fontSize: '13px',
+    fontSize: '14px',
     fontWeight: 500,
     color: theme.colors.textSecondary,
   },
   select: {
-    background: theme.colors.surfaceElevated,
+    background: theme.colors.background,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
-    padding: '10px 14px',
+    padding: '12px 16px',
     fontSize: '14px',
     color: theme.colors.textPrimary,
     outline: 'none',
     cursor: 'pointer',
-    minHeight: '42px',
+    minHeight: '46px',
   },
 }
 
@@ -803,7 +816,7 @@ export function Drawer({
   title,
   subtitle,
   children,
-  width = 440,
+  width = 480,
   isMobile,
 }: { 
   open: boolean
@@ -847,7 +860,7 @@ const drawerStyles: Record<string, CSSProperties> = {
   overlay: {
     position: 'fixed',
     inset: 0,
-    background: 'rgba(0, 0, 0, 0.6)',
+    background: 'rgba(0, 0, 0, 0.4)',
     zIndex: 50,
     animation: 'fadeIn 0.2s ease',
   },
@@ -856,20 +869,21 @@ const drawerStyles: Record<string, CSSProperties> = {
     top: 0,
     right: 0,
     height: '100dvh',
-    background: theme.colors.surface,
+    background: theme.colors.background,
     borderLeft: `1px solid ${theme.colors.border}`,
     zIndex: 60,
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
     animation: 'slideInRight 0.25s ease',
+    boxShadow: theme.shadows.lg,
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: '20px',
-    paddingTop: 'calc(20px + env(safe-area-inset-top))',
+    padding: '24px',
+    paddingTop: 'calc(24px + env(safe-area-inset-top))',
     borderBottom: `1px solid ${theme.colors.border}`,
     gap: '16px',
     flexShrink: 0,
@@ -881,7 +895,7 @@ const drawerStyles: Record<string, CSSProperties> = {
     letterSpacing: '-0.01em',
   },
   subtitle: {
-    fontSize: '13px',
+    fontSize: '14px',
     color: theme.colors.textMuted,
     marginTop: '4px',
   },
@@ -889,8 +903,8 @@ const drawerStyles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '36px',
-    height: '36px',
+    width: '40px',
+    height: '40px',
     borderRadius: theme.radius.md,
     background: theme.colors.surfaceElevated,
     color: theme.colors.textSecondary,
@@ -901,8 +915,8 @@ const drawerStyles: Record<string, CSSProperties> = {
   content: {
     flex: 1,
     overflowY: 'auto',
-    padding: '20px',
-    paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
+    padding: '24px',
+    paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
   },
 }
 
@@ -941,12 +955,12 @@ const emptyStyles: Record<string, CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '48px 20px',
+    padding: '64px 24px',
     textAlign: 'center',
   },
   icon: {
-    marginBottom: '16px',
-    opacity: 0.5,
+    marginBottom: '20px',
+    opacity: 0.4,
   },
   title: {
     fontSize: '16px',
@@ -957,10 +971,11 @@ const emptyStyles: Record<string, CSSProperties> = {
   description: {
     fontSize: '14px',
     color: theme.colors.textMuted,
-    maxWidth: '320px',
+    maxWidth: '360px',
+    lineHeight: 1.5,
   },
   action: {
-    marginTop: '20px',
+    marginTop: '24px',
   },
 }
 
@@ -978,18 +993,17 @@ export function AppShell({
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: isMobile ? '1fr' : '240px 1fr',
+      gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
       minHeight: '100dvh',
       height: '100dvh',
       overflow: 'hidden',
-      background: theme.colors.background,
+      background: theme.colors.muted,
     }}>
       {!isMobile && <Sidebar />}
       <main style={{
         overflow: 'auto',
         overscrollBehavior: 'contain',
-        padding: isMobile ? '0' : '24px',
-        paddingTop: isMobile ? '0' : '24px',
+        padding: isMobile ? '0' : '32px',
       }}>
         {children}
       </main>
@@ -1056,28 +1070,29 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
   overlay: {
     position: 'fixed',
     inset: 0,
-    background: 'rgba(0, 0, 0, 0.6)',
+    background: 'rgba(0, 0, 0, 0.4)',
     zIndex: 100,
   },
   container: {
     position: 'fixed',
     top: 0,
     left: 0,
-    width: '280px',
+    width: '300px',
     height: '100dvh',
-    background: theme.colors.surface,
+    background: theme.colors.background,
     borderRight: `1px solid ${theme.colors.border}`,
     zIndex: 101,
     display: 'flex',
     flexDirection: 'column',
     animation: 'slideInLeft 0.25s ease',
+    boxShadow: theme.shadows.lg,
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '16px 20px',
-    paddingTop: 'calc(16px + env(safe-area-inset-top))',
+    padding: '20px 24px',
+    paddingTop: 'calc(20px + env(safe-area-inset-top))',
     borderBottom: `1px solid ${theme.colors.border}`,
   },
   brand: {
@@ -1086,19 +1101,19 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
     gap: '12px',
   },
   logoBox: {
-    width: '32px',
-    height: '32px',
+    width: '36px',
+    height: '36px',
     borderRadius: theme.radius.md,
-    background: theme.colors.accent,
+    background: theme.colors.primary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: theme.colors.textInverse,
     fontWeight: 700,
-    fontSize: '14px',
+    fontSize: '16px',
   },
   brandText: {
-    fontSize: '16px',
+    fontSize: '18px',
     fontWeight: 600,
     color: theme.colors.textPrimary,
   },
@@ -1106,8 +1121,8 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '32px',
-    height: '32px',
+    width: '36px',
+    height: '36px',
     borderRadius: theme.radius.sm,
     background: 'transparent',
     color: theme.colors.textSecondary,
@@ -1117,14 +1132,14 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
   nav: {
     display: 'flex',
     flexDirection: 'column',
-    padding: '12px',
+    padding: '16px',
     gap: '4px',
   },
   navLink: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    padding: '12px 16px',
+    gap: '14px',
+    padding: '14px 16px',
     borderRadius: theme.radius.md,
     color: theme.colors.textSecondary,
     textDecoration: 'none',
@@ -1132,8 +1147,8 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
     fontWeight: 500,
   },
   navLinkActive: {
-    background: theme.colors.accentMuted,
-    color: theme.colors.accent,
+    background: theme.colors.primaryMuted,
+    color: theme.colors.primary,
   },
 }
 
@@ -1155,8 +1170,8 @@ export function SearchInput({
   return (
     <div style={{ ...searchStyles.container, ...customStyle }}>
       <svg 
-        width="16" 
-        height="16" 
+        width="18" 
+        height="18" 
         viewBox="0 0 24 24" 
         fill="none" 
         stroke={theme.colors.textMuted} 
@@ -1189,15 +1204,15 @@ const searchStyles: Record<string, CSSProperties> = {
   },
   icon: {
     position: 'absolute',
-    left: '14px',
+    left: '16px',
     pointerEvents: 'none',
   },
   input: {
     width: '100%',
-    background: theme.colors.surfaceElevated,
+    background: theme.colors.background,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
-    padding: '10px 14px 10px 42px',
+    padding: '12px 16px 12px 48px',
     fontSize: '14px',
     color: theme.colors.textPrimary,
     outline: 'none',
@@ -1232,7 +1247,7 @@ export function FilterTabs({
           {opt.count !== undefined && (
             <span style={{
               ...filterTabsStyles.count,
-              background: value === opt.value ? theme.colors.accent : theme.colors.surfaceActive,
+              background: value === opt.value ? theme.colors.primary : theme.colors.surfaceElevated,
               color: value === opt.value ? theme.colors.textInverse : theme.colors.textMuted,
             }}>
               {opt.count}
@@ -1257,27 +1272,27 @@ const filterTabsStyles: Record<string, CSSProperties> = {
   tab: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    padding: '8px 14px',
+    gap: '8px',
+    padding: '10px 16px',
     borderRadius: theme.radius.md,
     background: 'transparent',
     border: 'none',
     color: theme.colors.textSecondary,
-    fontSize: '13px',
+    fontSize: '14px',
     fontWeight: 500,
     cursor: 'pointer',
     whiteSpace: 'nowrap',
     transition: 'all 0.15s ease',
   },
   tabActive: {
-    background: theme.colors.surface,
+    background: theme.colors.background,
     color: theme.colors.textPrimary,
     boxShadow: theme.shadows.sm,
   },
   count: {
-    padding: '2px 6px',
+    padding: '2px 8px',
     borderRadius: '9999px',
-    fontSize: '11px',
+    fontSize: '12px',
     fontWeight: 600,
   },
 }

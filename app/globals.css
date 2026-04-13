@@ -1,54 +1,59 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Premium Dark Theme - Inspired by Linear/Vercel/Stripe */
-  
-  /* Base Colors */
-  --color-background: #0a0a0b;
-  --color-foreground: #fafafa;
-  
-  /* Surface Colors - Layered dark surfaces */
-  --color-surface: #111113;
-  --color-surface-elevated: #18181b;
-  --color-surface-hover: #1f1f23;
-  --color-surface-active: #27272a;
-  
-  /* Border Colors */
-  --color-border: #27272a;
-  --color-border-subtle: #1f1f23;
-  --color-border-strong: #3f3f46;
-  
-  /* Text Colors */
-  --color-text-primary: #fafafa;
-  --color-text-secondary: #a1a1aa;
-  --color-text-muted: #71717a;
-  --color-text-inverse: #0a0a0b;
-  
-  /* Accent - Warm Gold/Amber */
-  --color-accent: #f59e0b;
-  --color-accent-hover: #fbbf24;
-  --color-accent-muted: rgba(245, 158, 11, 0.15);
-  --color-accent-text: #fcd34d;
-  
-  /* Status Colors */
-  --color-success: #22c55e;
-  --color-success-muted: rgba(34, 197, 94, 0.15);
-  --color-warning: #f59e0b;
-  --color-warning-muted: rgba(245, 158, 11, 0.15);
-  --color-error: #ef4444;
-  --color-error-muted: rgba(239, 68, 68, 0.15);
-  --color-info: #3b82f6;
-  --color-info-muted: rgba(59, 130, 246, 0.15);
-  
-  /* Interactive */
-  --color-primary: #f59e0b;
-  --color-primary-hover: #fbbf24;
-  --color-secondary: #27272a;
-  --color-secondary-hover: #3f3f46;
+  /* Refined Light Theme - Original Brand Colors */
   
   /* Typography */
   --font-sans: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'Geist Mono', 'JetBrains Mono', monospace;
+  
+  /* Base Colors - Clean Light Theme */
+  --color-background: #FFFFFF;
+  --color-foreground: #111827;
+  
+  /* Surface Colors */
+  --color-surface: #FFFFFF;
+  --color-surface-elevated: #FFFFFF;
+  --color-surface-hover: #F9FAFB;
+  --color-surface-active: #F3F4F6;
+  --color-muted: #F9FAFB;
+  
+  /* Border Colors */
+  --color-border: #E5E7EB;
+  --color-border-subtle: #F3F4F6;
+  --color-border-strong: #D1D5DB;
+  
+  /* Text Colors */
+  --color-text-primary: #111827;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #6B7280;
+  --color-text-inverse: #FFFFFF;
+  
+  /* Primary - Original Brand Crimson */
+  --color-primary: #C41E3A;
+  --color-primary-hover: #A91B32;
+  --color-primary-muted: rgba(196, 30, 58, 0.1);
+  --color-primary-text: #C41E3A;
+  
+  /* Secondary */
+  --color-secondary: #F3F4F6;
+  --color-secondary-hover: #E5E7EB;
+  
+  /* Accent - Subtle brand tint */
+  --color-accent: #FEF2F2;
+  --color-accent-hover: #FEE2E2;
+  --color-accent-muted: rgba(196, 30, 58, 0.08);
+  --color-accent-text: #C41E3A;
+  
+  /* Status Colors */
+  --color-success: #059669;
+  --color-success-muted: #ECFDF5;
+  --color-warning: #D97706;
+  --color-warning-muted: #FFFBEB;
+  --color-error: #DC2626;
+  --color-error-muted: #FEF2F2;
+  --color-info: #2563EB;
+  --color-info-muted: #EFF6FF;
   
   /* Radius */
   --radius: 0.5rem;
@@ -58,8 +63,8 @@
 }
 
 :root {
-  --background: #0a0a0b;
-  --foreground: #fafafa;
+  --background: #FFFFFF;
+  --foreground: #111827;
 }
 
 * {
@@ -93,23 +98,23 @@ body {
   scroll-behavior: smooth;
 }
 
-/* Scrollbar Styling for Dark Theme */
+/* Scrollbar Styling for Light Theme */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-surface);
+  background: #F9FAFB;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
+  background: #D1D5DB;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
+  background: #9CA3AF;
 }
 
 /* Select optimization for mobile */
@@ -117,7 +122,7 @@ select {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 16px;
@@ -158,7 +163,7 @@ input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+  box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.15);
 }
 
 /* Drawer animations */
