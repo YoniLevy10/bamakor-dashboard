@@ -3,12 +3,17 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { parseIncomingWhatsAppMessage } from '@/lib/whatsapp-parser'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
+import { sendManagerSMS } from '@/lib/sms-send'
 import {
   downloadWhatsAppMedia,
   uploadWhatsAppMediaToStorage,
   createAttachmentRecord,
 } from '@/lib/whatsapp-media'
 import { getLogger } from '@/lib/logging'
+
+// ARCHIVED: Old WhatsApp manager notification
+// This module previously sent WhatsApp messages to project managers
+// CURRENT STATUS: Using SMS for manager notifications (temporary, while awaiting WhatsApp template approval)
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
 const logger = getLogger()
@@ -865,15 +870,30 @@ export async function POST(req: NextRequest) {
       if (projectNotificationError) {
         console.error('⚠️ Failed to fetch project manager phone:', projectNotificationError)
       } else if (projectForNotification?.manager_phone) {
+        // CURRENT CHANNEL: SMS for manager notifications
+        console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket)')
         const buildingText = buildingNumber ? `\nבניין: ${buildingNumber}` : ''
+        const smsMessage = `נכנסה תקלה חדשה במערכת.\n\nפרויקט: ${projectForNotification.name}${buildingText}\nפנייה: ${createdTicket.ticket_number}\nתיאור: ${textBody}\nמדווח: ${from}`
+        
+        const smsSent = await sendManagerSMS(projectForNotification.manager_phone, smsMessage)
+        
+        if (smsSent) {
+          console.log('✅ manager_sms_sent: Manager notification sent successfully via SMS')
+        } else {
+          console.error('❌ manager_sms_failed: Failed to send SMS to manager')
+        }
 
+        // ARCHIVED: Old WhatsApp manager notification (kept for future restoration)
+        /*
         await sendWhatsAppTextMessage(
           projectForNotification.manager_phone,
           `נכנסה תקלה חדשה במערכת.\n\nפרויקט: ${projectForNotification.name}${buildingText}\nפנייה: ${createdTicket.ticket_number}\nתיאור: ${textBody}\nמדווח: ${from}`
         )
+        console.log('✅ manager_whatsapp_archived: Manager notification was sent via WhatsApp (now archived)')
+        */
       }
     } catch (notifyManagerError) {
-      console.error('⚠️ Failed to notify manager:', notifyManagerError)
+      console.error('⚠️ manager_notification_failed: Error notifying manager:', notifyManagerError)
     }
 
     try {

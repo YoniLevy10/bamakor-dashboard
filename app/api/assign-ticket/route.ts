@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { sendWhatsAppTextWithTemplateFallback } from '@/lib/whatsapp-send'
+import { sendWorkerSMS } from '@/lib/sms-send'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 
-const WORKER_TEMPLATE_NAME = 'worker_assignment_notice'
+// ARCHIVED: Old WhatsApp notification
+// import { sendWhatsAppTextWithTemplateFallback } from '@/lib/whatsapp-send'
+// const WORKER_TEMPLATE_NAME = 'worker_assignment_notice'
 
 export async function POST(req: Request) {
   const logger = getLogger()
@@ -121,8 +123,22 @@ export async function POST(req: Request) {
 
     if (worker.phone) {
       try {
-        console.log('📤 Sending worker notification to:', worker.phone)
+        console.log('� NOTIFICATION_CHANNEL: SMS (worker assignment)')
+        console.log('📱 Sending worker notification to:', worker.phone)
 
+        // CURRENT CHANNEL: SMS for worker notifications
+        const smsMessage = `הוקצתה לך תקלה חדשה.\n\nפרויקט: ${projectName}\nפנייה: ${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא תיאור'}`
+        const smsSent = await sendWorkerSMS(worker.phone, smsMessage)
+
+        if (smsSent) {
+          console.log('✅ worker_sms_sent: Worker notification sent successfully via SMS to:', worker.phone)
+        } else {
+          console.error('❌ worker_sms_failed: Failed to send SMS to worker:', worker.phone)
+        }
+
+        // ARCHIVED: Old WhatsApp notification (kept for reference, can be restored later)
+        // Once WhatsApp templates are approved by Meta, uncomment and modify:
+        /*
         await sendWhatsAppTextWithTemplateFallback(
           worker.phone,
           `הוקצתה לך תקלה חדשה.\n\nפרויקט: ${projectName}\nפנייה: ${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא תיאור'}`,
@@ -134,13 +150,13 @@ export async function POST(req: Request) {
           ],
           'he'
         )
-
-        console.log('✅ Worker notification sent successfully to:', worker.phone)
+        console.log('✅ worker_whatsapp_archived: Old WhatsApp channel was here')
+        */
       } catch (sendError) {
-        console.error('⚠️ Failed to notify worker:', sendError)
+        console.error('⚠️ worker_notification_failed: Error sending worker notification:', sendError)
       }
     } else {
-      console.log('ℹ️ Worker has no phone number, skipping WhatsApp notification')
+      console.log('ℹ️ Worker has no phone number, skipping notification')
     }
 
     return NextResponse.json({
