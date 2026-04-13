@@ -20,8 +20,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   viewportFit: "cover",
-  themeColor: "#C41E3A",
-  colorScheme: "light dark",
+  themeColor: "#0a0a0b",
+  colorScheme: "dark",
   interactiveWidget: "resizes-content",
 };
 
@@ -93,9 +93,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background`}
     >
-      <body className="min-h-screen flex flex-col">
+      <body className="min-h-screen flex flex-col bg-background text-foreground">
         {children}
         <ToastContainer />
       </body>

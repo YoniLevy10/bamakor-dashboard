@@ -1,10 +1,23 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import { validateRequired } from '@/lib/validators'
+import {
+  AppShell,
+  MobileHeader,
+  MobileMenu,
+  PageHeader,
+  KpiCard,
+  Card,
+  Button,
+  StatusBadge,
+  SearchInput,
+  Drawer,
+  EmptyState,
+  theme
+} from '../components/ui'
 
 type ProjectRow = {
   id: string
@@ -52,11 +65,10 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
   const [isMobile, setIsMobile] = useState(false)
-  const [highlightedProjectCode, setHighlightedProjectCode] = useState<string | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<ProjectRow | null>(null)
@@ -122,15 +134,7 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     initializePage()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-
-  useEffect(() => {
-    if (!successMessage) return
-    const timer = window.setTimeout(() => setSuccessMessage(''), 1800)
-    return () => window.clearTimeout(timer)
-  }, [successMessage])
 
   function openCreateDrawer() {
     setEditingProject(null)
@@ -363,1020 +367,592 @@ export default function ProjectsPage() {
   }, [projects, searchTerm, statusFilter])
 
   return (
-    <main style={styles.page}>
-      <div
-        style={{
-          ...styles.appShell,
-          gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
-        }}
-      >
-        {!isMobile && (
-          <aside style={styles.sidebar}>
-            <div style={styles.sidebarBrand}>
-              <div style={styles.logoBox}>B</div>
-              <div>
-                <div style={styles.sidebarTitle}>Bamakor</div>
-                <div style={styles.sidebarSubtitle}>Maintenance SaaS</div>
-              </div>
-            </div>
-
-            <nav style={styles.sidebarNav}>
-              <Link href="/" style={styles.sidebarNavLink}>Dashboard</Link>
-              <Link href="/tickets" style={styles.sidebarNavLink}>Tickets</Link>
-              <Link href="/projects" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Projects</Link>
-              <Link href="/workers" style={styles.sidebarNavLink}>Workers</Link>
-              <Link href="/qr" style={styles.sidebarNavLink}>QR Codes</Link>
-              <Link href="/summary" style={styles.sidebarNavLink}>Summary</Link>
-            </nav>
-
-            <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>
-          </aside>
-        )}
-
-        <div
-          style={{
-            ...styles.mainArea,
-            ...(isMobile ? styles.mainAreaMobile : {}),
-          }}
-        >
-          <div style={styles.topBar}>
-            <div style={styles.titleWrap}>
-              <div style={styles.mobileTopRow}>
-                <Link href="/" style={styles.backButton}>
-                  ←
-                </Link>
-
-                <div>
-                  <h1
-                    style={{
-                      ...styles.title,
-                      ...(isMobile ? styles.titleMobile : {}),
-                    }}
-                  >
-                    Projects
-                  </h1>
-                  <p
-                    style={{
-                      ...styles.subtitle,
-                      ...(isMobile ? styles.subtitleMobile : {}),
-                    }}
-                  >
-                    Manage projects, codes and QR source identifiers
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div style={styles.topActions}>
-              <button onClick={initializePage} style={styles.secondaryButton}>
-                Refresh
-              </button>
-              <button onClick={openCreateDrawer} style={styles.primaryButton}>
-                Add Project
-              </button>
-            </div>
-          </div>
-
-          {successMessage && <div style={styles.toast}>{successMessage}</div>}
-
-          <div
-            style={{
-              ...styles.statsGrid,
-              gridTemplateColumns: isMobile
-                ? 'repeat(2, minmax(0, 1fr))'
-                : 'repeat(3, minmax(0, 1fr))',
-            }}
-          >
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Total Projects</div>
-              <div style={styles.statValue}>{stats.total}</div>
-            </div>
-
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Active</div>
-              <div style={styles.statValue}>{stats.active}</div>
-            </div>
-
-            <div
-              style={{
-                ...styles.statCard,
-                ...(isMobile ? styles.statCardFullWidthMobile : {}),
-              }}
-            >
-              <div style={styles.statLabel}>Inactive</div>
-              <div style={styles.statValue}>{stats.inactive}</div>
-            </div>
-          </div>
-
-          <div style={styles.card}>
-            <div style={styles.cardHeader}>
-              <div>
-                <div style={styles.cardTitle}>Project List</div>
-                <div style={styles.cardSubtitle}>
-                  Edit project details, status and QR identifiers
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                ...styles.filtersRow,
-                flexDirection: isMobile ? 'column' : 'row',
-              }}
-            >
-              <input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by name, code, address or QR identifier..."
-                style={styles.searchInput}
-              />
-
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
-                style={{
-                  ...styles.filterSelect,
-                  width: isMobile ? '100%' : '190px',
-                }}
-              >
-                <option value="ALL">All</option>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
-            </div>
-
-            {loading && <p style={styles.infoText}>Loading projects...</p>}
-            {error && <p style={styles.errorText}>{error}</p>}
-
-            {!loading && !error && filteredProjects.length === 0 && (
-              <p style={styles.infoText}>No projects found.</p>
-            )}
-
-            {!loading && !error && filteredProjects.length > 0 && (
-              <div
-                style={{
-                  ...styles.projectGrid,
-                  gridTemplateColumns: isMobile
-                    ? '1fr'
-                    : 'repeat(auto-fit, minmax(340px, 1fr))',
-                }}
-              >
-                {filteredProjects.map((project) => (
-                  <div 
-                    key={project.id} 
-                    onClick={() => openDetailDrawer(project)}
-                    style={{
-                      ...styles.projectCard,
-                      cursor: 'pointer',
-                      ...(highlightedProjectCode === project.project_code ? {
-                        borderColor: '#C1121F',
-                        borderWidth: '2px',
-                        boxShadow: '0 0 0 3px rgba(193, 18, 31, 0.1), 0 10px 30px rgba(0,0,0,0.04)',
-                      } : {}),
-                    }}
-                  >
-                    <div style={styles.projectTopRow}>
-                      <div>
-                        <div style={styles.projectName}>{project.name}</div>
-                        <div 
-                          style={styles.projectCode}
-                          onClick={() => setHighlightedProjectCode(highlightedProjectCode === project.project_code ? null : project.project_code)}
-                          title="Click to highlight project"
-                        >
-                          {project.project_code}
-                        </div>
-                      </div>
-
-                      <span
-                        style={{
-                          ...styles.statusPill,
-                          ...(project.is_active ? styles.activePill : styles.inactivePill),
-                        }}
-                      >
-                        {project.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
-
-                    <div style={styles.projectInfoBlock}>
-                      <div style={styles.projectInfoLine}>📍 {project.address || '-'}</div>
-                      <div style={styles.projectInfoLine}>🔑 {getStartCode(project)}</div>
-                      <div style={styles.projectInfoLine}>
-                        🕒 {new Date(project.created_at).toLocaleString()}
-                      </div>
-                    </div>
-
-                    <div style={styles.projectLinkBlock}>
-                      <div style={styles.smallLabel}>WhatsApp Link</div>
-                      <div style={styles.linkPreview}>{getWhatsappLink(project)}</div>
-                    </div>
-
-                    <div style={styles.projectActions}>
-                      <button
-                        onClick={() => openEditDrawer(project)}
-                        style={styles.secondaryButtonSmall}
-                      >
-                        Edit
-                      </button>
-
-                      <button
-                        onClick={() => toggleProjectStatus(project)}
-                        style={styles.secondaryButtonSmall}
-                      >
-                        {project.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-
-                      <button
-                        onClick={() => copyText(getStartCode(project), 'Start code copied')}
-                        style={styles.secondaryButtonSmall}
-                      >
-                        Copy Code
-                      </button>
-
-                      <button
-                        onClick={() => copyText(getWhatsappLink(project), 'WhatsApp link copied')}
-                        style={styles.secondaryButtonSmall}
-                      >
-                        Copy Link
-                      </button>
-
-                      <button
-                        onClick={() => deleteProject(project)}
-                        style={styles.dangerButtonSmall}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {drawerOpen && (
-        <>
-          <div style={styles.drawerOverlay} onClick={closeDrawer} />
-
-          <div
-            style={{
-              ...styles.drawer,
-              width: isMobile ? '100%' : '460px',
-            }}
-          >
-            <div style={styles.drawerHeader}>
-              <div>
-                <div style={styles.drawerTitle}>
-                  {editingProject ? 'Edit Project' : 'Add Project'}
-                </div>
-                <div style={styles.drawerSubtitle}>
-                  {editingProject
-                    ? 'Update project details and QR data'
-                    : 'Create a new project for this client'}
-                </div>
-              </div>
-
-              <button onClick={closeDrawer} style={styles.drawerCloseButton}>
-                ✕
-              </button>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Project Name</label>
-              <input
-                value={form.name}
-                onChange={(e) => updateForm('name', e.target.value)}
-                style={styles.input}
-                placeholder="Enter project name"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Project Code</label>
-              <input
-                value={form.project_code}
-                onChange={(e) => updateForm('project_code', e.target.value)}
-                style={styles.input}
-                placeholder="BMK1 / BMK2 ..."
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Address</label>
-              <input
-                value={form.address}
-                onChange={(e) => updateForm('address', e.target.value)}
-                style={styles.input}
-                placeholder="Enter project address"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>QR Identifier</label>
-              <input
-                value={form.qr_identifier}
-                onChange={(e) => updateForm('qr_identifier', e.target.value)}
-                style={styles.input}
-                placeholder="Optional custom code. If empty → START_PROJECTCODE"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Status</label>
-              <select
-                value={form.is_active ? 'ACTIVE' : 'INACTIVE'}
-                onChange={(e) => updateForm('is_active', e.target.value === 'ACTIVE')}
-                style={styles.input}
-              >
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
-            </div>
-
-            <div style={styles.drawerActions}>
-              <button onClick={saveProject} style={styles.primaryButton}>
-                {saving ? 'Saving...' : editingProject ? 'Save Changes' : 'Create Project'}
-              </button>
-
-              <button onClick={closeDrawer} style={styles.secondaryButton}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </>
+    <AppShell isMobile={isMobile}>
+      {isMobile && (
+        <MobileHeader
+          title="Projects"
+          subtitle={`${filteredProjects.length} projects`}
+          onMenuClick={() => setMenuOpen(true)}
+        />
       )}
 
-      {detailDrawerOpen && selectedProject && (
-        <>
-          <div onClick={closeDetailDrawer} style={styles.drawerOverlay} />
-          <div
-            style={{
-              ...styles.drawer,
-              width: isMobile ? '100%' : '460px',
-            }}
-          >
-            <div style={styles.drawerHeader}>
-              <div>
-                <div style={styles.drawerTitle}>{selectedProject.name}</div>
-                <div style={styles.drawerSubtitle}>{selectedProject.project_code}</div>
-              </div>
-              <button onClick={closeDetailDrawer} style={styles.drawerCloseButton}>
-                ✕
-              </button>
-            </div>
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Code</div>
-              <div style={styles.drawerValue}>{selectedProject.project_code}</div>
-            </div>
+      <div style={styles.content}>
+        {!isMobile && (
+          <PageHeader
+            title="Projects"
+            subtitle="Manage projects, codes and QR source identifiers"
+            actions={
+              <>
+                <Button variant="primary" onClick={openCreateDrawer}>
+                  Add Project
+                </Button>
+                <Button variant="secondary" onClick={initializePage}>
+                  Refresh
+                </Button>
+              </>
+            }
+          />
+        )}
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Address</div>
-              <div style={styles.drawerValue}>{selectedProject.address || '-'}</div>
-            </div>
+        {/* KPI Cards */}
+        <div style={{
+          ...styles.kpiGrid,
+          gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)',
+        }}>
+          <KpiCard label="Total Projects" value={stats.total} />
+          <KpiCard label="Active" value={stats.active} />
+          <KpiCard label="Inactive" value={stats.inactive} />
+        </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Status</div>
-              <div style={styles.drawerValue}>
-                <span
-                  style={{
-                    ...styles.statusPill,
-                    ...(selectedProject.is_active ? styles.activePill : styles.inactivePill),
-                  }}
+        {/* Projects Card */}
+        <Card
+          title="Project List"
+          subtitle="Edit project details, status and QR identifiers"
+          noPadding
+        >
+          {/* Filters */}
+          <div style={styles.filtersRow}>
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search by name, code, address..."
+              style={{ maxWidth: isMobile ? '100%' : '320px' }}
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
+              style={styles.filterSelect}
+            >
+              <option value="ALL">All Status</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </div>
+
+          {loading && (
+            <div style={styles.loadingState}>
+              <div style={styles.loadingSpinner} />
+              <span>Loading projects...</span>
+            </div>
+          )}
+
+          {error && (
+            <div style={styles.errorState}>
+              <span>{error}</span>
+              <Button variant="secondary" size="sm" onClick={initializePage}>
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {!loading && !error && filteredProjects.length === 0 && (
+            <EmptyState
+              title="No projects found"
+              description="Try adjusting your filters or create a new project."
+              action={
+                <Button variant="primary" onClick={openCreateDrawer}>
+                  Add Project
+                </Button>
+              }
+            />
+          )}
+
+          {!loading && !error && filteredProjects.length > 0 && (
+            <div style={styles.projectGrid}>
+              {filteredProjects.map((project) => (
+                <div
+                  key={project.id}
+                  onClick={() => openDetailDrawer(project)}
+                  style={styles.projectCard}
                 >
-                  {selectedProject.is_active ? 'Active' : 'Inactive'}
-                </span>
+                  <div style={styles.projectCardHeader}>
+                    <div>
+                      <div style={styles.projectName}>{project.name}</div>
+                      <div style={styles.projectCode}>{project.project_code}</div>
+                    </div>
+                    <StatusBadge status={project.is_active ? 'ACTIVE' : 'INACTIVE'} size="sm" />
+                  </div>
+
+                  <div style={styles.projectMeta}>
+                    <div style={styles.projectMetaItem}>
+                      <span style={styles.projectMetaLabel}>Address</span>
+                      <span style={styles.projectMetaValue}>{project.address || '-'}</span>
+                    </div>
+                    <div style={styles.projectMetaItem}>
+                      <span style={styles.projectMetaLabel}>Start Code</span>
+                      <span style={styles.projectMetaCode}>{getStartCode(project)}</span>
+                    </div>
+                  </div>
+
+                  <div style={styles.projectActions} onClick={(e) => e.stopPropagation()}>
+                    <Button variant="secondary" size="sm" onClick={() => openEditDrawer(project)}>
+                      Edit
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => toggleProjectStatus(project)}>
+                      {project.is_active ? 'Deactivate' : 'Activate'}
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => copyText(getStartCode(project), 'Code copied')}>
+                      Copy Code
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Create/Edit Drawer */}
+      <Drawer
+        open={drawerOpen}
+        onClose={closeDrawer}
+        title={editingProject ? 'Edit Project' : 'Add Project'}
+        subtitle={editingProject ? 'Update project details' : 'Create a new project'}
+        isMobile={isMobile}
+      >
+        <div style={styles.drawerContent}>
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Project Name *</label>
+            <input
+              value={form.name}
+              onChange={(e) => updateForm('name', e.target.value)}
+              placeholder="Enter project name"
+              style={styles.formInput}
+            />
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Project Code *</label>
+            <input
+              value={form.project_code}
+              onChange={(e) => updateForm('project_code', e.target.value.toUpperCase())}
+              placeholder="e.g. PRJ001"
+              style={styles.formInput}
+            />
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Address</label>
+            <input
+              value={form.address}
+              onChange={(e) => updateForm('address', e.target.value)}
+              placeholder="Project location"
+              style={styles.formInput}
+            />
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>QR Identifier</label>
+            <input
+              value={form.qr_identifier}
+              onChange={(e) => updateForm('qr_identifier', e.target.value)}
+              placeholder={`Default: START_${form.project_code || 'CODE'}`}
+              style={styles.formInput}
+            />
+            <span style={styles.formHint}>Leave empty to use default START code</span>
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={form.is_active}
+                onChange={(e) => updateForm('is_active', e.target.checked)}
+                style={styles.checkbox}
+              />
+              <span>Active</span>
+            </label>
+          </div>
+
+          <div style={styles.drawerActions}>
+            <Button variant="secondary" onClick={closeDrawer}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={saveProject} loading={saving}>
+              {editingProject ? 'Update' : 'Create'}
+            </Button>
+          </div>
+
+          {editingProject && (
+            <div style={styles.dangerZone}>
+              <Button
+                variant="danger"
+                onClick={() => deleteProject(editingProject)}
+                style={{ width: '100%' }}
+              >
+                Delete Project
+              </Button>
+            </div>
+          )}
+        </div>
+      </Drawer>
+
+      {/* Detail Drawer */}
+      <Drawer
+        open={detailDrawerOpen}
+        onClose={closeDetailDrawer}
+        title={selectedProject?.name || ''}
+        subtitle={selectedProject?.project_code}
+        isMobile={isMobile}
+      >
+        {selectedProject && (
+          <div style={styles.drawerContent}>
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>Status</div>
+              <StatusBadge status={selectedProject.is_active ? 'ACTIVE' : 'INACTIVE'} />
+            </div>
+
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>Address</div>
+              <div style={styles.detailValue}>{selectedProject.address || 'Not set'}</div>
+            </div>
+
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>Start Code</div>
+              <div style={styles.detailCodeBox}>
+                <code style={styles.detailCode}>{getStartCode(selectedProject)}</code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => copyText(getStartCode(selectedProject), 'Code copied')}
+                >
+                  Copy
+                </Button>
               </div>
             </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Created</div>
-              <div style={styles.drawerValue}>
-                {new Date(selectedProject.created_at).toLocaleDateString('en-GB', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>WhatsApp Link</div>
+              <div style={styles.detailCodeBox}>
+                <div style={styles.detailLinkText}>{getWhatsappLink(selectedProject)}</div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => copyText(getWhatsappLink(selectedProject), 'Link copied')}
+                >
+                  Copy
+                </Button>
               </div>
             </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>QR Code</div>
-              <div style={styles.drawerValue}>{getStartCode(selectedProject)}</div>
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>Created</div>
+              <div style={styles.detailValue}>
+                {new Date(selectedProject.created_at).toLocaleString()}
+              </div>
             </div>
 
-            <div style={styles.drawerDivider} />
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Related Tickets ({projectTickets.length})</div>
-              {loadingTickets && <div style={styles.ticketListItem}>Loading...</div>}
-              {!loadingTickets && projectTickets.length === 0 && (
-                <div style={styles.ticketListItem}>No tickets</div>
-              )}
-              {!loadingTickets && projectTickets.length > 0 && (
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>Recent Tickets</div>
+              {loadingTickets ? (
+                <div style={styles.ticketLoading}>Loading...</div>
+              ) : projectTickets.length === 0 ? (
+                <div style={styles.noTickets}>No tickets for this project</div>
+              ) : (
                 <div style={styles.ticketList}>
                   {projectTickets.slice(0, 5).map((ticket) => (
-                    <div key={ticket.id} style={styles.ticketListItem}>
-                      <div style={styles.ticketListItemRow}>
-                        <span style={styles.ticketNumber}>TKT-{ticket.ticket_number}</span>
-                        <span
-                          style={{
-                            ...styles.ticketBadge,
-                            color: ticket.status === 'CLOSED' ? '#16A34A' : '#DC2626',
-                          }}
-                        >
-                          {ticket.status}
-                        </span>
-                      </div>
+                    <div key={ticket.id} style={styles.ticketItem}>
+                      <span style={styles.ticketNumber}>#{ticket.ticket_number}</span>
+                      <StatusBadge status={ticket.status} size="sm" />
                     </div>
                   ))}
                   {projectTickets.length > 5 && (
-                    <div style={styles.ticketListMore}>+{projectTickets.length - 5} more tickets</div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigateToProjectTickets(selectedProject.project_code)}
+                    >
+                      View all {projectTickets.length} tickets
+                    </Button>
                   )}
                 </div>
               )}
             </div>
 
             <div style={styles.drawerActions}>
-              <button
-                onClick={() => {
-                  closeDetailDrawer()
-                  navigateToProjectTickets(selectedProject.project_code)
-                }}
-                style={styles.primaryButton}
-              >
-                View All Tickets
-              </button>
-
-              <button
+              <Button
+                variant="secondary"
                 onClick={() => {
                   closeDetailDrawer()
                   openEditDrawer(selectedProject)
                 }}
-                style={styles.secondaryButton}
+                style={{ flex: 1 }}
               >
                 Edit Project
-              </button>
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => navigateToProjectTickets(selectedProject.project_code)}
+                style={{ flex: 1 }}
+              >
+                View Tickets
+              </Button>
             </div>
           </div>
-        </>
+        )}
+      </Drawer>
+
+      {/* Mobile Bottom Actions */}
+      {isMobile && (
+        <div style={styles.mobileBottomActions}>
+          <Button variant="primary" onClick={openCreateDrawer} style={{ flex: 1 }}>
+            Add Project
+          </Button>
+        </div>
       )}
-    </main>
+    </AppShell>
   )
 }
 
 const styles: Record<string, CSSProperties> = {
-  page: {
-    height: '100dvh',
-    width: '100%',
-    maxWidth: '100%',
-    overflow: 'hidden',
-    background: '#F4F4F5',
-    color: '#2F2F33',
-    fontFamily: 'Inter, Arial, Helvetica, sans-serif',
-  },
-  appShell: {
-    display: 'grid',
-    width: '100%',
-    height: '100dvh',
-    overflow: 'hidden',
-  },
-  sidebar: {
-    background: '#FFFFFF',
-    borderRight: '1px solid #E5E7EB',
-    padding: '24px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'sticky',
-    top: 0,
-    height: '100%',
-    justifyContent: 'space-between',
-    overflow: 'auto',
-  },
-  sidebarBrand: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '28px',
-  },
-  sidebarTitle: {
-    fontSize: '18px',
-    fontWeight: 800,
-    color: '#111827',
-  },
-  sidebarSubtitle: {
-    fontSize: '12px',
-    color: '#6B7280',
-  },
-  sidebarNav: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  sidebarNavItem: {
-    textAlign: 'left',
-    background: '#FFFFFF',
-    color: '#374151',
-    border: '1px solid transparent',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  sidebarNavItemActive: {
-    background: '#111827',
-    color: '#FFFFFF',
-  },
-  sidebarNavLink: {
-    textDecoration: 'none',
-    color: '#374151',
-    fontWeight: 700,
-    padding: '12px 14px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-  },
-  sidebarFooter: {
-    marginTop: 'auto',
-    fontSize: '13px',
-    color: '#6B7280',
-    padding: '12px 14px',
-  },
-  mainArea: {
+  content: {
     padding: '24px',
-    width: '100%',
-    maxWidth: '100%',
-    minWidth: 0,
-    boxSizing: 'border-box',
-    overflow: 'auto',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    height: '100%',
+    paddingBottom: '100px',
   },
-  mainAreaMobile: {
-    padding: 'calc(18px + env(safe-area-inset-top)) 14px 18px 14px',
-    overflow: 'auto',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    height: '100%',
-  },
-  topBar: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '12px',
-    marginBottom: '20px',
-    flexWrap: 'wrap',
-    rowGap: '16px',
-  },
-  titleWrap: {
-    minWidth: 0,
-  },
-  mobileTopRow: {
-    display: 'flex',
-    gap: '10px',
-    alignItems: 'flex-start',
-  },
-  backButton: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    color: '#111827',
-    textDecoration: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    flexShrink: 0,
-  },
-  topActions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  logoBox: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: 'linear-gradient(135deg, #C1121F 0%, #8F0B16 100%)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    fontSize: '18px',
-    color: '#FFFFFF',
-    boxShadow: '0 8px 20px rgba(193, 18, 31, 0.25)',
-    flexShrink: 0,
-  },
-  title: {
-    margin: 0,
-    fontSize: '36px',
-    fontWeight: 800,
-    color: '#111827',
-  },
-  titleMobile: {
-    fontSize: '28px',
-    lineHeight: 1.1,
-  },
-  subtitle: {
-    margin: '6px 0 0 0',
-    color: '#6B7280',
-    fontSize: '14px',
-  },
-  subtitleMobile: {
-    fontSize: '13px',
-  },
-  secondaryButton: {
-    padding: '10px 14px',
-    fontSize: '13px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    color: '#2F2F33',
-    cursor: 'pointer',
-    fontWeight: 700,
-  },
-  primaryButton: {
-    padding: '10px 14px',
-    fontSize: '13px',
-    borderRadius: '12px',
-    background: '#111827',
-    border: '1px solid #111827',
-    color: '#FFFFFF',
-    cursor: 'pointer',
-    fontWeight: 700,
-  },
-  secondaryButtonSmall: {
-    padding: '8px 10px',
-    fontSize: '12px',
-    borderRadius: '10px',
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    color: '#2F2F33',
-    cursor: 'pointer',
-    fontWeight: 700,
-  },
-  dangerButtonSmall: {
-    padding: '8px 10px',
-    fontSize: '12px',
-    borderRadius: '10px',
-    background: '#FEF2F2',
-    border: '1px solid #FECACA',
-    color: '#B91C1C',
-    cursor: 'pointer',
-    fontWeight: 700,
-  },
-  toast: {
-    position: 'fixed',
-    top: 14,
-    left: '50%',
-    transform: 'translateX(-50%)',
-    background: '#111827',
-    color: '#FFFFFF',
-    padding: '10px 14px',
-    borderRadius: '999px',
-    zIndex: 100,
-    fontSize: '13px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-  },
-  statsGrid: {
+  kpiGrid: {
     display: 'grid',
-    gap: '14px',
-    marginBottom: '18px',
-    width: '100%',
-  },
-  statCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E7EB',
-    borderRadius: '18px',
-    padding: '20px',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
-    minHeight: '110px',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-  },
-  statCardFullWidthMobile: {
-    gridColumn: '1 / -1',
-  },
-  statLabel: {
-    color: '#6B7280',
-    fontSize: '14px',
-    marginBottom: '12px',
-    fontWeight: 600,
-  },
-  statValue: {
-    fontSize: '40px',
-    fontWeight: 800,
-    lineHeight: 1,
-    color: '#111827',
-  },
-  card: {
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    borderRadius: '20px',
-    padding: '18px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '18px',
-    gap: '12px',
-    flexWrap: 'wrap',
-  },
-  cardTitle: {
-    fontSize: '20px',
-    fontWeight: 800,
-    marginBottom: '4px',
-    color: '#2F2F33',
-  },
-  cardSubtitle: {
-    fontSize: '13px',
-    color: '#6B6B72',
+    gap: '16px',
+    marginBottom: '24px',
   },
   filtersRow: {
     display: 'flex',
-    gap: '10px',
-    marginBottom: '16px',
-    width: '100%',
-  },
-  searchInput: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '12px',
-    border: '1px solid #D7D7DB',
-    background: '#FFFFFF',
-    color: '#2F2F33',
-    outline: 'none',
-    fontSize: '14px',
-    boxSizing: 'border-box',
-    minHeight: '44px',
-    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '12px',
+    padding: '16px 20px',
+    borderBottom: `1px solid ${theme.colors.border}`,
     alignItems: 'center',
   },
   filterSelect: {
-    width: '190px',
-    padding: '12px',
-    borderRadius: '12px',
-    border: '1px solid #D7D7DB',
-    background: '#FFFFFF',
-    color: '#2F2F33',
-    outline: 'none',
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.md,
+    padding: '10px 14px',
     fontSize: '14px',
-    boxSizing: 'border-box',
-    minHeight: '44px',
+    color: theme.colors.textPrimary,
+    outline: 'none',
+    cursor: 'pointer',
+    minWidth: '140px',
+  },
+  loadingState: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
+    padding: '48px 20px',
+    color: theme.colors.textMuted,
+    fontSize: '14px',
+  },
+  loadingSpinner: {
+    width: '20px',
+    height: '20px',
+    border: `2px solid ${theme.colors.border}`,
+    borderTopColor: theme.colors.accent,
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  errorState: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '16px',
+    padding: '48px 20px',
+    color: theme.colors.error,
+    fontSize: '14px',
   },
   projectGrid: {
     display: 'grid',
-    gap: '14px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+    gap: '16px',
+    padding: '20px',
   },
   projectCard: {
-    background: '#FAFAFA',
-    border: '1px solid #E5E7EB',
-    borderRadius: '18px',
-    padding: '16px',
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.lg,
+    padding: '20px',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
   },
-  projectTopRow: {
+  projectCardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
-    gap: '12px',
     alignItems: 'flex-start',
-    marginBottom: '12px',
+    marginBottom: '16px',
   },
   projectName: {
-    fontSize: '18px',
-    fontWeight: 800,
-    color: '#111827',
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
     marginBottom: '4px',
   },
   projectCode: {
-    fontSize: '13px',
-    color: '#C1121F',
-    fontWeight: 800,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: theme.colors.accent,
   },
-  statusPill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '6px 10px',
-    borderRadius: '999px',
-    fontSize: '11px',
-    fontWeight: 700,
-    whiteSpace: 'nowrap',
-  },
-  activePill: {
-    background: '#DCFCE7',
-    color: '#166534',
-  },
-  inactivePill: {
-    background: '#F3F4F6',
-    color: '#4B5563',
-  },
-  projectInfoBlock: {
+  projectMeta: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
-    marginBottom: '14px',
+    gap: '12px',
+    marginBottom: '16px',
   },
-  projectInfoLine: {
-    fontSize: '14px',
-    color: '#374151',
-    lineHeight: 1.45,
-    wordBreak: 'break-word',
+  projectMetaItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
   },
-  projectLinkBlock: {
-    marginBottom: '14px',
-    padding: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #E5E7EB',
-    borderRadius: '12px',
-  },
-  smallLabel: {
+  projectMetaLabel: {
     fontSize: '11px',
-    color: '#6B7280',
-    fontWeight: 700,
+    color: theme.colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    marginBottom: '8px',
   },
-  linkPreview: {
+  projectMetaValue: {
     fontSize: '13px',
-    color: '#374151',
-    lineHeight: 1.45,
-    wordBreak: 'break-word',
+    color: theme.colors.textSecondary,
+  },
+  projectMetaCode: {
+    fontSize: '13px',
+    color: theme.colors.textPrimary,
+    fontFamily: 'monospace',
   },
   projectActions: {
     display: 'flex',
     gap: '8px',
     flexWrap: 'wrap',
-  },
-  drawerOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(47,47,51,0.35)',
-    zIndex: 50,
-  },
-  drawer: {
-    position: 'fixed',
-    top: 0,
-    right: 0,
-    maxWidth: '100%',
-    height: '100dvh',
-    background: '#FFFFFF',
-    borderLeft: '1px solid #D7D7DB',
-    zIndex: 60,
-    padding: 0,
-    boxShadow: '-10px 0 30px rgba(0,0,0,0.12)',
-    boxSizing: 'border-box',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  },
-  drawerHeader: {
-    background: '#FFFFFF',
-    padding: '18px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '16px',
-    borderBottom: '1px solid #EFEFF1',
-    flex: '0 0 auto',
-    zIndex: 10,
-  },
-  drawerTitle: {
-    fontSize: '22px',
-    fontWeight: 800,
-    color: '#2F2F33',
-    marginBottom: '6px',
-  },
-  drawerSubtitle: {
-    color: '#6B6B72',
-    fontSize: '14px',
-  },
-  drawerCloseButton: {
-    background: '#F9F9FA',
-    color: '#2F2F33',
-    border: '1px solid #D7D7DB',
-    borderRadius: '10px',
-    width: '40px',
-    height: '40px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    flexShrink: 0,
+    paddingTop: '16px',
+    borderTop: `1px solid ${theme.colors.border}`,
   },
   drawerContent: {
-    flex: '1 1 0%',
-    minHeight: 0,
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    padding: '18px',
-    paddingTop: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
   },
   formGroup: {
-    marginBottom: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
   },
-  label: {
-    display: 'block',
-    fontSize: '12px',
-    color: '#6B7280',
-    fontWeight: 700,
-    marginBottom: '8px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+  formLabel: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: theme.colors.textSecondary,
   },
-  input: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '12px',
-    border: '1px solid #D7D7DB',
-    background: '#FFFFFF',
-    color: '#2F2F33',
-    outline: 'none',
+  formInput: {
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.md,
+    padding: '10px 14px',
     fontSize: '14px',
-    boxSizing: 'border-box',
-    minHeight: '44px',
+    color: theme.colors.textPrimary,
+    outline: 'none',
+  },
+  formHint: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+  },
+  checkboxLabel: {
     display: 'flex',
     alignItems: 'center',
+    gap: '8px',
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
+    cursor: 'pointer',
+  },
+  checkbox: {
+    width: '18px',
+    height: '18px',
+    accentColor: theme.colors.accent,
   },
   drawerActions: {
     display: 'flex',
     gap: '10px',
-    flexWrap: 'wrap',
+    paddingTop: '12px',
+    borderTop: `1px solid ${theme.colors.border}`,
+  },
+  dangerZone: {
+    paddingTop: '20px',
+    borderTop: `1px solid ${theme.colors.border}`,
     marginTop: '8px',
   },
-  infoText: {
-    color: '#6B7280',
-    margin: 0,
+  detailSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
   },
-  errorText: {
-    color: '#B91C1C',
-    margin: 0,
-    fontWeight: 600,
-  },
-  drawerSection: {
-    marginBottom: '16px',
-  },
-  drawerLabel: {
-    color: '#6B7280',
+  detailLabel: {
     fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    marginBottom: '8px',
-    fontWeight: 700,
   },
-  drawerValue: {
-    color: '#2F2F33',
-    fontSize: '15px',
-    lineHeight: 1.5,
+  detailValue: {
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
   },
-  drawerDivider: {
-    height: '1px',
-    background: 'rgba(0,0,0,0.04)',
-    margin: '20px 0',
+  detailCodeBox: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    background: theme.colors.surfaceActive,
+    padding: '10px 14px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+  },
+  detailCode: {
+    fontSize: '13px',
+    color: theme.colors.textPrimary,
+    fontFamily: 'monospace',
+  },
+  detailLinkText: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+    wordBreak: 'break-all',
+    flex: 1,
+  },
+  ticketLoading: {
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+    padding: '12px 0',
+  },
+  noTickets: {
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+    padding: '12px 0',
   },
   ticketList: {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
   },
-  ticketListItem: {
-    background: '#F9F9FA',
-    border: '1px solid rgba(0,0,0,0.04)',
-    borderRadius: '10px',
-    padding: '10px 12px',
-    fontSize: '13px',
-    color: '#6B7280',
-  },
-  ticketListItemRow: {
+  ticketItem: {
     display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: '8px',
+    justifyContent: 'space-between',
+    padding: '10px 12px',
+    background: theme.colors.surfaceActive,
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
   },
   ticketNumber: {
-    fontWeight: 700,
-    color: '#2F2F33',
+    fontSize: '13px',
+    fontWeight: 500,
+    color: theme.colors.textPrimary,
   },
-  ticketBadge: {
-    fontSize: '11px',
-    fontWeight: 700,
-  },
-  ticketListMore: {
-    fontSize: '12px',
-    color: '#6B7280',
-    fontWeight: 600,
-    padding: '8px 0',
-    textAlign: 'center',
+  mobileBottomActions: {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: '16px 20px',
+    paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
+    background: theme.colors.surface,
+    borderTop: `1px solid ${theme.colors.border}`,
+    display: 'flex',
+    gap: '10px',
   },
 }
-

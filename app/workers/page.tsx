@@ -1,10 +1,23 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import { validateRequired, validatePhoneNumber, validateEmail } from '@/lib/validators'
+import {
+  AppShell,
+  MobileHeader,
+  MobileMenu,
+  PageHeader,
+  KpiCard,
+  Card,
+  Button,
+  StatusBadge,
+  SearchInput,
+  Drawer,
+  EmptyState,
+  theme
+} from '../components/ui'
 
 type WorkerRow = {
   id: string
@@ -66,10 +79,10 @@ export default function WorkersPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
   const [isMobile, setIsMobile] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingWorker, setEditingWorker] = useState<WorkerRow | null>(null)
@@ -140,14 +153,7 @@ export default function WorkersPage() {
 
   useEffect(() => {
     initializePage()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  useEffect(() => {
-    if (!successMessage) return
-    const timer = window.setTimeout(() => setSuccessMessage(''), 1800)
-    return () => window.clearTimeout(timer)
-  }, [successMessage])
 
   function openCreateDrawer() {
     setEditingWorker(null)
@@ -335,10 +341,9 @@ export default function WorkersPage() {
         if (error) throw error
 
         const mapped = (data || []).map((ticket: RawTicketWithProjects) => {
-          // Handle projects as either single object or array
           let projectCode = 'N/A'
           let projectName = 'Unknown'
-          
+
           if (ticket.projects) {
             if (Array.isArray(ticket.projects)) {
               projectCode = ticket.projects[0]?.project_code || 'N/A'
@@ -348,7 +353,7 @@ export default function WorkersPage() {
               projectName = ticket.projects.name || 'Unknown'
             }
           }
-          
+
           return {
             id: ticket.id,
             ticket_number: ticket.ticket_number,
@@ -403,968 +408,567 @@ export default function WorkersPage() {
   }, [workers, searchTerm, statusFilter])
 
   return (
-    <main style={styles.page}>
-      <div
-        style={{
-          ...styles.appShell,
-          gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
-        }}
-      >
+    <AppShell isMobile={isMobile}>
+      {isMobile && (
+        <MobileHeader
+          title="Workers"
+          subtitle={`${filteredWorkers.length} team members`}
+          onMenuClick={() => setMenuOpen(true)}
+        />
+      )}
+
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+      <div style={styles.content}>
         {!isMobile && (
-          <aside style={styles.sidebar}>
-            <div style={styles.sidebarBrand}>
-              <div style={styles.logoBox}>B</div>
-              <div>
-                <div style={styles.sidebarTitle}>Bamakor</div>
-                <div style={styles.sidebarSubtitle}>Maintenance SaaS</div>
-              </div>
-            </div>
-
-            <nav style={styles.sidebarNav}>
-              <Link href="/" style={styles.sidebarNavLink}>Dashboard</Link>
-              <Link href="/tickets" style={styles.sidebarNavLink}>Tickets</Link>
-              <Link href="/projects" style={styles.sidebarNavLink}>Projects</Link>
-              <Link href="/workers" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Workers</Link>
-              <Link href="/qr" style={styles.sidebarNavLink}>QR Codes</Link>
-              <Link href="/summary" style={styles.sidebarNavLink}>Summary</Link>
-            </nav>
-
-            <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>
-          </aside>
+          <PageHeader
+            title="Workers"
+            subtitle="Manage your team directly from the dashboard"
+            actions={
+              <>
+                <Button variant="primary" onClick={openCreateDrawer}>
+                  Add Worker
+                </Button>
+                <Button variant="secondary" onClick={initializePage}>
+                  Refresh
+                </Button>
+              </>
+            }
+          />
         )}
 
-        <div
-          style={{
-            ...styles.mainArea,
-            ...(isMobile ? styles.mainAreaMobile : {}),
-          }}
-        >
-          <div style={styles.topBar}>
-            <div style={styles.titleWrap}>
-              <div style={styles.mobileTopRow}>
-                <Link href="/" style={styles.backButton}>
-                  ←
-                </Link>
-
-                <div>
-                  <h1
-                    style={{
-                      ...styles.title,
-                      ...(isMobile ? styles.titleMobile : {}),
-                    }}
-                  >
-                    Workers
-                  </h1>
-                  <p
-                    style={{
-                      ...styles.subtitle,
-                      ...(isMobile ? styles.subtitleMobile : {}),
-                    }}
-                  >
-                    Manage your team directly from the dashboard
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div style={styles.topActions}>
-              <button onClick={initializePage} style={styles.secondaryButton}>
-                Refresh
-              </button>
-              <button onClick={openCreateDrawer} style={styles.primaryButton}>
-                Add Worker
-              </button>
-            </div>
-          </div>
-
-          {successMessage && <div style={styles.toast}>{successMessage}</div>}
-
-          <div
-            style={{
-              ...styles.statsGrid,
-              gridTemplateColumns: isMobile
-                ? 'repeat(2, minmax(0, 1fr))'
-                : 'repeat(3, minmax(0, 1fr))',
-            }}
-          >
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Total Workers</div>
-              <div style={styles.statValue}>{stats.total}</div>
-            </div>
-
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Active</div>
-              <div style={styles.statValue}>{stats.active}</div>
-            </div>
-
-            <div
-              style={{
-                ...styles.statCard,
-                ...(isMobile ? styles.statCardFullWidthMobile : {}),
-              }}
-            >
-              <div style={styles.statLabel}>Inactive</div>
-              <div style={styles.statValue}>{stats.inactive}</div>
-            </div>
-          </div>
-
-          <div style={styles.card}>
-            <div style={styles.cardHeader}>
-              <div>
-                <div style={styles.cardTitle}>Team Members</div>
-                <div style={styles.cardSubtitle}>Search, edit, activate or remove workers</div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                ...styles.filtersRow,
-                flexDirection: isMobile ? 'column' : 'row',
-              }}
-            >
-              <input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by name, phone, email or role..."
-                style={styles.searchInput}
-              />
-
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
-                style={{
-                  ...styles.filterSelect,
-                  width: isMobile ? '100%' : '190px',
-                }}
-              >
-                <option value="ALL">All</option>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
-            </div>
-
-            {loading && <p style={styles.infoText}>Loading workers...</p>}
-            {error && <p style={styles.errorText}>{error}</p>}
-
-            {!loading && !error && filteredWorkers.length === 0 && (
-              <p style={styles.infoText}>No workers found.</p>
-            )}
-
-            {!loading && !error && filteredWorkers.length > 0 && (
-              <div
-                style={{
-                  ...styles.workerGrid,
-                  gridTemplateColumns: isMobile
-                    ? '1fr'
-                    : 'repeat(auto-fit, minmax(320px, 1fr))',
-                }}
-              >
-                {filteredWorkers.map((worker) => (
-                  <div
-                    key={worker.id}
-                    style={{
-                      ...styles.workerCard,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                    }}
-                    onClick={() => openDetailDrawer(worker)}
-                  >
-                    <div style={styles.workerTopRow}>
-                      <div>
-                        <div style={styles.workerName}>{worker.full_name}</div>
-                        <div style={styles.workerRole}>{worker.role || 'No role set'}</div>
-                      </div>
-
-                      <span
-                        style={{
-                          ...styles.statusPill,
-                          ...(worker.is_active ? styles.activePill : styles.inactivePill),
-                        }}
-                      >
-                        {worker.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
-
-                    <div style={styles.workerInfoBlock}>
-                      <div style={styles.workerInfoLine}>📞 {worker.phone}</div>
-                      <div style={styles.workerInfoLine}>✉️ {worker.email || '-'}</div>
-                      <div style={styles.workerInfoLine}>
-                        🕒 {new Date(worker.created_at).toLocaleString()}
-                      </div>
-                    </div>
-
-                    <div style={styles.workerActions}>
-                      <button
-                        onClick={() => openEditDrawer(worker)}
-                        style={styles.secondaryButtonSmall}
-                      >
-                        Edit
-                      </button>
-
-                      <button
-                        onClick={() => toggleWorkerStatus(worker)}
-                        style={styles.secondaryButtonSmall}
-                      >
-                        {worker.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-
-                      <button
-                        onClick={() => deleteWorker(worker)}
-                        style={styles.dangerButtonSmall}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* KPI Cards */}
+        <div style={{
+          ...styles.kpiGrid,
+          gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)',
+        }}>
+          <KpiCard label="Total Workers" value={stats.total} />
+          <KpiCard label="Active" value={stats.active} />
+          <KpiCard label="Inactive" value={stats.inactive} />
         </div>
+
+        {/* Workers Card */}
+        <Card
+          title="Team Members"
+          subtitle="Search, edit, activate or remove workers"
+          noPadding
+        >
+          {/* Filters */}
+          <div style={styles.filtersRow}>
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search by name, phone, email, role..."
+              style={{ maxWidth: isMobile ? '100%' : '320px' }}
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
+              style={styles.filterSelect}
+            >
+              <option value="ALL">All Status</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </div>
+
+          {loading && (
+            <div style={styles.loadingState}>
+              <div style={styles.loadingSpinner} />
+              <span>Loading workers...</span>
+            </div>
+          )}
+
+          {error && (
+            <div style={styles.errorState}>
+              <span>{error}</span>
+              <Button variant="secondary" size="sm" onClick={initializePage}>
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {!loading && !error && filteredWorkers.length === 0 && (
+            <EmptyState
+              title="No workers found"
+              description="Try adjusting your filters or add a new worker."
+              action={
+                <Button variant="primary" onClick={openCreateDrawer}>
+                  Add Worker
+                </Button>
+              }
+            />
+          )}
+
+          {!loading && !error && filteredWorkers.length > 0 && (
+            <div style={styles.workerGrid}>
+              {filteredWorkers.map((worker) => (
+                <div
+                  key={worker.id}
+                  onClick={() => openDetailDrawer(worker)}
+                  style={styles.workerCard}
+                >
+                  <div style={styles.workerCardHeader}>
+                    <div style={styles.workerAvatar}>
+                      {worker.full_name.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={styles.workerInfo}>
+                      <div style={styles.workerName}>{worker.full_name}</div>
+                      <div style={styles.workerRole}>{worker.role || 'No role set'}</div>
+                    </div>
+                    <StatusBadge status={worker.is_active ? 'ACTIVE' : 'INACTIVE'} size="sm" />
+                  </div>
+
+                  <div style={styles.workerMeta}>
+                    <div style={styles.workerMetaItem}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                      </svg>
+                      <span>{worker.phone}</span>
+                    </div>
+                    {worker.email && (
+                      <div style={styles.workerMetaItem}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect width="20" height="16" x="2" y="4" rx="2" />
+                          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                        </svg>
+                        <span>{worker.email}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={styles.workerActions} onClick={(e) => e.stopPropagation()}>
+                    <Button variant="secondary" size="sm" onClick={() => openEditDrawer(worker)}>
+                      Edit
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => toggleWorkerStatus(worker)}>
+                      {worker.is_active ? 'Deactivate' : 'Activate'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
 
-      {detailDrawerOpen && selectedWorker && (
-        <>
-          <div style={styles.drawerOverlay} onClick={closeDetailDrawer} />
-          <div
-            style={{
-              ...styles.drawer,
-              width: isMobile ? '100%' : '460px',
-            }}
-          >
-            <div style={styles.drawerHeader}>
-              <div>
-                <div style={styles.drawerTitle}>{selectedWorker.full_name}</div>
-                <div style={styles.drawerSubtitle}>{selectedWorker.role || 'No role set'}</div>
-              </div>
-              <button onClick={closeDetailDrawer} style={styles.drawerCloseButton}>
-                ✕
-              </button>
-            </div>
+      {/* Create/Edit Drawer */}
+      <Drawer
+        open={drawerOpen}
+        onClose={closeDrawer}
+        title={editingWorker ? 'Edit Worker' : 'Add Worker'}
+        subtitle={editingWorker ? 'Update worker details' : 'Add a new team member'}
+        isMobile={isMobile}
+      >
+        <div style={styles.drawerContent}>
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Full Name *</label>
+            <input
+              value={form.full_name}
+              onChange={(e) => updateForm('full_name', e.target.value)}
+              placeholder="Enter full name"
+              style={styles.formInput}
+            />
+          </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Phone</div>
-              <div style={styles.drawerValue}>{selectedWorker.phone}</div>
-            </div>
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Phone *</label>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={(e) => updateForm('phone', e.target.value)}
+              placeholder="Enter phone number"
+              style={styles.formInput}
+            />
+          </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Email</div>
-              <div style={styles.drawerValue}>{selectedWorker.email || '-'}</div>
-            </div>
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Email</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => updateForm('email', e.target.value)}
+              placeholder="Enter email address"
+              style={styles.formInput}
+            />
+          </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Status</div>
-              <div
-                style={{
-                  ...styles.statusPill,
-                  ...(selectedWorker.is_active ? styles.activePill : styles.inactivePill),
-                }}
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Role</label>
+            <input
+              value={form.role}
+              onChange={(e) => updateForm('role', e.target.value)}
+              placeholder="e.g. Technician, Plumber, Electrician"
+              style={styles.formInput}
+            />
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={form.is_active}
+                onChange={(e) => updateForm('is_active', e.target.checked)}
+                style={styles.checkbox}
+              />
+              <span>Active</span>
+            </label>
+          </div>
+
+          <div style={styles.drawerActions}>
+            <Button variant="secondary" onClick={closeDrawer}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={saveWorker} loading={saving}>
+              {editingWorker ? 'Update' : 'Create'}
+            </Button>
+          </div>
+
+          {editingWorker && (
+            <div style={styles.dangerZone}>
+              <Button
+                variant="danger"
+                onClick={() => deleteWorker(editingWorker)}
+                style={{ width: '100%' }}
               >
-                {selectedWorker.is_active ? 'Active' : 'Inactive'}
+                Delete Worker
+              </Button>
+            </div>
+          )}
+        </div>
+      </Drawer>
+
+      {/* Detail Drawer */}
+      <Drawer
+        open={detailDrawerOpen}
+        onClose={closeDetailDrawer}
+        title={selectedWorker?.full_name || ''}
+        subtitle={selectedWorker?.role || 'No role set'}
+        isMobile={isMobile}
+      >
+        {selectedWorker && (
+          <div style={styles.drawerContent}>
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>Status</div>
+              <StatusBadge status={selectedWorker.is_active ? 'ACTIVE' : 'INACTIVE'} />
+            </div>
+
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>Phone</div>
+              <div style={styles.detailValue}>{selectedWorker.phone}</div>
+            </div>
+
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>Email</div>
+              <div style={styles.detailValue}>{selectedWorker.email || 'Not set'}</div>
+            </div>
+
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>Created</div>
+              <div style={styles.detailValue}>
+                {new Date(selectedWorker.created_at).toLocaleString()}
               </div>
             </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Created</div>
-              <div style={styles.drawerValue}>
-                {new Date(selectedWorker.created_at).toLocaleDateString('en-GB', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-              </div>
-            </div>
-
-            <div style={{ ...styles.drawerSection, marginTop: '24px', borderTop: '1px solid #EFEFF1', paddingTop: '16px' }}>
-              <div style={styles.drawerLabel}>Assigned Tickets</div>
-              {loadingWorkerTickets && (
-                <div style={styles.drawerValue}>Loading tickets...</div>
-              )}
-              {!loadingWorkerTickets && workerTickets.length === 0 && (
-                <div style={styles.drawerValue}>No tickets assigned</div>
-              )}
-              {!loadingWorkerTickets && workerTickets.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+            <div style={styles.detailSection}>
+              <div style={styles.detailLabel}>Assigned Tickets</div>
+              {loadingWorkerTickets ? (
+                <div style={styles.ticketLoading}>Loading...</div>
+              ) : workerTickets.length === 0 ? (
+                <div style={styles.noTickets}>No tickets assigned</div>
+              ) : (
+                <div style={styles.ticketList}>
                   {workerTickets.map((ticket) => (
-                    <div
-                      key={ticket.id}
-                      style={{
-                        background: '#F9FAFB',
-                        border: '1px solid #E5E7EB',
-                        borderRadius: '12px',
-                        padding: '12px',
-                        fontSize: '13px',
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, marginBottom: '4px', color: '#111827' }}>
-                        #{ticket.ticket_number} - {ticket.project_code}
+                    <div key={ticket.id} style={styles.ticketItem}>
+                      <div style={styles.ticketItemMain}>
+                        <span style={styles.ticketNumber}>#{ticket.ticket_number}</span>
+                        <span style={styles.ticketProject}>{ticket.project_code}</span>
                       </div>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            ...getTicketStatusStyle(ticket.status),
-                          }}
-                        >
-                          {ticket.status}
-                        </span>
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            ...getTicketPriorityStyle(ticket.priority),
-                          }}
-                        >
-                          {ticket.priority || 'LOW'}
-                        </span>
-                      </div>
+                      <StatusBadge status={ticket.status} size="sm" />
                     </div>
                   ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => viewWorkerTickets(selectedWorker.id)}
+                  >
+                    View all assigned tickets
+                  </Button>
                 </div>
               )}
             </div>
 
             <div style={styles.drawerActions}>
-              <button
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  closeDetailDrawer()
+                  openEditDrawer(selectedWorker)
+                }}
+                style={{ flex: 1 }}
+              >
+                Edit Worker
+              </Button>
+              <Button
+                variant="primary"
                 onClick={() => viewWorkerTickets(selectedWorker.id)}
-                style={{ ...styles.primaryButton, width: '100%' }}
+                style={{ flex: 1 }}
               >
-                View Assigned Tickets
-              </button>
+                View Tickets
+              </Button>
             </div>
           </div>
-        </>
+        )}
+      </Drawer>
+
+      {/* Mobile Bottom Actions */}
+      {isMobile && (
+        <div style={styles.mobileBottomActions}>
+          <Button variant="primary" onClick={openCreateDrawer} style={{ flex: 1 }}>
+            Add Worker
+          </Button>
+        </div>
       )}
-
-      {drawerOpen && (
-        <>
-          <div style={styles.drawerOverlay} onClick={closeDrawer} />
-
-          <div
-            style={{
-              ...styles.drawer,
-              width: isMobile ? '100%' : '460px',
-            }}
-          >
-            <div style={styles.drawerHeader}>
-              <div>
-                <div style={styles.drawerTitle}>
-                  {editingWorker ? 'Edit Worker' : 'Add Worker'}
-                </div>
-                <div style={styles.drawerSubtitle}>
-                  {editingWorker
-                    ? 'Update worker details and status'
-                    : 'Create a new worker for this client'}
-                </div>
-              </div>
-
-              <button onClick={closeDrawer} style={styles.drawerCloseButton}>
-                ✕
-              </button>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Full Name</label>
-              <input
-                value={form.full_name}
-                onChange={(e) => updateForm('full_name', e.target.value)}
-                style={styles.input}
-                placeholder="Enter worker full name"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Phone</label>
-              <input
-                value={form.phone}
-                onChange={(e) => updateForm('phone', e.target.value)}
-                style={styles.input}
-                placeholder="Enter phone number"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Email</label>
-              <input
-                value={form.email}
-                onChange={(e) => updateForm('email', e.target.value)}
-                style={styles.input}
-                placeholder="Enter email"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Role</label>
-              <input
-                value={form.role}
-                onChange={(e) => updateForm('role', e.target.value)}
-                style={styles.input}
-                placeholder="Technician / Electrician / Manager..."
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Status</label>
-              <select
-                value={form.is_active ? 'ACTIVE' : 'INACTIVE'}
-                onChange={(e) => updateForm('is_active', e.target.value === 'ACTIVE')}
-                style={styles.input}
-              >
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
-            </div>
-
-            <div style={styles.drawerActions}>
-              <button onClick={saveWorker} style={styles.primaryButton}>
-                {saving ? 'Saving...' : editingWorker ? 'Save Changes' : 'Create Worker'}
-              </button>
-
-              <button onClick={closeDrawer} style={styles.secondaryButton}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </main>
+    </AppShell>
   )
 }
 
-function getTicketStatusStyle(status: string): CSSProperties {
-  switch (status) {
-    case 'NEW':
-      return { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }
-    case 'ASSIGNED':
-      return { background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }
-    case 'IN_PROGRESS':
-      return { background: '#EEF2FF', color: '#4F46E5', border: '1px solid #C7D2FE' }
-    case 'WAITING_PARTS':
-      return { background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }
-    case 'CLOSED':
-      return { background: '#ECFDF5', color: '#16A34A', border: '1px solid #BBF7D0' }
-    default:
-      return { background: '#F3F4F6', color: '#4B5563', border: '1px solid #E5E7EB' }
-  }
-}
-
-function getTicketPriorityStyle(priority?: string | null): CSSProperties {
-  switch ((priority || '').toUpperCase()) {
-    case 'URGENT':
-    case 'HIGH':
-      return { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }
-    case 'MEDIUM':
-    case 'NORMAL':
-      return { background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }
-    case 'LOW':
-      return { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }
-    default:
-      return { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }
-  }
-}
-
 const styles: Record<string, CSSProperties> = {
-  page: {
-    height: '100dvh',
-    width: '100%',
-    maxWidth: '100%',
-    overflow: 'hidden',
-    background: '#F4F4F5',
-    color: '#2F2F33',
-    fontFamily: 'Inter, Arial, Helvetica, sans-serif',
-  },
-  appShell: {
-    display: 'grid',
-    width: '100%',
-    height: '100dvh',
-    overflow: 'hidden',
-  },
-  sidebar: {
-    background: '#FFFFFF',
-    borderRight: '1px solid #E5E7EB',
-    padding: '24px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'sticky',
-    top: 0,
-    height: '100%',
-    justifyContent: 'space-between',
-    overflow: 'auto',
-  },
-  sidebarBrand: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '28px',
-  },
-  sidebarTitle: {
-    fontSize: '18px',
-    fontWeight: 800,
-    color: '#111827',
-  },
-  sidebarSubtitle: {
-    fontSize: '12px',
-    color: '#6B7280',
-  },
-  sidebarNav: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  sidebarNavItem: {
-    textAlign: 'left',
-    background: '#FFFFFF',
-    color: '#374151',
-    border: '1px solid transparent',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  sidebarNavItemActive: {
-    background: '#111827',
-    color: '#FFFFFF',
-  },
-  sidebarNavLink: {
-    textDecoration: 'none',
-    color: '#374151',
-    fontWeight: 700,
-    padding: '12px 14px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-  },
-  sidebarFooter: {
-    marginTop: 'auto',
-    fontSize: '13px',
-    color: '#6B7280',
-    padding: '12px 14px',
-  },
-  mainArea: {
+  content: {
     padding: '24px',
-    width: '100%',
-    maxWidth: '100%',
-    minWidth: 0,
-    boxSizing: 'border-box',
-    overflow: 'auto',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    height: '100%',
+    paddingBottom: '100px',
   },
-  mainAreaMobile: {
-    padding: 'calc(18px + env(safe-area-inset-top)) 14px 18px 14px',
-    overflow: 'auto',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    height: '100%',
-  },
-  topBar: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '12px',
-    marginBottom: '20px',
-    flexWrap: 'wrap',
-    rowGap: '16px',
-  },
-  titleWrap: {
-    minWidth: 0,
-  },
-  mobileTopRow: {
-    display: 'flex',
-    gap: '10px',
-    alignItems: 'flex-start',
-  },
-  backButton: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    color: '#111827',
-    textDecoration: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    flexShrink: 0,
-  },
-  topActions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  logoBox: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: 'linear-gradient(135deg, #C1121F 0%, #8F0B16 100%)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    fontSize: '18px',
-    color: '#FFFFFF',
-    boxShadow: '0 8px 20px rgba(193, 18, 31, 0.25)',
-    flexShrink: 0,
-  },
-  title: {
-    margin: 0,
-    fontSize: '36px',
-    fontWeight: 800,
-    color: '#111827',
-  },
-  titleMobile: {
-    fontSize: '28px',
-    lineHeight: 1.1,
-  },
-  subtitle: {
-    margin: '6px 0 0 0',
-    color: '#6B7280',
-    fontSize: '14px',
-  },
-  subtitleMobile: {
-    fontSize: '13px',
-  },
-  secondaryButton: {
-    padding: '10px 14px',
-    fontSize: '13px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    color: '#2F2F33',
-    cursor: 'pointer',
-    fontWeight: 700,
-    transition: 'all 0.2s ease',
-  },
-  primaryButton: {
-    padding: '10px 14px',
-    fontSize: '13px',
-    borderRadius: '12px',
-    background: '#111827',
-    border: '1px solid #111827',
-    color: '#FFFFFF',
-    cursor: 'pointer',
-    fontWeight: 700,
-    transition: 'all 0.2s ease',
-  },
-  secondaryButtonSmall: {
-    padding: '8px 10px',
-    fontSize: '12px',
-    borderRadius: '10px',
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    color: '#2F2F33',
-    cursor: 'pointer',
-    fontWeight: 700,
-    transition: 'all 0.2s ease',
-  },
-  dangerButtonSmall: {
-    padding: '8px 10px',
-    fontSize: '12px',
-    borderRadius: '10px',
-    background: '#FEF2F2',
-    border: '1px solid #FECACA',
-    color: '#B91C1C',
-    cursor: 'pointer',
-    fontWeight: 700,
-  },
-  toast: {
-    position: 'fixed',
-    top: 14,
-    left: '50%',
-    transform: 'translateX(-50%)',
-    background: '#111827',
-    color: '#FFFFFF',
-    padding: '10px 14px',
-    borderRadius: '999px',
-    zIndex: 100,
-    fontSize: '13px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-  },
-  statsGrid: {
+  kpiGrid: {
     display: 'grid',
-    gap: '14px',
-    marginBottom: '18px',
-    width: '100%',
-  },
-  statCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E7EB',
-    borderRadius: '18px',
-    padding: '20px',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
-    minHeight: '110px',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-  },
-  statCardFullWidthMobile: {
-    gridColumn: '1 / -1',
-  },
-  statLabel: {
-    color: '#6B7280',
-    fontSize: '14px',
-    marginBottom: '12px',
-    fontWeight: 600,
-  },
-  statValue: {
-    fontSize: '42px',
-    fontWeight: 800,
-    lineHeight: 1,
-    color: '#111827',
-  },
-  card: {
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    borderRadius: '20px',
-    padding: '18px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '18px',
-    gap: '12px',
-    flexWrap: 'wrap',
-  },
-  cardTitle: {
-    fontSize: '20px',
-    fontWeight: 800,
-    marginBottom: '4px',
-    color: '#2F2F33',
-  },
-  cardSubtitle: {
-    fontSize: '13px',
-    color: '#6B6B72',
+    gap: '16px',
+    marginBottom: '24px',
   },
   filtersRow: {
     display: 'flex',
-    gap: '10px',
-    marginBottom: '16px',
-    width: '100%',
-  },
-  searchInput: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '12px',
-    border: '1px solid #D7D7DB',
-    background: '#FFFFFF',
-    color: '#2F2F33',
-    outline: 'none',
-    fontSize: '14px',
-    boxSizing: 'border-box',
-    minHeight: '44px',
-    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '12px',
+    padding: '16px 20px',
+    borderBottom: `1px solid ${theme.colors.border}`,
     alignItems: 'center',
   },
   filterSelect: {
-    width: '190px',
-    padding: '12px',
-    borderRadius: '12px',
-    border: '1px solid #D7D7DB',
-    background: '#FFFFFF',
-    color: '#2F2F33',
-    outline: 'none',
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.md,
+    padding: '10px 14px',
     fontSize: '14px',
-    boxSizing: 'border-box',
-    minHeight: '44px',
+    color: theme.colors.textPrimary,
+    outline: 'none',
+    cursor: 'pointer',
+    minWidth: '140px',
+  },
+  loadingState: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
+    padding: '48px 20px',
+    color: theme.colors.textMuted,
+    fontSize: '14px',
+  },
+  loadingSpinner: {
+    width: '20px',
+    height: '20px',
+    border: `2px solid ${theme.colors.border}`,
+    borderTopColor: theme.colors.accent,
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  errorState: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '16px',
+    padding: '48px 20px',
+    color: theme.colors.error,
+    fontSize: '14px',
   },
   workerGrid: {
     display: 'grid',
-    gap: '14px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gap: '16px',
+    padding: '20px',
   },
   workerCard: {
-    background: '#FAFAFA',
-    border: '1px solid #E5E7EB',
-    borderRadius: '18px',
-    padding: '16px',
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.lg,
+    padding: '20px',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
   },
-  workerTopRow: {
+  workerCardHeader: {
     display: 'flex',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: '12px',
-    alignItems: 'flex-start',
-    marginBottom: '12px',
+    marginBottom: '16px',
+  },
+  workerAvatar: {
+    width: '44px',
+    height: '44px',
+    borderRadius: '50%',
+    background: `linear-gradient(135deg, ${theme.colors.accent} 0%, #d97706 100%)`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: theme.colors.textInverse,
+    fontWeight: 600,
+    fontSize: '18px',
+    flexShrink: 0,
+  },
+  workerInfo: {
+    flex: 1,
+    minWidth: 0,
   },
   workerName: {
-    fontSize: '18px',
-    fontWeight: 800,
-    color: '#111827',
-    marginBottom: '4px',
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+    marginBottom: '2px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   workerRole: {
     fontSize: '13px',
-    color: '#6B7280',
+    color: theme.colors.textMuted,
   },
-  statusPill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '6px 10px',
-    borderRadius: '999px',
-    fontSize: '11px',
-    fontWeight: 700,
-    whiteSpace: 'nowrap',
-  },
-  activePill: {
-    background: '#DCFCE7',
-    color: '#166534',
-  },
-  inactivePill: {
-    background: '#F3F4F6',
-    color: '#4B5563',
-  },
-  workerInfoBlock: {
+  workerMeta: {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
-    marginBottom: '14px',
+    marginBottom: '16px',
   },
-  workerInfoLine: {
-    fontSize: '14px',
-    color: '#374151',
-    lineHeight: 1.45,
-    wordBreak: 'break-word',
+  workerMetaItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '13px',
+    color: theme.colors.textSecondary,
   },
   workerActions: {
     display: 'flex',
     gap: '8px',
-    flexWrap: 'wrap',
-  },
-  drawerOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(47,47,51,0.35)',
-    zIndex: 50,
-  },
-  drawer: {
-    position: 'fixed',
-    top: 0,
-    right: 0,
-    maxWidth: '100%',
-    height: '100dvh',
-    background: '#FFFFFF',
-    borderLeft: '1px solid #D7D7DB',
-    zIndex: 60,
-    padding: 0,
-    boxShadow: '-10px 0 30px rgba(0,0,0,0.12)',
-    boxSizing: 'border-box',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  },
-   drawerHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '16px',
-    padding: '16px',
-    paddingTop: 'calc(16px + env(safe-area-inset-top))',
-    paddingLeft: 'calc(16px + env(safe-area-inset-left))',
-    paddingRight: 'calc(16px + env(safe-area-inset-right))',
-    background: '#FFFFFF',
-    borderBottom: '1px solid rgba(15,23,42,0.06)',
-    flex: '0 0 auto',
-  },
-
-  drawerTitle: {
-    fontSize: '22px',
-    fontWeight: 800,
-    color: '#2F2F33',
-    marginBottom: '6px',
-  },
-  drawerSubtitle: {
-    color: '#6B6B72',
-    fontSize: '14px',
-  },
-  drawerCloseButton: {
-    background: '#F9F9FA',
-    color: '#2F2F33',
-    border: '1px solid #D7D7DB',
-    borderRadius: '10px',
-    width: '40px',
-    height: '40px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    flexShrink: 0,
+    paddingTop: '16px',
+    borderTop: `1px solid ${theme.colors.border}`,
   },
   drawerContent: {
-    flex: '1 1 0%',
-    minHeight: 0,
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    padding: '18px',
-    paddingTop: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
   },
   formGroup: {
-    marginBottom: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
   },
-  label: {
-    display: 'block',
-    fontSize: '12px',
-    color: '#6B7280',
-    fontWeight: 700,
-    marginBottom: '8px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+  formLabel: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: theme.colors.textSecondary,
   },
-  input: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '12px',
-    border: '1px solid #D7D7DB',
-    background: '#FFFFFF',
-    color: '#2F2F33',
-    outline: 'none',
+  formInput: {
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.md,
+    padding: '10px 14px',
     fontSize: '14px',
-    boxSizing: 'border-box',
-    minHeight: '44px',
+    color: theme.colors.textPrimary,
+    outline: 'none',
+  },
+  checkboxLabel: {
     display: 'flex',
     alignItems: 'center',
+    gap: '8px',
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
+    cursor: 'pointer',
+  },
+  checkbox: {
+    width: '18px',
+    height: '18px',
+    accentColor: theme.colors.accent,
   },
   drawerActions: {
     display: 'flex',
     gap: '10px',
-    flexWrap: 'wrap',
+    paddingTop: '12px',
+    borderTop: `1px solid ${theme.colors.border}`,
+  },
+  dangerZone: {
+    paddingTop: '20px',
+    borderTop: `1px solid ${theme.colors.border}`,
     marginTop: '8px',
   },
-  drawerSection: {
-    marginBottom: '16px',
+  detailSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
   },
-  drawerLabel: {
-    display: 'block',
+  detailLabel: {
     fontSize: '12px',
-    color: '#6B7280',
-    fontWeight: 700,
-    marginBottom: '8px',
+    fontWeight: 600,
+    color: theme.colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
-  drawerValue: {
+  detailValue: {
     fontSize: '14px',
-    color: '#2F2F33',
-    lineHeight: 1.5,
-    wordBreak: 'break-word',
+    color: theme.colors.textPrimary,
   },
-  infoText: {
-    color: '#6B7280',
-    margin: 0,
+  ticketLoading: {
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+    padding: '12px 0',
   },
-  errorText: {
-    color: '#B91C1C',
-    margin: 0,
-    fontWeight: 600,
+  noTickets: {
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+    padding: '12px 0',
+  },
+  ticketList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  ticketItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '10px 12px',
+    background: theme.colors.surfaceActive,
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+  },
+  ticketItemMain: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  ticketNumber: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: theme.colors.textPrimary,
+  },
+  ticketProject: {
+    fontSize: '12px',
+    color: theme.colors.accent,
+  },
+  mobileBottomActions: {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: '16px 20px',
+    paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
+    background: theme.colors.surface,
+    borderTop: `1px solid ${theme.colors.border}`,
+    display: 'flex',
+    gap: '10px',
   },
 }
-
