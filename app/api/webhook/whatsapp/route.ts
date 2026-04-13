@@ -872,8 +872,8 @@ export async function POST(req: NextRequest) {
       } else if (projectForNotification?.manager_phone) {
         // CURRENT CHANNEL: SMS for manager notifications
         console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket)')
-        const buildingText = buildingNumber ? `\nבניין: ${buildingNumber}` : ''
-        const smsMessage = `נכנסה תקלה חדשה במערכת.\n\nפרויקט: ${projectForNotification.name}${buildingText}\nפנייה: ${createdTicket.ticket_number}\nתיאור: ${textBody}\nמדווח: ${from}`
+        const buildingLine = buildingNumber ? `🏢 בניין: ${buildingNumber}\n` : ''
+        const smsMessage = `🚨 נפתחה תקלה חדשה\n\n📍 פרויקט: ${projectForNotification.name}\n${buildingLine}🆔 תקלה: #${createdTicket.ticket_number}\n📝 תיאור: ${textBody || 'ללא פירוט'}\n📞 מדווח: ${from}\n\n— Bamakor`
         
         const smsSent = await sendManagerSMS(projectForNotification.manager_phone, smsMessage)
         

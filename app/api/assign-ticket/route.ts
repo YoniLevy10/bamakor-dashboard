@@ -127,7 +127,7 @@ export async function POST(req: Request) {
         console.log('📱 Sending worker notification to:', worker.phone)
 
         // CURRENT CHANNEL: SMS for worker notifications
-        const smsMessage = `הוקצתה לך תקלה חדשה.\n\nפרויקט: ${projectName}\nפנייה: ${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא תיאור'}`
+          const smsMessage = `🔧 תקלה חדשה הוקצתה לך\n\n📍 פרויקט: ${projectName}\n🆔 תקלה: #${ticket.ticket_number}\n📝 תיאור: ${ticket.description || 'ללא פירוט'}\n\n— Bamakor`
         const smsSent = await sendWorkerSMS(worker.phone, smsMessage)
 
         if (smsSent) {
