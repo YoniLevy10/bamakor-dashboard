@@ -748,7 +748,7 @@ const styles: Record<string, CSSProperties> = {
     width: '20px',
     height: '20px',
     border: `2px solid ${theme.colors.border}`,
-    borderTopColor: theme.colors.accent,
+    borderTopColor: theme.colors.primary,
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
@@ -790,7 +790,7 @@ const styles: Record<string, CSSProperties> = {
   projectCode: {
     fontSize: '14px',
     fontWeight: 500,
-    color: theme.colors.accent,
+    color: theme.colors.primary,
   },
   projectMeta: {
     display: 'flex',
@@ -864,7 +864,7 @@ const styles: Record<string, CSSProperties> = {
   checkbox: {
     width: '18px',
     height: '18px',
-    accentColor: theme.colors.accent,
+    accentColor: theme.colors.primary,
   },
   drawerActions: {
     display: 'flex',

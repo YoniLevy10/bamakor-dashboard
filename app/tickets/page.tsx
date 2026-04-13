@@ -645,8 +645,7 @@ export default function TicketsPage() {
                           <Button
                             variant="secondary"
                             size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
+                            onClick={() => {
                               closeTicket(ticket.id)
                             }}
                             loading={actionLoadingId === ticket.id}
@@ -949,7 +948,7 @@ const styles: Record<string, CSSProperties> = {
     width: '20px',
     height: '20px',
     border: `2px solid ${theme.colors.border}`,
-    borderTopColor: theme.colors.accent,
+    borderTopColor: theme.colors.primary,
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
@@ -976,8 +975,8 @@ const styles: Record<string, CSSProperties> = {
     transition: 'background 0.15s ease',
   },
   ticketRowActive: {
-    background: theme.colors.accentMuted,
-    borderLeft: `3px solid ${theme.colors.accent}`,
+    background: theme.colors.primaryMuted,
+    borderLeft: `3px solid ${theme.colors.primary}`,
   },
   ticketRowTop: {
     display: 'flex',
@@ -1003,7 +1002,7 @@ const styles: Record<string, CSSProperties> = {
   },
   ticketProject: {
     fontSize: '13px',
-    color: theme.colors.accent,
+    color: theme.colors.primary,
     fontWeight: 500,
   },
   ticketDescription: {

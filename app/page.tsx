@@ -1312,8 +1312,8 @@ const styles: Record<string, CSSProperties> = {
     transition: 'all 0.15s ease',
   },
   projectChipActive: {
-    borderColor: theme.colors.accent,
-    background: theme.colors.accentMuted,
+    borderColor: theme.colors.primary,
+    background: theme.colors.primaryMuted,
   },
   projectChipName: {
     fontSize: '14px',
@@ -1323,7 +1323,7 @@ const styles: Record<string, CSSProperties> = {
   },
   projectChipCode: {
     fontSize: '12px',
-    color: theme.colors.accent,
+    color: theme.colors.primary,
     fontWeight: 500,
   },
   projectChipCount: {
@@ -1357,7 +1357,7 @@ const styles: Record<string, CSSProperties> = {
   qrCardCode: {
     fontSize: '14px',
     fontWeight: 600,
-    color: theme.colors.accent,
+    color: theme.colors.primary,
   },
   qrCardName: {
     fontSize: '13px',
@@ -1388,7 +1388,7 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     padding: '6px 12px',
     borderRadius: theme.radius.md,
-    background: theme.colors.accent,
+    background: theme.colors.primary,
     color: theme.colors.textInverse,
     fontSize: '13px',
     fontWeight: 500,
@@ -1414,7 +1414,7 @@ const styles: Record<string, CSSProperties> = {
     width: '20px',
     height: '20px',
     border: `2px solid ${theme.colors.border}`,
-    borderTopColor: theme.colors.accent,
+    borderTopColor: theme.colors.primary,
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
@@ -1441,8 +1441,8 @@ const styles: Record<string, CSSProperties> = {
     transition: 'background 0.15s ease',
   },
   ticketRowActive: {
-    background: theme.colors.accentMuted,
-    borderLeftColor: theme.colors.accent,
+    background: theme.colors.primaryMuted,
+    borderLeftColor: theme.colors.primary,
     borderLeftWidth: '3px',
     borderLeftStyle: 'solid',
   },
@@ -1458,7 +1458,7 @@ const styles: Record<string, CSSProperties> = {
   },
   ticketProject: {
     fontSize: '13px',
-    color: theme.colors.accent,
+    color: theme.colors.primary,
     fontWeight: 500,
   },
   ticketDescription: {
