@@ -26,7 +26,7 @@
 const SMS_019_ENDPOINT = 'https://019sms.co.il/api'
 const SMS_019_API_TOKEN = process.env.SMS_019_API_TOKEN
 const SMS_019_USERNAME = process.env.SMS_019_USERNAME
-const SMS_019_SENDER = process.env.SMS_019_SENDER || '972559899132'
+const SMS_019_SENDER = process.env.SMS_019_SENDER || '0559899132'
 
 /**
  * Normalize phone number to 019SMS format
