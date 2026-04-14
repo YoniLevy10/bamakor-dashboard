@@ -170,6 +170,27 @@ function isAddressLikeText(text: string): boolean {
   return false
 }
 
+function logWhatsAppRuntimePath(
+  tag: string,
+  params: {
+    textBody: string
+    phone_number: string
+    session: { project_id?: unknown; active_ticket_id?: unknown } | null | undefined
+  }
+) {
+  const { textBody, phone_number, session } = params
+  console.log(tag, {
+    textBody,
+    phone_number,
+    session_exists: !!session,
+    project_id: session && 'project_id' in session ? (session as { project_id?: unknown }).project_id : null,
+    active_ticket_id:
+      session && 'active_ticket_id' in session
+        ? (session as { active_ticket_id?: unknown }).active_ticket_id
+        : null,
+  })
+}
+
 // Expire temporary WhatsApp session flow state if inactive
 // Sessions without tickets expire after 20 minutes (incomplete flow)
 // Sessions with active tickets expire after 30 minutes (follow-up context)
@@ -828,6 +849,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (!session) {
+      logWhatsAppRuntimePath('NO_SESSION_PATH_ENTERED', {
+        textBody,
+        phone_number: from,
+        session: null,
+      })
+
       // STEP 2.5: PENDING SELECTION HANDLING (user replies with number 1/2/3)
       const numericSelection = isNumericSelection(textBody)
       const pendingSelection = await getPendingSelection(from, supabaseAdmin)
@@ -945,7 +972,15 @@ export async function POST(req: NextRequest) {
       // NO PENDING SELECTION:
       // Product rule: do NOT run fuzzy building search for unrelated free-text after reset.
       // Only attempt building search if the message looks like an address/building lookup.
-      if (!isAddressLikeText(textBody)) {
+      const addressLike = isAddressLikeText(textBody)
+      logWhatsAppRuntimePath('TEXT_ADDRESS_LIKE_RESULT', {
+        textBody,
+        phone_number: from,
+        session: null,
+      })
+      console.log('TEXT_ADDRESS_LIKE_RESULT_VALUE', { textBody, phone_number: from, addressLike })
+
+      if (!addressLike) {
         console.log('ℹ️ Free-text does not look address-like; sending guidance instead of searching:', textBody)
 
         const fallbackMessage =
@@ -956,6 +991,12 @@ export async function POST(req: NextRequest) {
         } catch (sendError) {
           console.error('⚠️ Failed to send no-match message:', sendError)
         }
+
+        logWhatsAppRuntimePath('GUIDANCE_FALLBACK_RETURNED', {
+          textBody,
+          phone_number: from,
+          session: null,
+        })
 
         return NextResponse.json(
           {
@@ -969,6 +1010,12 @@ export async function POST(req: NextRequest) {
       }
 
       console.log('ℹ️ Address-like text detected; attempting building search...')
+
+      logWhatsAppRuntimePath('SEARCH_PROJECTS_CALLED', {
+        textBody,
+        phone_number: from,
+        session: null,
+      })
 
       const searchResults = await searchProjectsByBuilding(textBody, supabaseAdmin)
 
@@ -1107,6 +1154,12 @@ export async function POST(req: NextRequest) {
         { status: 200 }
       )
     }
+
+    logWhatsAppRuntimePath('TICKET_CREATE_PATH_ENTERED', {
+      textBody,
+      phone_number: from,
+      session,
+    })
 
     // Product rule: never keep active_ticket_id for text follow-ups.
     // Session is only used to bridge: (project identified) -> (ticket description) -> ticket created.
