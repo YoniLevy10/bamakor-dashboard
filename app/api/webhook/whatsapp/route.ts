@@ -143,6 +143,33 @@ function isNumericSelection(text: string): number | null {
   return null
 }
 
+function isAddressLikeText(text: string): boolean {
+  const t = text.trim()
+  if (t.length < 4) return false
+
+  // If it contains digits, it's likely a street+number or building identifier.
+  if (/\d/.test(t)) return true
+
+  // Hebrew cues that usually indicate an address/building lookup.
+  // Keep this conservative to avoid "aggressive" fuzzy searching on random greetings.
+  const addressCues = [
+    'רחוב',
+    'רח׳',
+    'כתובת',
+    'בניין',
+    'בנין',
+    'דירה',
+    'קומה',
+    'כניסה',
+    'שדרה',
+    'שד׳',
+  ]
+  if (addressCues.some((cue) => t.includes(cue))) return true
+
+  // Very short generic messages (e.g. "היי", "שלום") should not trigger search.
+  return false
+}
+
 // Expire temporary WhatsApp session flow state if inactive
 // Sessions without tickets expire after 20 minutes (incomplete flow)
 // Sessions with active tickets expire after 30 minutes (follow-up context)
@@ -915,8 +942,33 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      // NO PENDING SELECTION: Do building search
-      console.log('ℹ️ No active session and no pending selection. Attempting building search...')
+      // NO PENDING SELECTION:
+      // Product rule: do NOT run fuzzy building search for unrelated free-text after reset.
+      // Only attempt building search if the message looks like an address/building lookup.
+      if (!isAddressLikeText(textBody)) {
+        console.log('ℹ️ Free-text does not look address-like; sending guidance instead of searching:', textBody)
+
+        const fallbackMessage =
+          'לא הצלחנו לזהות את הבניין.\n\n📍 כדי שנוכל לאתר אותו, כתבו את כתובת הבניין (רחוב ומספר)\n\nאו:\n1. סרקו את קוד ה-QR בבניין\n2. פנו למנהלת הבניין לקבלת קוד הגישה'
+
+        try {
+          await sendWhatsAppTextMessage(from, fallbackMessage)
+        } catch (sendError) {
+          console.error('⚠️ Failed to send no-match message:', sendError)
+        }
+
+        return NextResponse.json(
+          {
+            received: true,
+            type: 'search_no_match',
+            from,
+            reason: 'text_not_address_like',
+          },
+          { status: 200 }
+        )
+      }
+
+      console.log('ℹ️ Address-like text detected; attempting building search...')
 
       const searchResults = await searchProjectsByBuilding(textBody, supabaseAdmin)
 
