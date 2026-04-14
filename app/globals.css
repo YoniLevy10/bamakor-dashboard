@@ -1,43 +1,169 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Refined Light Theme - Original Brand Colors */
+  
+  /* Typography */
+  --font-sans: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', 'JetBrains Mono', monospace;
+  
+  /* Base Colors - Clean Light Theme */
+  --color-background: #FFFFFF;
+  --color-foreground: #111827;
+  
+  /* Surface Colors */
+  --color-surface: #FFFFFF;
+  --color-surface-elevated: #FFFFFF;
+  --color-surface-hover: #F9FAFB;
+  --color-surface-active: #F3F4F6;
+  --color-muted: #F9FAFB;
+  
+  /* Border Colors */
+  --color-border: #E5E7EB;
+  --color-border-subtle: #F3F4F6;
+  --color-border-strong: #D1D5DB;
+  
+  /* Text Colors */
+  --color-text-primary: #111827;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #6B7280;
+  --color-text-inverse: #FFFFFF;
+  
+  /* Primary - Original Brand Crimson */
+  --color-primary: #C41E3A;
+  --color-primary-hover: #A91B32;
+  --color-primary-muted: rgba(196, 30, 58, 0.1);
+  --color-primary-text: #C41E3A;
+  
+  /* Secondary */
+  --color-secondary: #F3F4F6;
+  --color-secondary-hover: #E5E7EB;
+  
+  /* Accent - Subtle brand tint */
+  --color-accent: #FEF2F2;
+  --color-accent-hover: #FEE2E2;
+  --color-accent-muted: rgba(196, 30, 58, 0.08);
+  --color-accent-text: #C41E3A;
+  
+  /* Status Colors */
+  --color-success: #059669;
+  --color-success-muted: #ECFDF5;
+  --color-warning: #D97706;
+  --color-warning-muted: #FFFBEB;
+  --color-error: #DC2626;
+  --color-error-muted: #FEF2F2;
+  --color-info: #2563EB;
+  --color-info-muted: #EFF6FF;
+  
+  /* Radius */
+  --radius: 0.5rem;
+  --radius-sm: 0.375rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: #FFFFFF;
+  --foreground: #111827;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  position: relative;
+  width: 100%;
+  background: var(--background);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
-}
-
-/* Mobile-specific optimizations */
-html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   position: relative;
   width: 100%;
+  overscroll-behavior-y: contain;
+  overscroll-behavior-x: contain;
 }
 
-body {
-  position: relative;
-  width: 100%;
+/* Smooth scrolling */
+* {
+  scroll-behavior: smooth;
+}
+
+/* Scrollbar Styling for Light Theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F9FAFB;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* Select optimization for mobile */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  padding-right: 36px;
+}
+
+/* Input optimization */
+input[type="text"],
+input[type="email"],
+input[type="tel"],
+textarea {
+  font-size: 16px;
+}
+
+/* Prevent zoom on input focus for iOS */
+@media (max-width: 767px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Optimize for touch */
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Better mobile form appearance */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.15);
 }
 
 /* Drawer animations */
@@ -83,63 +209,22 @@ body {
   }
 }
 
-/* Select optimization for mobile */
-select {
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 16px;
-  padding-right: 36px;
-}
-
-/* Input optimization */
-input[type="text"],
-input[type="email"],
-input[type="tel"],
-textarea {
-  font-size: 16px;
-  /* Prevents zoom on iOS when focusing inputs */
-}
-
-/* Prevent zoom on input focus for iOS */
-@media (max-width: 767px) {
-  input[type="text"],
-  input[type="email"],
-  input[type="tel"],
-  textarea,
-  select {
-    font-size: 16px !important;
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-/* Smooth scrolling */
-* {
-  scroll-behavior: smooth;
-}
-
-/* Prevent pull-to-refresh on mobile */
-body {
-  overscroll-behavior-y: contain;
-  overscroll-behavior-x: contain;
-}
-
-/* Optimize for touch */
-button,
-a,
-input,
-textarea,
-select {
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-/* Better mobile form appearance */
-input:focus,
-textarea:focus,
-select:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(193, 18, 31, 0.1);
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }

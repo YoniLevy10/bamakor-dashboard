@@ -4,6 +4,21 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler } from '@/lib/error-handler'
+import { 
+  AppShell, 
+  MobileHeader, 
+  MobileMenu, 
+  PageHeader, 
+  Button, 
+  theme 
+} from './components/ui'
+import { DashboardStats } from './components/dashboard/DashboardStats'
+import { ProjectFilterSection } from './components/dashboard/ProjectFilterSection'
+import { QrManagementSection } from './components/dashboard/QrManagementSection'
+import { TicketsList } from './components/tickets/TicketsList'
+import { TicketDetailDrawer } from './components/tickets/TicketDetailDrawer'
+import { AddTicketModal } from './components/tickets/AddTicketModal'
+import { ImageLightbox } from './components/shared/ImageLightbox'
 
 type TicketRow = {
   id: string
@@ -55,99 +70,6 @@ const statusOptions = ['ALL', 'NEW', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED'] as con
 const editableStatusOptions = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED'] as const
 
 const WHATSAPP_NUMBER = '972559740732'
-
-function MobileTicketCard({
-  ticket,
-  workersMap,
-  assignWorker,
-  closeTicket,
-  updateTicketStatus,
-  openTicket,
-  getStatusStyle,
-}: {
-  ticket: TicketRow
-  workersMap: Record<string, string>
-  assignWorker: (ticketId: string, workerId: string) => Promise<void>
-  closeTicket: (ticketId: string) => Promise<void>
-  updateTicketStatus: (ticketId: string, status: string) => Promise<void>
-  openTicket: (ticket: TicketRow) => void
-  getStatusStyle: (status: string) => CSSProperties
-}) {
-  return (
-    <div onClick={() => openTicket(ticket)} style={styles.mobileCard}>
-      <div style={styles.mobileCardHeader}>
-        <div style={styles.mobileCardHeaderLeft}>
-          <div style={styles.mobileCardTicketNumber}>#{ticket.ticket_number}</div>
-          <div style={styles.mobileProject}>{ticket.project_name || '-'}</div>
-          <div style={styles.mobileProjectCode}>{ticket.project_code || '-'}</div>
-        </div>
-
-        <span
-          style={{
-            ...styles.statusBadge,
-            ...getStatusStyle(ticket.status),
-          }}
-        >
-          {ticket.status}
-        </span>
-      </div>
-
-      <div style={styles.mobileDescription}>{ticket.description || '-'}</div>
-
-      <div style={styles.mobileMetaGroup}>
-        <div style={styles.mobileMeta}>📞 {ticket.reporter_phone}</div>
-        <div style={styles.mobileMeta}>🕒 {new Date(ticket.created_at).toLocaleString()}</div>
-      </div>
-
-      <div style={styles.mobileField} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.mobileFieldLabel}>Status</div>
-        <select
-          value={ticket.status}
-          onChange={(e) => updateTicketStatus(ticket.id, e.target.value)}
-          style={{
-            ...styles.select,
-            ...styles.mobileTouchSelect,
-          }}
-        >
-          {editableStatusOptions.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div style={styles.mobileField} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.mobileFieldLabel}>Worker</div>
-        <select
-          value={ticket.assigned_worker_id || ''}
-          onChange={(e) => assignWorker(ticket.id, e.target.value)}
-          style={{
-            ...styles.select,
-            ...styles.mobileTouchSelect,
-          }}
-        >
-          <option value="">Assign Worker</option>
-          {Object.entries(workersMap).map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div style={styles.mobileActions} onClick={(e) => e.stopPropagation()}>
-        {ticket.status !== 'CLOSED' ? (
-          <button onClick={() => closeTicket(ticket.id)} style={styles.closeButton}>
-            Close Ticket
-          </button>
-        ) : (
-          <span style={styles.closedText}>Done</span>
-        )}
-      </div>
-    </div>
-  )
-}
 
 export default function HomePage() {
   const [tickets, setTickets] = useState<TicketRow[]>([])
@@ -214,8 +136,6 @@ export default function HomePage() {
     setMenuOpen(false)
   }, [activeSource])
 
-
-
   useEffect(() => {
     const channel = supabase
       .channel('bamakor-live-updates')
@@ -240,23 +160,19 @@ export default function HomePage() {
       )
       .subscribe()
 
-    // Refresh on window focus for data freshness
     const handleFocus = async () => {
-      console.log('🔄 Window focus detected - refreshing data')
       await Promise.all([loadTickets(activeSource), loadAllTickets()])
       if (selectedTicket) {
         await loadTicketLogs(selectedTicket.id)
       }
     }
 
-    // Background refresh every 10 minutes to catch any missed realtime updates
     const backgroundRefreshInterval = setInterval(async () => {
-      console.log('🔄 Background refresh (10min) - keeping data fresh')
       await Promise.all([loadTickets(activeSource), loadAllTickets()])
       if (selectedTicket) {
         await loadTicketLogs(selectedTicket.id)
       }
-    }, 10 * 60 * 1000) // 10 minutes
+    }, 10 * 60 * 1000)
 
     window.addEventListener('focus', handleFocus)
 
@@ -619,18 +535,16 @@ export default function HomePage() {
     setActionLoadingId(null)
   }
 
-   function openTicket(ticket: TicketRow) {
-    console.log(`🎟️ Opening ticket: ${ticket.id}`, { ticketNumber: ticket.ticket_number, ticketId: ticket.id })
+  function openTicket(ticket: TicketRow) {
     setSelectedTicket(ticket)
     setDraftDescription(ticket.description || '')
     setDraftPhone(ticket.reporter_phone || '')
     setDraftWorkerId(ticket.assigned_worker_id || '')
-    // Note: priority is only available in tickets/page.tsx
     setDraftStatus(ticket.status)
     setSelectedTicketAttachments([])
     loadTicketAttachments(ticket.id)
+    loadTicketLogs(ticket.id)
   }
-
 
   function closeDrawer() {
     setSelectedTicket(null)
@@ -646,15 +560,11 @@ export default function HomePage() {
   async function loadTicketAttachments(ticketId: string) {
     setLoadingAttachments(true)
     try {
-      // STABILITY: Validate ticketId before query
       if (!ticketId || typeof ticketId !== 'string') {
-        console.error('❌ Cannot load attachments: ticketId is invalid', { ticketId, type: typeof ticketId })
         setSelectedTicketAttachments([])
         setLoadingAttachments(false)
         return
       }
-
-      console.log(`📥 Loading attachments for ticket: ${ticketId}`)
 
       const { data, error } = await supabase
         .from('ticket_attachments')
@@ -663,55 +573,23 @@ export default function HomePage() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('❌ Failed to load attachments from database:', {
-          ticketId,
-          error,
-          message: error?.message || 'Unknown error',
-          code: error?.code || 'NO_CODE',
-          details: error?.details || 'No details available',
-          hint: error?.hint || 'No hint available',
-        })
         setSelectedTicketAttachments([])
       } else if (!data || data.length === 0) {
-        console.log(`ℹ️ No attachments found for ticket ${ticketId}`)
         setSelectedTicketAttachments([])
       } else {
-        console.log(`📦 Found ${data.length} attachment(s) for ticket ${ticketId}`, { data })
-        
-        // Generate signed URLs for each attachment for reliable access
         const attachmentsWithUrls = await Promise.all(
           (data || []).map(async (attachment: AttachmentRow) => {
             try {
-              // STABILITY: Validate file_url before URL generation
               if (!attachment.file_url) {
-                console.error(`❌ Attachment ${attachment.id} has missing file_url - skipping URL generation`, {
-                  attachmentId: attachment.id,
-                  ticketId,
-                  reason: 'file_url is null or empty',
-                })
-                return {
-                  ...attachment,
-                  signed_url: null,
-                }
+                return { ...attachment, signed_url: null }
               }
 
-              console.log(`🔗 Generating signed URL for: ${attachment.file_name}`)
               const { data: signedUrlData } = await supabase.storage
                 .from('ticket-attachments')
-                .createSignedUrl(attachment.file_url, 3600) // Valid for 1 hour
+                .createSignedUrl(attachment.file_url, 3600)
 
-              return {
-                ...attachment,
-                signed_url: signedUrlData?.signedUrl || null,
-              }
-            } catch (urlErr) {
-              console.warn(`⚠️ Failed to generate signed URL for ${attachment.file_name}:`, {
-                attachmentId: attachment.id,
-                filePath: attachment.file_url,
-                reason: urlErr instanceof Error ? urlErr.message : String(urlErr),
-                action: 'Falling back to public URL',
-              })
-              // Fallback to public URL if signed URL fails
+              return { ...attachment, signed_url: signedUrlData?.signedUrl || null }
+            } catch {
               return {
                 ...attachment,
                 signed_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_url}`,
@@ -721,13 +599,8 @@ export default function HomePage() {
         )
 
         setSelectedTicketAttachments(attachmentsWithUrls)
-        console.log(`✅ Loaded ${attachmentsWithUrls.length} attachment(s) with URLs`)
       }
-    } catch (err) {
-      console.error('❌ Unexpected error loading attachments:', {
-        ticketId,
-        error: err instanceof Error ? err.message : String(err),
-      })
+    } catch {
       setSelectedTicketAttachments([])
     } finally {
       setLoadingAttachments(false)
@@ -735,11 +608,9 @@ export default function HomePage() {
   }
 
   function getImageUrl(attachment: AttachmentRow): string {
-    // Use signed URL if available (most reliable)
     if (attachment.signed_url) {
       return attachment.signed_url
     }
-    // Fallback to public URL
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jsliqlmjksintyigkulq.supabase.co'
     return `${supabaseUrl}/storage/v1/object/public/ticket-attachments/${attachment.file_url}`
   }
@@ -852,43 +723,6 @@ export default function HomePage() {
     })
   }, [tickets, searchTerm, statusFilter, activeKpi, selectedProjectCode])
 
-  function getStatusStyle(status: string): CSSProperties {
-    switch (status) {
-      case 'NEW':
-        return { background: '#FEF08A', color: '#713F12', borderColor: '#FBBF24' }
-      case 'ASSIGNED':
-        return { background: '#FECACA', color: '#7F1D1D', borderColor: '#F87171' }
-      case 'IN_PROGRESS':
-        return { background: '#BFDBFE', color: '#1E40AF', borderColor: '#60A5FA' }
-      case 'CLOSED':
-        return { background: '#BBF7D0', color: '#065F46', borderColor: '#6EE7B7' }
-      default:
-        return { background: '#E5E7EB', color: '#374151', borderColor: '#D1D5DB' }
-    }
-  }
-
-  function getRowStyle(status: string, ticketId: string): CSSProperties {
-    const base =
-      status === 'NEW'
-        ? { background: '#FFFFFF' }
-        : status === 'ASSIGNED'
-        ? { background: '#FFF7F7' }
-        : status === 'IN_PROGRESS'
-        ? { background: '#F7FAFF' }
-        : status === 'CLOSED'
-        ? { background: '#F6FDF9' }
-        : { background: '#FFFFFF' }
-
-    if (selectedTicket?.id === ticketId) {
-      return {
-        ...base,
-        boxShadow: 'inset 4px 0 0 #C1121F',
-      }
-    }
-
-    return base
-  }
-
   function formatLogTitle(actionType: string) {
     switch (actionType) {
       case 'TICKET_CREATED':
@@ -915,8 +749,7 @@ export default function HomePage() {
 
   async function handleCreateTicket(e: React.FormEvent) {
     e.preventDefault()
-    
-    // Validation
+
     if (!addTicketForm.project_code) {
       setAddTicketError('Please select a project')
       return
@@ -952,16 +785,14 @@ export default function HomePage() {
       }
 
       const result = await response.json()
-      
-      // Check if ticket was created but images failed
+
       if (result.imageUploadWarning) {
         toast.success(`Ticket #${result.ticketNumber} created successfully`)
         toast.error(result.imageUploadWarning)
       } else {
         toast.success(`Ticket #${result.ticketNumber} created successfully`)
       }
-      
-      // Reset form and close modal
+
       setAddTicketForm({
         project_code: '',
         description: '',
@@ -969,8 +800,7 @@ export default function HomePage() {
         reporter_phone: '',
       })
       setShowAddTicketModal(false)
-      
-      // Refresh ticket list
+
       await refreshData()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create ticket'
@@ -982,1973 +812,163 @@ export default function HomePage() {
   }
 
   return (
-    <main style={styles.page}>
-      <div
-        style={{
-          ...styles.appShell,
-          gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
-        }}
-      >
+    <AppShell isMobile={isMobile}>
+      {isMobile && (
+        <MobileHeader
+          title="Dashboard"
+          subtitle="Welcome back"
+          onMenuClick={() => setMenuOpen(true)}
+        />
+      )}
+
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+      <div style={styles.content}>
         {!isMobile && (
-          <aside style={styles.sidebar}>
-            <div style={styles.sidebarBrand}>
-              <div style={styles.logoBox}>B</div>
-              <div>
-                <div style={styles.sidebarTitle}>Bamakor</div>
-                <div style={styles.sidebarSubtitle}>Maintenance SaaS</div>
-              </div>
-            </div>
-
-            <nav style={styles.sidebarNav}>
-              <Link href="/" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Dashboard</Link>
-              <Link href="/tickets" style={styles.sidebarNavLink}>Tickets</Link>
-              <Link href="/projects" style={styles.sidebarNavLink}>Projects</Link>
-              <Link href="/workers" style={styles.sidebarNavLink}>Workers</Link>
-              <Link href="/qr" style={styles.sidebarNavLink}>QR Codes</Link>
-              <a href="/summary" style={styles.sidebarNavLink}>Summary</a>
-            </nav>
-
-            <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>
-          </aside>
+          <PageHeader
+            title="Dashboard"
+            subtitle="Welcome back. Here&apos;s what&apos;s happening today."
+            actions={
+              <>
+                <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
+                  + New Ticket
+                </Button>
+                <Button variant="secondary" onClick={() => setShowQrSection((prev) => !prev)}>
+                  QR Management
+                </Button>
+                <Button variant="secondary" onClick={exportCurrentViewToCsv}>
+                  Export CSV
+                </Button>
+              </>
+            }
+          />
         )}
 
-        <div
-          style={{
-            ...styles.mainArea,
-            ...(isMobile ? styles.mainAreaMobile : {}),
-          }}
-        >
-          <div style={styles.topBar}>
-            <div style={styles.brandWrap}>
-              <div style={styles.brandRow}>
-                {isMobile && (
-                  <button
-                    onClick={() => setMenuOpen((prev) => !prev)}
-                    style={styles.hamburgerButton}
-                  >
-                    ☰
-                  </button>
-                )}
+        {/* Dashboard Stats */}
+        <DashboardStats
+          stats={stats}
+          activeKpi={activeKpi}
+          onKpiChange={setActiveKpi}
+          isMobile={isMobile}
+        />
 
-                <div>
-                  <h1
-                    style={{
-                      ...styles.title,
-                      ...(isMobile ? styles.titleMobile : {}),
-                    }}
-                  >
-                    Dashboard
-                  </h1>
-                  <p
-                    style={{
-                      ...styles.subtitle,
-                      ...(isMobile ? styles.subtitleMobile : {}),
-                    }}
-                  >
-                    Welcome back. Here&apos;s what&apos;s happening today.
-                  </p>
-                </div>
-              </div>
-            </div>
+        {/* Projects Filter */}
+        <ProjectFilterSection
+          projectCounts={projectCounts}
+          selectedProjectCode={selectedProjectCode}
+          onProjectSelect={setSelectedProjectCode}
+        />
 
-            <div style={styles.topActions}>
-              <button
-                onClick={() => setShowAddTicketModal(true)}
-                style={styles.primaryActionButton}
-              >
-                + New Ticket
-              </button>
+        {/* QR Management Section */}
+        {showQrSection && (
+          <QrManagementSection
+            projects={projects}
+            onCopyText={copyText}
+          />
+        )}
 
-              <button
-                onClick={() => setShowQrSection((prev) => !prev)}
-                style={styles.secondaryButton}
-              >
-                QR Management
-              </button>
-
-              {!isMobile && (
-                <button onClick={exportCurrentViewToCsv} style={styles.secondaryButton}>
-                  Export CSV
-                </button>
-              )}
-            </div>
-          </div>
-
-
-
-          {menuOpen && isMobile && (
-            <div style={styles.mobileMenuCard}>
-              <div style={styles.mobileMenuTitle}>Navigation</div>
-
-             <div style={styles.mobileMenuList}>
-  <Link href="/" style={{ ...styles.mobileMenuLink, ...styles.mobileMenuItemActive }}>
-    Dashboard
-  </Link>
-  <Link href="/tickets" style={styles.mobileMenuLink}>
-    Tickets
-  </Link>
-  <Link href="/projects" style={styles.mobileMenuLink}>
-    Projects
-  </Link>
-  <Link href="/workers" style={styles.mobileMenuLink}>
-    Workers
-  </Link>
-  <Link href="/qr" style={styles.mobileMenuLink}>
-    QR Codes
-  </Link>
-  <a href="/summary" style={styles.mobileMenuLink}>
-    Summary
-  </a>
-</div>
-
-            </div>
-          )}
-
-          <div
-            style={{
-              ...styles.statsGrid,
-              gridTemplateColumns: isMobile
-                ? 'repeat(2, minmax(0, 1fr))'
-                : 'repeat(4, minmax(0, 1fr))',
-            }}
-          >
-            <button
-              style={{
-                ...styles.kpiCard,
-                ...(isMobile ? styles.kpiCardMobile : {}),
-                ...(activeKpi === 'ALL' ? styles.kpiCardActive : {}),
-              }}
-              onClick={() => setActiveKpi('ALL')}
-            >
-              <div style={styles.kpiLabel}>Total Tickets</div>
-              <div
-                style={{
-                  ...styles.kpiValue,
-                  fontSize: isMobile ? '34px' : '42px',
-                }}
-              >
-                {stats.total}
-              </div>
-            </button>
-
-            <button
-              style={{
-                ...styles.kpiCard,
-                ...(isMobile ? styles.kpiCardMobile : {}),
-                ...(activeKpi === 'NEW' ? styles.kpiCardActive : {}),
-              }}
-              onClick={() => setActiveKpi('NEW')}
-            >
-              <div style={styles.kpiLabel}>Open</div>
-              <div
-                style={{
-                  ...styles.kpiValue,
-                  fontSize: isMobile ? '34px' : '42px',
-                }}
-              >
-                {stats.open}
-              </div>
-            </button>
-
-            <button
-              style={{
-                ...styles.kpiCard,
-                ...(isMobile ? styles.kpiCardMobile : {}),
-                ...(activeKpi === 'ASSIGNED' ? styles.kpiCardActive : {}),
-              }}
-              onClick={() => setActiveKpi('ASSIGNED')}
-            >
-              <div style={styles.kpiLabel}>Assigned</div>
-              <div
-                style={{
-                  ...styles.kpiValue,
-                  fontSize: isMobile ? '34px' : '42px',
-                }}
-              >
-                {stats.assigned}
-              </div>
-            </button>
-
-            <button
-              style={{
-                ...styles.kpiCard,
-                ...(isMobile ? styles.kpiCardMobile : {}),
-                ...(activeKpi === 'CLOSED' ? styles.kpiCardActive : {}),
-              }}
-              onClick={() => setActiveKpi('CLOSED')}
-            >
-              <div style={styles.kpiLabel}>Closed</div>
-              <div
-                style={{
-                  ...styles.kpiValue,
-                  fontSize: isMobile ? '34px' : '42px',
-                }}
-              >
-                {stats.closed}
-              </div>
-            </button>
-          </div>
-
-          <div
-            style={{
-              ...styles.projectSection,
-              padding: isMobile ? '14px' : '18px',
-            }}
-          >
-            <div style={styles.projectSectionHeader}>
-              <div>
-                <div style={styles.projectSectionTitle}>Projects</div>
-                <div style={styles.projectSectionSubtitle}>Scroll horizontally to browse all projects</div>
-              </div>
-
-              <button onClick={() => setSelectedProjectCode('ALL')} style={styles.secondaryButtonSmall}>
-                Show All
-              </button>
-            </div>
-
-            <div style={styles.projectScrollRow}>
-              {projectCounts.map((project) => (
-                <button
-                  key={project.id}
-                  onClick={() => setSelectedProjectCode(project.project_code)}
-                  style={{
-                    ...styles.projectMiniCard,
-                    ...(isMobile ? styles.projectMiniCardMobile : {}),
-                    ...(selectedProjectCode === project.project_code
-                      ? styles.projectMiniCardActive
-                      : {}),
-                  }}
-                >
-                  <div style={styles.projectMiniName}>{project.name}</div>
-                  <div style={styles.projectMiniCode}>{project.project_code}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {showQrSection && (
-            <div style={styles.qrSectionCard}>
-              <div style={styles.qrSectionHeader}>
-                <div>
-                  <div style={styles.cardTitle}>QR Management</div>
-                  <div style={styles.cardSubtitle}>
-                    Copy project links and generate QR codes from each WhatsApp link
-                  </div>
-                </div>
-              </div>
-
-              <div style={styles.qrGrid}>
-                {projects.map((project) => {
-                  const startCode = `START_${project.project_code}`
-                  const whatsappLink = buildWhatsappLink(project.project_code)
-
-                  return (
-                    <div key={project.id} style={styles.qrProjectCard}>
-                      <div style={styles.qrProjectCode}>{project.project_code}</div>
-                      <div style={styles.qrProjectName}>{project.name}</div>
-
-                      <div style={styles.qrMetaBlock}>
-                        <div style={styles.qrMetaLabel}>Start Code</div>
-                        <div style={styles.qrMetaValue}>{startCode}</div>
-                      </div>
-
-                      <div style={styles.qrMetaBlock}>
-                        <div style={styles.qrMetaLabel}>WhatsApp Link</div>
-                        <div style={styles.qrLinkText}>{whatsappLink}</div>
-                      </div>
-
-                      <div style={styles.qrActions}>
-                        <button
-                          onClick={() => copyText(startCode, 'Code copied')}
-                          style={styles.secondaryButtonSmall}
-                        >
-                          Copy Code
-                        </button>
-
-                        <button
-                          onClick={() => copyText(whatsappLink, 'Link copied')}
-                          style={styles.secondaryButtonSmall}
-                        >
-                          Copy Link
-                        </button>
-
-                        <a
-                          href={whatsappLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={styles.linkButton}
-                        >
-                          Open Link
-                        </a>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          <div style={styles.card}>
-            <div style={styles.cardHeader}>
-              <div>
-                <div style={styles.cardTitle}>All Tickets</div>
-                <div style={styles.cardSubtitle}>
-                  Live operational view connected to Supabase
-                </div>
-              </div>
-
-              <button onClick={resetAllFilters} style={styles.secondaryButtonSmall}>
-                Reset Filters
-              </button>
-            </div>
-
-            <div
-              style={{
-                ...styles.filtersRow,
-                flexDirection: isMobile ? 'column' : 'row',
-              }}
-            >
-              <input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by phone, description or project..."
-                style={styles.searchInput}
-              />
-
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={{
-                  ...styles.filterSelect,
-                  width: isMobile ? '100%' : '180px',
-                }}
-              >
-                {statusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {loading && <p style={styles.infoText}>Loading tickets...</p>}
-            {error && <p style={styles.errorText}>{error}</p>}
-
-            {!loading && !error && filteredTickets.length === 0 && (
-              <p style={styles.infoText}>No tickets found.</p>
-            )}
-
-            {!loading && !error && filteredTickets.length > 0 && (
-              isMobile ? (
-                <div>
-                  {filteredTickets.map((ticket) => (
-                    <MobileTicketCard
-                      key={ticket.id}
-                      ticket={ticket}
-                      workersMap={workersMap}
-                      assignWorker={assignWorker}
-                      closeTicket={closeTicket}
-                      updateTicketStatus={updateTicketStatus}
-                      openTicket={openTicket}
-                      getStatusStyle={getStatusStyle}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div style={styles.tableWrapper}>
-                  <table style={styles.table}>
-                    <thead>
-                      <tr>
-                        <th style={styles.th}>Ticket #</th>
-                        <th style={styles.th}>Project</th>
-                        <th style={styles.th}>Phone</th>
-                        <th style={styles.th}>Description</th>
-                        <th style={styles.th}>Status</th>
-                        <th style={styles.th}>Worker</th>
-                        <th style={styles.th}>Created</th>
-                        <th style={styles.th}>Closed</th>
-                        <th style={styles.th}>Actions</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {filteredTickets.map((ticket) => (
-                        <tr
-                          key={ticket.id}
-                          style={{
-                            ...styles.clickableRow,
-                            ...getRowStyle(ticket.status, ticket.id),
-                          }}
-                          onClick={() => openTicket(ticket)}
-                        >
-                          <td style={styles.td}>{ticket.ticket_number}</td>
-
-                          <td style={styles.td}>
-                            <div style={styles.projectCell}>
-                              <div style={styles.projectNameMain}>
-                                {ticket.project_name || '-'}
-                              </div>
-                              <div style={styles.projectCode}>{ticket.project_code || '-'}</div>
-                            </div>
-                          </td>
-
-                          <td style={styles.td}>{ticket.reporter_phone}</td>
-
-                          <td style={styles.td}>
-                            <div style={styles.descriptionCell}>
-                              {ticket.description || '-'}
-                            </div>
-                          </td>
-
-                          <td style={styles.td} onClick={(e) => e.stopPropagation()}>
-                            <select
-                              value={ticket.status}
-                              onChange={(e) => updateTicketStatus(ticket.id, e.target.value)}
-                              style={styles.select}
-                            >
-                              {editableStatusOptions.map((status) => (
-                                <option key={status} value={status}>
-                                  {status}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-
-                          <td style={styles.td} onClick={(e) => e.stopPropagation()}>
-                            <select
-                              value={ticket.assigned_worker_id || ''}
-                              onChange={(e) => assignWorker(ticket.id, e.target.value)}
-                              style={styles.select}
-                            >
-                              <option value="">Assign</option>
-                              {Object.entries(workersMap).map(([id, name]) => (
-                                <option key={id} value={id}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-
-                          <td style={styles.td}>
-                            {new Date(ticket.created_at).toLocaleString()}
-                          </td>
-
-                          <td style={styles.td}>
-                            {ticket.closed_at
-                              ? new Date(ticket.closed_at).toLocaleString()
-                              : '-'}
-                          </td>
-
-                          <td style={styles.td}>
-                            {ticket.status !== 'CLOSED' ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  closeTicket(ticket.id)
-                                }}
-                                style={styles.closeButton}
-                              >
-                                Close
-                              </button>
-                            ) : (
-                              <span style={styles.closedText}>Done</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
-            )}
-          </div>
-        </div>
+        {/* Tickets List */}
+        <TicketsList
+          tickets={tickets}
+          filteredTickets={filteredTickets}
+          loading={loading}
+          error={error}
+          searchTerm={searchTerm}
+          statusFilter={statusFilter}
+          onSearchChange={setSearchTerm}
+          onStatusFilterChange={setStatusFilter}
+          onTicketClick={openTicket}
+          onCreateClick={() => setShowAddTicketModal(true)}
+          onRetry={() => loadTickets(activeSource)}
+          selectedTicketId={selectedTicket?.id}
+          workersMap={workersMap}
+          isMobile={isMobile}
+        />
       </div>
 
-      {showAddTicketModal && (
-        <>
-          <div style={styles.modalOverlay} onClick={() => setShowAddTicketModal(false)} />
-          <div style={styles.addTicketModal}>
-            <div style={styles.addTicketModalHeader}>
-              <h3 style={styles.addTicketModalTitle}>Create New Ticket</h3>
-              <button
-                onClick={() => setShowAddTicketModal(false)}
-                style={styles.addTicketModalClose}
-              >
-                ✕
-              </button>
-            </div>
+      {/* Ticket Detail Drawer */}
+      <TicketDetailDrawer
+        selectedTicket={selectedTicket}
+        isMobile={isMobile}
+        draftDescription={draftDescription}
+        draftWorkerId={draftWorkerId}
+        draftStatus={draftStatus}
+        selectedTicketAttachments={selectedTicketAttachments}
+        ticketLogs={ticketLogs}
+        drawerLoading={drawerLoading}
+        savingTicket={savingTicket}
+        workersMap={workersMap}
+        onClose={closeDrawer}
+        onDescriptionChange={setDraftDescription}
+        onWorkerChange={setDraftWorkerId}
+        onStatusChange={setDraftStatus}
+        onSave={saveSelectedTicket}
+        onSelectImage={setSelectedImageUrl}
+        onCloseTicket={() => closeTicket(selectedTicket?.id || '')}
+        getImageUrl={getImageUrl}
+      />
 
-            <form onSubmit={handleCreateTicket} style={styles.addTicketForm}>
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Project *</label>
-                <select
-                  value={addTicketForm.project_code}
-                  onChange={(e) =>
-                    setAddTicketForm({
-                      ...addTicketForm,
-                      project_code: e.target.value,
-                    })
-                  }
-                  style={styles.formSelect}
-                >
-                  <option value="">Select a project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.project_code}>
-                      {p.project_code} - {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+      {/* Add Ticket Modal */}
+      <AddTicketModal
+        open={showAddTicketModal}
+        onClose={() => setShowAddTicketModal(false)}
+        projects={projects}
+        projectCode={addTicketForm.project_code}
+        description={addTicketForm.description}
+        reporterName={addTicketForm.reporter_name}
+        reporterPhone={addTicketForm.reporter_phone}
+        error={addTicketError}
+        loading={addingTicket}
+        onProjectCodeChange={(value) =>
+          setAddTicketForm({ ...addTicketForm, project_code: value })
+        }
+        onDescriptionChange={(value) =>
+          setAddTicketForm({ ...addTicketForm, description: value })
+        }
+        onReporterNameChange={(value) =>
+          setAddTicketForm({ ...addTicketForm, reporter_name: value })
+        }
+        onReporterPhoneChange={(value) =>
+          setAddTicketForm({ ...addTicketForm, reporter_phone: value })
+        }
+        onSubmit={handleCreateTicket}
+      />
 
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Description *</label>
-                <textarea
-                  value={addTicketForm.description}
-                  onChange={(e) =>
-                    setAddTicketForm({
-                      ...addTicketForm,
-                      description: e.target.value,
-                    })
-                  }
-                  placeholder="Enter ticket description (min 3 characters)"
-                  style={styles.formTextarea}
-                />
-              </div>
+      {/* Image Lightbox */}
+      <ImageLightbox imageUrl={selectedImageUrl} onClose={() => setSelectedImageUrl(null)} />
 
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Reporter Name</label>
-                <input
-                  type="text"
-                  value={addTicketForm.reporter_name}
-                  onChange={(e) =>
-                    setAddTicketForm({
-                      ...addTicketForm,
-                      reporter_name: e.target.value,
-                    })
-                  }
-                  placeholder="Enter reporter name"
-                  style={styles.formInput}
-                />
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Reporter Phone</label>
-                <input
-                  type="tel"
-                  value={addTicketForm.reporter_phone}
-                  onChange={(e) =>
-                    setAddTicketForm({
-                      ...addTicketForm,
-                      reporter_phone: e.target.value,
-                    })
-                  }
-                  placeholder="Enter phone number"
-                  style={styles.formInput}
-                />
-              </div>
-
-              {addTicketError && (
-                <div style={styles.formError}>{addTicketError}</div>
-              )}
-
-              <div style={styles.formActions}>
-                <button
-                  type="button"
-                  onClick={() => setShowAddTicketModal(false)}
-                  style={styles.formCancelButton}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={addingTicket}
-                  style={{
-                    ...styles.formSubmitButton,
-                    opacity: addingTicket ? 0.6 : 1,
-                    cursor: addingTicket ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {addingTicket ? 'Creating...' : 'Create Ticket'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </>
-      )}
-
-      {selectedImageUrl && (
-        <>
-          <div onClick={() => setSelectedImageUrl(null)} style={styles.imageModalOverlay} />
-          <div style={styles.imageModal}>
-            <button onClick={() => setSelectedImageUrl(null)} style={styles.imageModalClose}>
-              ✕
-            </button>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={selectedImageUrl} alt="Full view" style={styles.imageModalImg} />
-          </div>
-        </>
-      )}
-
-      {selectedTicket && (
-        <>
-          <div 
-            style={styles.drawerOverlay}
-          />
-
-          <div
-            style={{
-              ...styles.drawer,
-              ...(isMobile ? { ...styles.drawerMobile, left: 0, right: 'auto' } : {}),
-              width: isMobile ? '100vw' : '440px',
-              right: !isMobile ? 0 : 'auto',
-            }}
+      {/* Mobile Actions */}
+      {isMobile && (
+        <div style={styles.mobileBottomActions}>
+          <Button
+            variant="primary"
+            onClick={() => setShowAddTicketModal(true)}
+            style={{ flex: 1 }}
           >
-            <div style={styles.drawerHeader}>
-              <button
-                onClick={closeDrawer}
-                style={styles.drawerCloseButton}
-              >
-                {isMobile ? '←' : '✕'}
-              </button>
-              <div style={{ flex: 1 }}>
-                <div style={styles.drawerTitle}>
-                  Ticket #{selectedTicket.ticket_number}
-                </div>
-
-                <div style={styles.drawerSubtitle}>
-                  {selectedTicket.project_code} - {selectedTicket.project_name}
-                </div>
-              </div>
-            </div>
-
-            <div style={styles.drawerContentWrapper} data-drawer-content="true">
-              {/* PRIMARY: Description with high emphasis */}
-              <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
-                <div style={styles.drawerLabel}>Description</div>
-                <textarea
-                  value={draftDescription}
-                  onChange={(e) => setDraftDescription(e.target.value)}
-                  style={{...styles.drawerTextarea, ...styles.descriptionTextarea}}
-                />
-              </div>
-
-            {/* Attachments - first-class UX */}
-            <div style={styles.drawerSection}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <div style={styles.drawerLabel}>📷 Attachments</div>
-                {selectedTicketAttachments.length > 0 && (
-                  <span style={{ fontSize: '11px', background: '#FEF2F2', color: '#C1121F', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                    {selectedTicketAttachments.length}
-                  </span>
-                )}
-              </div>
-              {loadingAttachments ? (
-                <div style={{ fontSize: '13px', color: '#6B7280' }}>Loading images...</div>
-              ) : selectedTicketAttachments.length > 0 ? (
-                <div style={styles.attachmentGrid}>
-                  {selectedTicketAttachments.map((attachment: AttachmentRow) => (
-                    <button
-                      key={attachment.id}
-                      onClick={() => setSelectedImageUrl(getImageUrl(attachment))}
-                      style={styles.attachmentThumbnail}
-                      title={attachment.file_name}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={getImageUrl(attachment)}
-                        alt={attachment.file_name}
-                        style={styles.attachmentImg}
-                      />
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ fontSize: '13px', color: '#9CA3AF' }}>No images attached</div>
-              )}
-            </div>
-
-            {/* KEY ACTIONS - clear, prominent */}
-            <div style={styles.drawerActionsZone}>
-              <button 
-                onClick={saveSelectedTicket} 
-                style={styles.primaryActionButton}
-                disabled={savingTicket}
-              >
-                {savingTicket ? 'Saving...' : '💾 Save Changes'}
-              </button>
-
-              {draftStatus !== 'CLOSED' && (
-                <button
-                  onClick={() => closeTicket(selectedTicket.id)}
-                  style={styles.dangerActionButton}
-                  disabled={actionLoadingId === selectedTicket.id}
-                >
-                  {actionLoadingId === selectedTicket.id ? 'Closing...' : '✓ Close Ticket'}
-                </button>
-              )}
-            </div>
-
-            {/* QUICK ACTIONS */}
-            <div style={styles.drawerQuickActions}>
-              <button
-                onClick={() => copyText(selectedTicket.reporter_phone, 'Phone copied')}
-                style={styles.secondaryButtonSmall}
-              >
-                Copy Phone
-              </button>
-
-              {selectedTicket.project_code && (
-                <button
-                  onClick={() => copyText(selectedTicket.project_code!, 'Project code copied')}
-                  style={styles.secondaryButtonSmall}
-                >
-                  Copy Project
-                </button>
-              )}
-            </div>
-
-            {/* METADATA & CONTROLS - lighter section */}
-            <div style={styles.metadataSection}>
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Phone</div>
-                <div style={styles.drawerValue}>{selectedTicket.reporter_phone}</div>
-              </div>
-
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Status</div>
-                <select
-                  value={draftStatus}
-                  onChange={(e) => setDraftStatus(e.target.value)}
-                  style={{
-                    ...styles.select,
-                    ...(isMobile ? styles.mobileTouchSelect : {}),
-                  }}
-                >
-                  {editableStatusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Worker</div>
-                <select
-                  value={draftWorkerId}
-                  onChange={(e) => setDraftWorkerId(e.target.value)}
-                  style={{
-                    ...styles.select,
-                    ...(isMobile ? styles.mobileTouchSelect : {}),
-                  }}
-                >
-                  <option value="">Assign Worker</option>
-                  {Object.entries(workersMap).map(([id, name]) => (
-                    <option key={id} value={id}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Created</div>
-                <div style={styles.drawerValue}>
-                  {new Date(selectedTicket.created_at).toLocaleString()}
-                </div>
-              </div>
-
-              <div style={{...styles.drawerSection, borderBottom: 'none'}}>
-                <div style={styles.drawerLabel}>Closed</div>
-                <div style={styles.drawerValue}>
-                  {selectedTicket.closed_at
-                    ? new Date(selectedTicket.closed_at).toLocaleString()
-                    : '-'}
-                </div>
-              </div>
-            </div>
-
-            <div style={styles.historySection}>
-              <div style={styles.historyTitle}>History</div>
-
-              {drawerLoading && <p style={styles.infoText}>Loading history...</p>}
-
-              {!drawerLoading && ticketLogs.length === 0 && (
-                <p style={styles.infoText}>No history found.</p>
-              )}
-
-              {!drawerLoading &&
-                ticketLogs.map((log) => (
-                  <div key={log.id} style={styles.logCard}>
-                    <div style={styles.logTopRow}>
-                      <div style={styles.logAction}>
-                        {formatLogTitle(log.action_type)}
-                      </div>
-
-                      <div style={styles.logTime}>
-                        {new Date(log.created_at).toLocaleString()}
-                      </div>
-                    </div>
-
-                    {log.new_value && (
-                      <div style={styles.logContent}>{log.new_value}</div>
-                    )}
-
-                    {(log.performed_by || log.notes) && (
-                      <div style={styles.logMeta}>
-                        {log.performed_by ? `By: ${log.performed_by}` : ''}
-                        {log.performed_by && log.notes ? ' • ' : ''}
-                        {log.notes || ''}
-                      </div>
-                    )}
-                  </div>
-                ))}
-            </div>
-            </div>
-          </div>
-        </>
+            + New Ticket
+          </Button>
+        </div>
       )}
-    </main>
+    </AppShell>
   )
 }
 
 const styles: Record<string, CSSProperties> = {
-  page: {
-    minHeight: '100dvh',
-    width: '100%',
-    maxWidth: '100%',
-    overflow: 'visible',
-    background: '#F5F5F7',
-    color: '#1F2937',
-    fontFamily: 'Inter, Arial, Helvetica, sans-serif',
-    paddingTop: 'env(safe-area-inset-top)',
-    paddingBottom: 'env(safe-area-inset-bottom)',
-    paddingLeft: 'env(safe-area-inset-left)',
-    paddingRight: 'env(safe-area-inset-right)',
-  },
-  appShell: {
-    display: 'grid',
-    width: '100%',
-    minHeight: '100dvh',
-    overflow: 'visible',
-  },
-  sidebar: {
-    background: '#FFFFFF',
-    borderRight: '1px solid #E5E5E9',
-    padding: '24px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'sticky',
-    top: 0,
-    height: '100%',
-    justifyContent: 'space-between',
-    overflowY: 'auto',
-    overscrollBehavior: 'contain',
-  },
-  sidebarBrand: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '28px',
-  },
-  sidebarTitle: {
-    fontSize: '18px',
-    fontWeight: 800,
-    color: '#1F2937',
-  },
-  sidebarSubtitle: {
-    fontSize: '12px',
-    color: '#4B5563',
-  },
-  sidebarNav: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  sidebarNavItem: {
-    textAlign: 'left',
-    background: '#FFFFFF',
-    color: '#4B5563',
-    border: '1px solid #E5E5E9',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  sidebarNavItemActive: {
-    background: '#111827',
-    color: '#FFFFFF',
-  },
-  sidebarNavLink: {
-    textDecoration: 'none',
-    color: '#4B5563',
-    fontWeight: 700,
-    padding: '12px 14px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-  },
-  sidebarFooter: {
-    marginTop: 'auto',
-    fontSize: '13px',
-    color: '#9CA3AF',
-    padding: '12px 14px',
-  },
-  mainArea: {
+  content: {
     padding: '24px',
-    width: '100%',
-    maxWidth: '100%',
-    minWidth: 0,
-    boxSizing: 'border-box',
-    WebkitOverflowScrolling: 'touch',
-    paddingTop: 'calc(24px + env(safe-area-inset-top))',
-    paddingLeft: 'calc(24px + env(safe-area-inset-left))',
-    paddingRight: 'calc(24px + env(safe-area-inset-right))',
-    paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
+    paddingBottom: '100px',
   },
-  mainAreaMobile: {
-    padding: '18px 14px',
-    paddingTop: 'calc(18px + env(safe-area-inset-top))',
-    paddingLeft: 'calc(14px + env(safe-area-inset-left))',
-    paddingRight: 'calc(14px + env(safe-area-inset-right))',
-    paddingBottom: 'calc(18px + env(safe-area-inset-bottom))',
-  },
-  brandWrap: {
-    minWidth: 0,
-  },
-  topBar: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '12px',
-    marginBottom: '20px',
-    flexWrap: 'wrap',
-    rowGap: '16px',
-  },
-  topActions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-    minWidth: 0,
-    rowGap: '12px',
-  },
-  brandRow: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '10px',
-  },
-  logoBox: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: 'linear-gradient(135deg, #C1121F 0%, #8F0B16 100%)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    fontSize: '18px',
-    color: '#FFFFFF',
-    boxShadow: '0 12px 32px rgba(193, 18, 31, 0.35)',
-    flexShrink: 0,
-  },
-  title: {
-    margin: 0,
-    fontSize: '32px',
-    fontWeight: 800,
-    color: '#1F2937',
-  },
-  titleMobile: {
-    fontSize: '28px',
-    lineHeight: 1.1,
-  },
-  subtitle: {
-    margin: '6px 0 0 0',
-    color: '#4B5563',
-    fontSize: '14px',
-  },
-  subtitleMobile: {
-    fontSize: '13px',
-  },
-  hamburgerButton: {
-    width: '48px',
-    height: '48px',
-    fontSize: '20px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    color: '#1F2937',
-    cursor: 'pointer',
-    flexShrink: 0,
-    minHeight: '48px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease',
-  },
-  secondaryButton: {
-    padding: '12px 16px',
-    fontSize: '13px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D9D9E3',
-    color: '#1F2937',
-    cursor: 'pointer',
-    fontWeight: 700,
-    minHeight: '48px',
-    minWidth: '48px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease',
-  },
-  secondaryButtonSmall: {
-    padding: '10px 14px',
-    fontSize: '12px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D9D9E3',
-    color: '#1F2937',
-    cursor: 'pointer',
-    fontWeight: 700,
-    minHeight: '44px',
-    minWidth: '44px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease',
-  },
-  primarySaveButton: {
-    background: '#1F2937',
-    color: '#FFFFFF',
-    border: 'none',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    minHeight: '44px',
-    transition: 'all 0.2s ease',
-  },
-  mobileMenuCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '16px',
-    padding: '16px',
-    marginBottom: '16px',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.05)',
-  },
-  mobileMenuTitle: {
-    fontSize: '12px',
-    color: '#4B5563',
-    marginBottom: '10px',
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
-  },
-  mobileMenuList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  mobileMenuItem: {
-    width: '100%',
-    textAlign: 'left',
-    background: '#F8F8FB',
-    color: '#1F2937',
-    border: '1px solid #E5E5E9',
-    borderRadius: '12px',
-    padding: '12px 14px',
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
-  mobileMenuItemActive: {
-    background: '#C1121F',
-    color: '#FFFFFF',
-    border: '1px solid #C1121F',
-  },
-  mobileMenuLink: {
-    textDecoration: 'none',
-    background: '#F8F8FB',
-    color: '#1F2937',
-    border: '1px solid #E5E5E9',
-    borderRadius: '12px',
-    padding: '12px 14px',
-    fontWeight: 600,
-  },
-  statsGrid: {
-    display: 'grid',
-    gap: '10px',
-    marginBottom: '18px',
-    width: '100%',
-    minWidth: 0,
-  },
-  kpiCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '20px',
-    padding: '20px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-    textAlign: 'left',
-    cursor: 'pointer',
-    minWidth: 0,
-    transition: 'all 0.2s ease',
-  },
-  kpiCardMobile: {
-    padding: '12px',
-    borderRadius: '20px',
-    minHeight: '100px',
-  },
-  kpiCardActive: {
-    border: '1px solid #C1121F',
-    boxShadow: '0 12px 28px rgba(193, 18, 31, 0.12)',
-  },
-  kpiLabel: {
-    color: '#4B5563',
-    fontSize: '13px',
-    marginBottom: '12px',
-    fontWeight: 600,
-  },
-  kpiValue: {
-    fontSize: '42px',
-    fontWeight: 800,
-    lineHeight: 1,
-    color: '#1F2937',
-    wordBreak: 'break-word',
-  },
-  projectSection: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '20px',
-    padding: '20px',
-    marginBottom: '18px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-    width: '100%',
-    minWidth: 0,
-    boxSizing: 'border-box',
-  },
-  projectSectionHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '12px',
-    flexWrap: 'wrap',
-    marginBottom: '14px',
-  },
-  projectSectionTitle: {
-    fontSize: '20px',
-    fontWeight: 800,
-    color: '#1F2937',
-    marginBottom: '4px',
-  },
-  projectSectionSubtitle: {
-    fontSize: '13px',
-    color: '#4B5563',
-  },
-  projectScrollRow: {
-    display: 'flex',
-    gap: '12px',
-    overflowX: 'auto',
-    paddingBottom: '8px',
-    width: '100%',
-    minWidth: 0,
-    scrollBehavior: 'smooth',
-    WebkitOverflowScrolling: 'touch',
-  },
-  projectMiniCard: {
-    minWidth: '180px',
-    background: '#F8F8FB',
-    border: '1px solid #E5E5E9',
-    borderRadius: '16px',
-    padding: '14px',
-    textAlign: 'left',
-    cursor: 'pointer',
-    flexShrink: 0,
-    transition: 'all 0.2s ease',
-  },
-  projectMiniCardMobile: {
-    minWidth: '140px',
-    padding: '10px',
-  },
-  projectMiniCardActive: {
-    border: '1px solid #C1121F',
-    background: '#FEF2F2',
-  },
-  projectMiniName: {
-    fontSize: '14px',
-    fontWeight: 800,
-    color: '#1F2937',
-    marginBottom: '6px',
-    lineHeight: 1.35,
-  },
-  projectMiniCode: {
-    fontSize: '13px',
-    fontWeight: 700,
-    color: '#C1121F',
-  },
-  qrSectionCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '20px',
-    padding: '20px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-    marginBottom: '20px',
-  },
-  qrSectionHeader: {
-    marginBottom: '18px',
-  },
-  qrGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-    gap: '14px',
-  },
-  qrProjectCard: {
-    background: '#F8F8FB',
-    border: '1px solid #E5E5E9',
-    borderRadius: '16px',
-    padding: '16px',
-  },
-  qrProjectCode: {
-    color: '#C1121F',
-    fontWeight: 800,
-    fontSize: '13px',
-    marginBottom: '6px',
-  },
-  qrProjectName: {
-    color: '#1F2937',
-    fontWeight: 800,
-    fontSize: '18px',
-    marginBottom: '16px',
-  },
-  qrMetaBlock: {
-    marginBottom: '12px',
-  },
-  qrMetaLabel: {
-    color: '#4B5563',
-    fontSize: '12px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    marginBottom: '6px',
-  },
-  qrMetaValue: {
-    color: '#1F2937',
-    fontSize: '14px',
-    wordBreak: 'break-word',
-  },
-  qrLinkText: {
-    color: '#4B5563',
-    fontSize: '13px',
-    lineHeight: 1.45,
-    wordBreak: 'break-word',
-  },
-  qrActions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-    marginTop: '14px',
-  },
-  linkButton: {
-    background: '#2F2F33',
-    color: '#FFFFFF',
-    borderRadius: '12px',
-    padding: '10px 14px',
-    textDecoration: 'none',
-    fontWeight: 700,
-    fontSize: '13px',
-    display: 'inline-flex',
-    alignItems: 'center',
-    transition: 'all 0.2s ease',
-  },
-  card: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '20px',
-    padding: '20px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-    width: '100%',
-    minWidth: 0,
-    boxSizing: 'border-box',
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '18px',
-    gap: '12px',
-    flexWrap: 'wrap',
-  },
-  cardTitle: {
-    fontSize: '20px',
-    fontWeight: 800,
-    marginBottom: '4px',
-    color: '#1F2937',
-  },
-  cardSubtitle: {
-    fontSize: '13px',
-    color: '#4B5563',
-  },
-  filtersRow: {
-    display: 'flex',
-    gap: '10px',
-    marginBottom: '16px',
-    width: '100%',
-    minWidth: 0,
-    flexWrap: 'wrap',
-    rowGap: '12px',
-  },
-  searchInput: {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    border: '1px solid #D9D9E3',
-    background: '#FFFFFF',
-    color: '#1F2937',
-    outline: 'none',
-    fontSize: '14px',
-    boxSizing: 'border-box',
-    minHeight: '44px',
-  },
-  filterSelect: {
-    width: '180px',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    border: '1px solid #D9D9E3',
-    background: '#FFFFFF',
-    color: '#1F2937',
-    outline: 'none',
-    fontSize: '14px',
-    boxSizing: 'border-box',
-  },
-  tableWrapper: {
-    overflowX: 'auto',
-    borderRadius: '16px',
-  },
-  table: {
-    minWidth: '1100px',
-    width: '100%',
-    borderCollapse: 'collapse',
-  },
-  th: {
-    textAlign: 'left',
-    padding: '16px 12px',
-    borderBottom: '1px solid #D9D9E3',
-    color: '#4B5563',
-    fontSize: '12px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    whiteSpace: 'nowrap',
-    background: '#F8F8FB',
-    fontWeight: 700,
-  },
-  td: {
-    padding: '16px 12px',
-    borderBottom: '1px solid #E5E5E9',
-    color: '#1F2937',
-    fontSize: '14px',
-    verticalAlign: 'top',
-  },
-  clickableRow: {
-    cursor: 'pointer',
-    transition: 'background 0.2s ease',
-  },
-  projectCell: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  projectCode: {
-    fontSize: '12px',
-    color: '#C1121F',
-    fontWeight: 800,
-  },
-  projectNameMain: {
-    fontSize: '14px',
-    color: '#1F2937',
-    fontWeight: 700,
-  },
-  descriptionCell: {
-    maxWidth: '340px',
-    lineHeight: 1.45,
-    color: '#1F2937',
-    wordBreak: 'break-word',
-  },
-  statusBadge: {
-    display: 'inline-block',
-    padding: '6px 10px',
-    borderRadius: '999px',
-    fontSize: '11px',
-    fontWeight: 700,
-    whiteSpace: 'nowrap',
-    border: '1px solid',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-  },
-  select: {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    color: '#1F2937',
-    border: '1px solid #D9D9E3',
-    outline: 'none',
-    minWidth: '150px',
-    boxSizing: 'border-box',
-    minHeight: '44px',
-  },
-  mobileTouchSelect: {
-    minHeight: '44px',
-  },
-  closeButton: {
-    background: '#C1121F',
-    color: '#FFFFFF',
-    border: 'none',
-    padding: '10px 14px',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    minHeight: '44px',
-    minWidth: '44px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 6px 18px rgba(193, 18, 31, 0.18)',
-    transition: 'all 0.2s ease',
-  },
-  closedText: {
-    color: '#166534',
-    fontWeight: 700,
-    fontSize: '13px',
-  },
-  mobileCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '20px',
-    padding: '16px',
-    marginBottom: '12px',
-    cursor: 'pointer',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.05)',
-    transition: 'all 0.2s ease',
-  },
-  mobileCardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '12px',
-    marginBottom: '12px',
-  },
-  mobileCardHeaderLeft: {
-    minWidth: 0,
-    flex: 1,
-  },
-  mobileCardTicketNumber: {
-    fontSize: '16px',
-    fontWeight: 800,
-    color: '#1F2937',
-    lineHeight: 1.2,
-  },
-  mobileAttachmentBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    backgroundColor: '#FEF2F2',
-    color: '#C1121F',
-    padding: '4px 8px',
-    borderRadius: '6px',
-    fontSize: '11px',
-    fontWeight: 700,
-    marginTop: '4px',
-  },
-  mobileProject: {
-    marginTop: '6px',
-    color: '#4B5563',
-    fontSize: '13px',
-    fontWeight: 600,
-    lineHeight: 1.35,
-  },
-  mobileProjectCode: {
-    marginTop: '4px',
-    color: '#C1121F',
-    fontSize: '12px',
-    fontWeight: 800,
-  },
-  mobileDescription: {
-    marginTop: '10px',
-    color: '#1F2937',
-    lineHeight: 1.5,
-    fontWeight: '500',
-  },
-  mobileMetaGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    marginTop: '12px',
-  },
-  mobileMeta: {
-    fontSize: '13px',
-    color: '#4B5563',
-  },
-  mobileField: {
-    marginTop: '14px',
-  },
-  mobileFieldLabel: {
-    marginBottom: '6px',
-    fontSize: '12px',
-    color: '#4B5563',
-    fontWeight: 700,
-  },
-  mobileActions: {
-    marginTop: '14px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-  },
-  drawerOverlay: {
+  mobileBottomActions: {
     position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.25)',
-    zIndex: 50,
-    pointerEvents: 'none',
-  },
-  drawer: {
-    position: 'fixed',
-    top: 0,
-    right: 0,
-    width: '440px',
-    maxWidth: '100%',
-    height: '100dvh',
-    background: '#FFFFFF',
-    borderLeft: '1px solid #E5E5E9',
-    zIndex: 60,
-    padding: '20px',
-    paddingTop: 'calc(20px + env(safe-area-inset-top))',
-    paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
-    paddingLeft: 'calc(20px + env(safe-area-inset-left))',
-    paddingRight: 'calc(20px + env(safe-area-inset-right))',
-    boxShadow: '-12px 0 40px rgba(0,0,0,0.08)',
-    boxSizing: 'border-box',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    animation: 'slideInRight 0.3s ease-out',
-  },
-  drawerMobile: {
-    width: '100%',
-    left: 0,
-    right: 'auto',
-    height: '100dvh',
-    borderLeft: 'none',
-    boxShadow: 'none',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  },
-  drawerHeader: {
-    background: '#FFFFFF',
-    paddingTop: '4px',
-    paddingBottom: '12px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '16px',
-    marginBottom: '18px',
-    borderBottom: '1px solid #E5E5E9',
-    paddingLeft: 'calc(16px + env(safe-area-inset-left))',
-    paddingRight: 'calc(16px + env(safe-area-inset-right))',
-    flex: '0 0 auto',
-    zIndex: 40,
-    position: 'sticky',
-    top: 0,
-  },
-  drawerContentWrapper: {
-    flex: '1 1 0%',
-    minHeight: 0,
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    paddingLeft: 'calc(16px + env(safe-area-inset-left))',
-    paddingRight: 'calc(16px + env(safe-area-inset-right))',
-    paddingBottom: 'calc(120px + env(safe-area-inset-bottom))',
-  },
-  drawerTitle: {
-    fontSize: '24px',
-    fontWeight: 800,
-    color: '#1F2937',
-    marginBottom: '6px',
-    lineHeight: 1.2,
-  },
-  drawerSubtitle: {
-    color: '#4B5563',
-    fontSize: '14px',
-    fontWeight: '500',
-  },
-  drawerCloseButton: {
-    background: '#F8F8FB',
-    color: '#1F2937',
-    border: '1px solid #E5E5E9',
-    borderRadius: '12px',
-    width: '44px',
-    height: '44px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    flexShrink: 0,
-    minHeight: '44px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease',
-  },
-  drawerSection: {
-    marginBottom: '18px',
-    paddingBottom: '16px',
-    borderBottom: '1px solid #E5E5E9',
-  },
-  drawerLabel: {
-    color: '#4B5563',
-    fontSize: '11px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom: '10px',
-    fontWeight: 700,
-  },
-  drawerValue: {
-    color: '#1F2937',
-    fontSize: '15px',
-    lineHeight: 1.6,
-    fontWeight: '500',
-  },
-  drawerTextarea: {
-    width: '100%',
-    minHeight: '120px',
-    resize: 'vertical',
-    background: '#FFFFFF',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    border: '1px solid #D9D9E3',
-    color: '#1F2937',
-    lineHeight: 1.6,
-    fontSize: '14px',
-    outline: 'none',
-    fontFamily: 'Inter, Arial, Helvetica, sans-serif',
-    boxSizing: 'border-box',
-  },
-  descriptionTextarea: {
-    minHeight: '140px !important',
-    fontSize: '15px !important',
-    fontWeight: '500 !important',
-    lineHeight: '1.7 !important',
-  },
-  descriptionSection: {
-    marginBottom: '20px !important',
-    paddingBottom: '20px !important',
-    borderBottom: '2px solid rgba(193, 18, 31, 0.15) !important',
-  },
-  drawerActionsZone: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    marginBottom: '24px',
-    paddingBottom: '24px',
-    borderBottom: '1px solid #E5E5E9',
-  },
-  primaryActionButton: {
-    background: '#C1121F',
-    color: '#FFFFFF',
-    border: 'none',
-    padding: '14px 16px',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    fontSize: '15px',
-    minHeight: '48px',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 8px 20px rgba(193, 18, 31, 0.25)',
-  },
-  dangerActionButton: {
-    background: '#C1121F',
-    color: '#FFFFFF',
-    border: 'none',
-    padding: '14px 16px',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    fontSize: '15px',
-    minHeight: '48px',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 4px 12px rgba(193, 18, 31, 0.2)',
-  },
-  metadataSection: {
-    background: '#F8F8FB',
-    borderRadius: '12px',
-    padding: '16px',
-    marginTop: '0',
-    marginBottom: '100px',
-  },
-  drawerQuickActions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-    marginBottom: '12px',
-  },
-  drawerActions: {
-    marginTop: '10px',
-    marginBottom: '20px',
-    display: 'flex',
-    gap: '10px',
-    flexWrap: 'wrap',
-  },
-  historySection: {
-    marginTop: '24px',
-    marginBottom: '24px',
-  },
-  historyTitle: {
-    fontSize: '18px',
-    fontWeight: 800,
-    marginBottom: '12px',
-    color: '#1F2937',
-  },
-  logCard: {
-    background: '#F8F8FB',
-    borderRadius: '12px',
-    padding: '12px',
-    marginBottom: '10px',
-    border: '1px solid #E5E5E9',
-  },
-  logTopRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: '10px',
-    marginBottom: '8px',
-  },
-  logAction: {
-    color: '#1F2937',
-    fontWeight: 800,
-    fontSize: '14px',
-  },
-  logTime: {
-    color: '#4B5563',
-    fontSize: '12px',
-    whiteSpace: 'nowrap',
-  },
-  logContent: {
-    color: '#1F2937',
-    fontSize: '14px',
-    lineHeight: 1.5,
-    marginBottom: '8px',
-    wordBreak: 'break-word',
-  },
-  logMeta: {
-    color: '#4B5563',
-    fontSize: '12px',
-    lineHeight: 1.4,
-  },
-  infoText: {
-    color: '#4B5563',
-    margin: 0,
-  },
-  errorText: {
-    color: '#B91C1C',
-    margin: 0,
-    fontWeight: 600,
-  },
-  attachmentGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
-    gap: '12px',
-  },
-  attachmentThumbnail: {
-    background: '#F8F8FB',
-    border: '2px solid #E5E5E9',
-    borderRadius: '12px',
-    padding: 0,
-    cursor: 'pointer',
-    overflow: 'hidden',
-    height: '90px',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-  },
-  attachmentImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  imageModalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.8)',
-    zIndex: 100,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageModal: {
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    zIndex: 101,
-    maxWidth: '90vw',
-    maxHeight: '85vh',
-    backgroundColor: '#FFFFFF',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-    paddingTop: 'env(safe-area-inset-top)',
-    paddingBottom: 'env(safe-area-inset-bottom)',
-  },
-  imageModalImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'contain',
-    maxWidth: '90vw',
-    maxHeight: '75vh',
-  },
-  imageModalClose: {
-    position: 'absolute',
-    top: '12px',
-    right: '12px',
-    background: 'rgba(0,0,0,0.6)',
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: '6px',
-    width: '32px',
-    height: '32px',
-    fontSize: '18px',
-    cursor: 'pointer',
-    zIndex: 102,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
     bottom: 0,
-    background: 'rgba(0, 0, 0, 0.5)',
-    zIndex: 199,
-    pointerEvents: 'auto',
-  },
-  addTicketModal: {
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '90%',
-    maxWidth: '500px',
-    background: '#FFFFFF',
-    borderRadius: '12px',
-    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-    zIndex: 200,
-    maxHeight: '90vh',
-    overflow: 'auto',
-    paddingTop: 'env(safe-area-inset-top)',
-    paddingBottom: 'env(safe-area-inset-bottom)',
-  },
-  addTicketModalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '16px',
-    borderBottom: '1px solid #E5E7EB',
-    position: 'sticky',
-    top: 0,
-    background: '#FFFFFF',
-    zIndex: 1,
-  },
-  addTicketModalTitle: {
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#1F2937',
-    margin: 0,
-  },
-  addTicketModalClose: {
-    background: 'none',
-    border: 'none',
-    fontSize: '20px',
-    color: '#4B5563',
-    cursor: 'pointer',
-    padding: '4px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addTicketForm: {
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  formLabel: {
-    fontSize: '14px',
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  formInput: {
-    padding: '10px 12px',
-    borderRadius: '6px',
-    border: '1px solid #D9D9E3',
-    fontSize: '14px',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box',
-  },
-  formSelect: {
-    padding: '10px 12px',
-    borderRadius: '6px',
-    border: '1px solid #D9D9E3',
-    fontSize: '14px',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box',
-    background: '#FFFFFF',
-    cursor: 'pointer',
-  },
-  formTextarea: {
-    padding: '10px 12px',
-    borderRadius: '6px',
-    border: '1px solid #D9D9E3',
-    fontSize: '14px',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box',
-    minHeight: '100px',
-    resize: 'vertical',
-  },
-  formError: {
-    padding: '10px 12px',
-    background: '#FEE2E2',
-    color: '#DC2626',
-    borderRadius: '6px',
-    fontSize: '13px',
-  },
-  formActions: {
+    left: 0,
+    right: 0,
+    padding: '16px 20px',
+    paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
+    background: theme.colors.surface,
+    borderTop: `1px solid ${theme.colors.border}`,
     display: 'flex',
     gap: '10px',
-    justifyContent: 'flex-end',
-    marginTop: '8px',
-  },
-  formCancelButton: {
-    padding: '10px 16px',
-    background: '#F8F8FB',
-    color: '#1F2937',
-    border: '1px solid #D9D9E3',
-    borderRadius: '6px',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-  },
-  formSubmitButton: {
-    padding: '10px 16px',
-    background: '#C1121F',
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: '6px',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(193, 18, 31, 0.2)',
   },
 }
-
+  

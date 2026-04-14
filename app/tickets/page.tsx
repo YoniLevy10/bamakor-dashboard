@@ -1,9 +1,24 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler } from '@/lib/error-handler'
+import {
+  AppShell,
+  MobileHeader,
+  MobileMenu,
+  PageHeader,
+  KpiCard,
+  Card,
+  Button,
+  StatusBadge,
+  SearchInput,
+  FilterTabs,
+  Drawer,
+  EmptyState,
+  Select,
+  theme
+} from '../components/ui'
 
 type TicketRow = {
   id: string
@@ -68,6 +83,7 @@ export default function TicketsPage() {
   const [projectFilter, setProjectFilter] = useState('ALL')
   const [workerFilter, setWorkerFilter] = useState('ALL')
   const [isMobile, setIsMobile] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [selectedTicket, setSelectedTicket] = useState<TicketRow | null>(null)
   const [draftPriority, setDraftPriority] = useState<string>('')
@@ -95,7 +111,6 @@ export default function TicketsPage() {
   }, [])
 
   useEffect(() => {
-    // Handle project and worker filters from URL query parameters
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       const projectParam = params.get('project')
@@ -112,17 +127,13 @@ export default function TicketsPage() {
   useEffect(() => {
     fetchData()
 
-    // Refresh on window focus for data freshness
     const handleFocus = async () => {
-      console.log('🔄 Window focus detected - refreshing tickets data')
       await fetchData()
     }
 
-    // Background refresh every 10 minutes to catch any missed updates
     const backgroundRefreshInterval = setInterval(async () => {
-      console.log('🔄 Background refresh (10min) - keeping tickets data fresh')
       await fetchData()
-    }, 10 * 60 * 1000) // 10 minutes
+    }, 10 * 60 * 1000)
 
     window.addEventListener('focus', handleFocus)
 
@@ -130,7 +141,6 @@ export default function TicketsPage() {
       window.removeEventListener('focus', handleFocus)
       clearInterval(backgroundRefreshInterval)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function fetchData() {
@@ -253,11 +263,9 @@ export default function TicketsPage() {
   }
 
   function openTicket(ticket: TicketRow) {
-    console.log(`🎟️ Opening ticket: ${ticket.id}`, { ticketNumber: ticket.ticket_number, ticketId: ticket.id })
     setSelectedTicket(ticket)
     setDraftPriority(ticket.priority || 'LOW')
     setDraftStatus(ticket.status)
-    // Reset attachments before loading new ones
     setSelectedTicketAttachments([])
     loadTicketAttachments(ticket.id)
   }
@@ -265,15 +273,11 @@ export default function TicketsPage() {
   async function loadTicketAttachments(ticketId: string) {
     setLoadingAttachments(true)
     try {
-      // STABILITY: Validate ticketId before query
       if (!ticketId || typeof ticketId !== 'string') {
-        console.error('❌ Cannot load attachments: ticketId is invalid', { ticketId, type: typeof ticketId })
         setSelectedTicketAttachments([])
         setLoadingAttachments(false)
         return
       }
-
-      console.log(`📥 Loading attachments for ticket: ${ticketId}`)
 
       const { data, error } = await supabase
         .from('ticket_attachments')
@@ -282,55 +286,23 @@ export default function TicketsPage() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('❌ Failed to load attachments from database:', {
-          ticketId,
-          error,
-          message: error?.message || 'Unknown error',
-          code: error?.code || 'NO_CODE',
-          details: error?.details || 'No details available',
-          hint: error?.hint || 'No hint available',
-        })
         setSelectedTicketAttachments([])
       } else if (!data || data.length === 0) {
-        console.log(`ℹ️  No attachments found for ticket ${ticketId}`)
         setSelectedTicketAttachments([])
       } else {
-        console.log(`📦 Found ${data.length} attachment(s) for ticket ${ticketId}`, { data })
-        
-        // Generate signed URLs for each attachment for reliable access
         const attachmentsWithUrls = await Promise.all(
           (data || []).map(async (attachment: AttachmentRow) => {
             try {
-              // STABILITY: Validate file_url before URL generation
               if (!attachment.file_url) {
-                console.error(`❌ Attachment ${attachment.id} has missing file_url - skipping URL generation`, {
-                  attachmentId: attachment.id,
-                  ticketId,
-                  reason: 'file_url is null or empty',
-                })
-                return {
-                  ...attachment,
-                  signed_url: null,
-                }
+                return { ...attachment, signed_url: null }
               }
 
-              console.log(`🔗 Generating signed URL for: ${attachment.file_name}`)
               const { data: signedUrlData } = await supabase.storage
                 .from('ticket-attachments')
-                .createSignedUrl(attachment.file_url, 3600) // Valid for 1 hour
+                .createSignedUrl(attachment.file_url, 3600)
 
-              return {
-                ...attachment,
-                signed_url: signedUrlData?.signedUrl || null,
-              }
-            } catch (urlErr) {
-              console.warn(`⚠️ Failed to generate signed URL for ${attachment.file_name}:`, {
-                attachmentId: attachment.id,
-                filePath: attachment.file_url,
-                reason: urlErr instanceof Error ? urlErr.message : String(urlErr),
-                action: 'Falling back to public URL',
-              })
-              // Fallback to public URL if signed URL fails
+              return { ...attachment, signed_url: signedUrlData?.signedUrl || null }
+            } catch {
               return {
                 ...attachment,
                 signed_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_url}`,
@@ -340,13 +312,8 @@ export default function TicketsPage() {
         )
 
         setSelectedTicketAttachments(attachmentsWithUrls)
-        console.log(`✅ Loaded ${attachmentsWithUrls.length} attachment(s) with URLs`)
       }
-    } catch (err) {
-      console.error('❌ Unexpected error loading attachments:', {
-        ticketId,
-        error: err instanceof Error ? err.message : String(err),
-      })
+    } catch {
       setSelectedTicketAttachments([])
     } finally {
       setLoadingAttachments(false)
@@ -354,11 +321,9 @@ export default function TicketsPage() {
   }
 
   function getImageUrl(attachment: AttachmentWithUrl): string {
-    // Use signed URL if available (most reliable)
     if (attachment.signed_url) {
       return attachment.signed_url
     }
-    // Fallback to public URL
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jsliqlmjksintyigkulq.supabase.co'
     return `${supabaseUrl}/storage/v1/object/public/ticket-attachments/${attachment.file_url}`
   }
@@ -373,8 +338,7 @@ export default function TicketsPage() {
 
   async function handleCreateTicket(e: React.FormEvent) {
     e.preventDefault()
-    
-    // Validation
+
     if (!addTicketForm.project_code) {
       setAddTicketError('Please select a project')
       return
@@ -410,16 +374,14 @@ export default function TicketsPage() {
       }
 
       const result = await response.json()
-      
-      // Check if ticket was created but images failed
+
       if (result.imageUploadWarning) {
         toast.success(`Ticket #${result.ticketNumber} created successfully`)
         toast.error(result.imageUploadWarning)
       } else {
         toast.success(`Ticket #${result.ticketNumber} created successfully`)
       }
-      
-      // Reset form and close modal
+
       setAddTicketForm({
         project_code: '',
         description: '',
@@ -427,8 +389,7 @@ export default function TicketsPage() {
         reporter_phone: '',
       })
       setShowAddTicketModal(false)
-      
-      // Refresh ticket list
+
       await fetchData()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create ticket'
@@ -515,36 +476,6 @@ export default function TicketsPage() {
     return { total, open, assigned, resolved }
   }, [tickets])
 
-  function getStatusStyle(status: string): CSSProperties {
-    switch (status) {
-      case 'NEW':
-        return { background: '#FEF08A', color: '#713F12', border: '1px solid #FBBF24' }
-      case 'ASSIGNED':
-        return { background: '#BFDBFE', color: '#1E40AF', border: '1px solid #60A5FA' }
-      case 'IN_PROGRESS':
-        return { background: '#BFDBFE', color: '#1E40AF', border: '1px solid #60A5FA' }
-      case 'WAITING_PARTS':
-        return { background: '#FED7AA', color: '#92400E', border: '1px solid #FDBA74' }
-      case 'CLOSED':
-        return { background: '#BBF7D0', color: '#065F46', border: '1px solid #6EE7B7' }
-      default:
-        return { background: '#E5E7EB', color: '#374151', border: '1px solid #D1D5DB' }
-    }
-  }
-
-  function getPriorityStyle(priority?: string | null): CSSProperties {
-    switch ((priority || '').toUpperCase()) {
-      case 'HIGH':
-        return { background: '#FECACA', color: '#7F1D1D', border: '1px solid #F87171' }
-      case 'MEDIUM':
-        return { background: '#FED7AA', color: '#92400E', border: '1px solid #FDBA74' }
-      case 'LOW':
-        return { background: '#E5E7EB', color: '#374151', border: '1px solid #D1D5DB' }
-      default:
-        return { background: '#E5E7EB', color: '#374151', border: '1px solid #D1D5DB' }
-    }
-  }
-
   function getWorkerName(workerId?: string | null) {
     if (!workerId) return 'Unassigned'
     const worker = workers.find((w) => w.id === workerId)
@@ -552,398 +483,374 @@ export default function TicketsPage() {
   }
 
   return (
-    <main style={styles.page}>
-      <div
-        style={{
-          ...styles.appShell,
-          gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
-        }}
-      >
+    <AppShell isMobile={isMobile}>
+      {isMobile && (
+        <MobileHeader
+          title="Tickets"
+          subtitle={`${filteredTickets.length} tickets`}
+          onMenuClick={() => setMenuOpen(true)}
+        />
+      )}
+
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+      <div style={styles.content}>
         {!isMobile && (
-          <aside style={styles.sidebar}>
-            <div style={styles.sidebarBrand}>
-              <div style={styles.logoBox}>B</div>
-              <div>
-                <div style={styles.sidebarTitle}>Bamakor</div>
-                <div style={styles.sidebarSubtitle}>Maintenance System</div>
-              </div>
-            </div>
-
-            <nav style={styles.sidebarNav}>
-              <Link href="/" style={styles.sidebarNavLink}>
-                Dashboard
-              </Link>
-
-              <Link href="/tickets" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>
-                Tickets
-              </Link>
-
-              <Link href="/projects" style={styles.sidebarNavLink}>
-                Projects
-              </Link>
-
-              <Link href="/workers" style={styles.sidebarNavLink}>
-                Workers
-              </Link>
-
-              <Link href="/qr" style={styles.sidebarNavLink}>
-                QR Codes
-              </Link>
-
-              <Link href="/summary" style={styles.sidebarNavLink}>
-                Summary
-              </Link>
-            </nav>
-
-            <div style={styles.sidebarFooter}>
-              All rights reserved to Yoni Levy
-            </div>
-          </aside>
+          <PageHeader
+            title="Tickets"
+            subtitle="Manage and track all maintenance tickets"
+            actions={
+              <>
+                <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
+                  + New Ticket
+                </Button>
+                <Button variant="secondary" onClick={fetchData}>
+                  Refresh
+                </Button>
+              </>
+            }
+          />
         )}
 
-        <div style={{ ...styles.mainArea, ...(isMobile ? styles.mainAreaMobile : {}) }}>
-          <div style={styles.header}>
-            <div style={styles.mobileTopRow}>
-              <Link href="/" style={styles.backButton}>
-                ←
-              </Link>
-              <div>
-                <h1 style={styles.title}>All Tickets</h1>
-                <p style={styles.subtitle}>Manage and track maintenance requests</p>
-              </div>
-            </div>
+        {/* KPI Cards */}
+        <div style={{
+          ...styles.kpiGrid,
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+        }}>
+          <KpiCard label="Total" value={stats.total} />
+          <KpiCard label="Open" value={stats.open} />
+          <KpiCard label="In Progress" value={stats.assigned} />
+          <KpiCard label="Resolved" value={stats.resolved} />
+        </div>
 
-            <div style={styles.headerActions}>
-              <button 
-                onClick={() => setShowAddTicketModal(true)}
-                style={styles.primaryButton}
-              >
-                + New Ticket
-              </button>
-            </div>
-          </div>
+        {/* Tickets Card */}
+        <Card
+          title="All Tickets"
+          subtitle="Click on a ticket to view details"
+          noPadding
+        >
+          {/* Filters */}
+          <div style={styles.filtersRow}>
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search tickets..."
+              style={{ maxWidth: isMobile ? '100%' : '280px' }}
+            />
 
-          <div style={{
-            ...styles.statsGrid,
-            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(180px, 1fr))',
-          }}>
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Total Tickets</div>
-              <div style={styles.statValue}>{stats.total}</div>
-            </div>
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Open</div>
-              <div style={styles.statValue}>{stats.open}</div>
-            </div>
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>In Progress</div>
-              <div style={styles.statValue}>{stats.assigned}</div>
-            </div>
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Resolved</div>
-              <div style={styles.statValue}>{stats.resolved}</div>
-            </div>
-          </div>
-
-          <div style={styles.filtersCard}>
-            <div style={styles.filtersHeader}>Filters</div>
-
-            <div
-              style={{
-                ...styles.filtersRow,
-                gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr 1fr 1fr',
-              }}
-            >
-              <input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search tickets..."
-                style={styles.input}
-              />
-
+            <div style={styles.filterGroup}>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                style={styles.select}
+                style={styles.filterSelect}
               >
-                {statusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status === 'ALL' ? 'All Status' : status}
-                  </option>
+                {statusOptions.map((s) => (
+                  <option key={s} value={s}>{s === 'ALL' ? 'All Status' : s.replace('_', ' ')}</option>
                 ))}
               </select>
 
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                style={styles.select}
+                style={styles.filterSelect}
               >
-                {priorityOptions.map((priority) => (
-                  <option key={priority} value={priority}>
-                    {priority === 'ALL' ? 'All Priority' : priority}
-                  </option>
+                {priorityOptions.map((p) => (
+                  <option key={p} value={p}>{p === 'ALL' ? 'All Priority' : p}</option>
                 ))}
               </select>
 
-              <select
-                value={projectFilter}
-                onChange={(e) => setProjectFilter(e.target.value)}
-                style={styles.select}
-              >
-                {projectOptions.map((projectCode) => (
-                  <option key={projectCode} value={projectCode}>
-                    {projectCode === 'ALL' ? 'All Projects' : projectCode}
-                  </option>
-                ))}
-              </select>
+              {!isMobile && (
+                <select
+                  value={projectFilter}
+                  onChange={(e) => setProjectFilter(e.target.value)}
+                  style={styles.filterSelect}
+                >
+                  {projectOptions.map((p) => (
+                    <option key={p} value={p}>{p === 'ALL' ? 'All Projects' : p}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
-          {loading && <p style={styles.infoText}>Loading tickets...</p>}
-          {error && <p style={styles.errorText}>{error}</p>}
-
-          {!loading && !error && (
-            <div style={styles.resultCount}>{filteredTickets.length} tickets found</div>
-          )}
-
-          {!loading && !error && filteredTickets.length === 0 && (
-            <div style={styles.emptyState}>
-              <div style={styles.emptyStateTitle}>No tickets found</div>
-              <div style={styles.emptyStateText}>
-                Try adjusting the filters or search term.
-              </div>
+          {/* Loading State */}
+          {loading && (
+            <div style={styles.loadingState}>
+              <div style={styles.loadingSpinner} />
+              <span>Loading tickets...</span>
             </div>
           )}
 
-          {!loading && !error && filteredTickets.length > 0 && !isMobile && (
-            <div style={styles.tableCard}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Ticket</th>
-                    <th style={styles.th}>Title</th>
-                    <th style={styles.th}>Project</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Priority</th>
-                    <th style={styles.th}>Assigned</th>
-                    <th style={styles.th}>Created</th>
-                    <th style={styles.th}>Actions</th>
-                  </tr>
-                </thead>
+          {/* Error State */}
+          {error && (
+            <div style={styles.errorState}>
+              <span>{error}</span>
+              <Button variant="secondary" size="sm" onClick={fetchData}>
+                Retry
+              </Button>
+            </div>
+          )}
 
-                <tbody>
-                  {filteredTickets.map((ticket) => (
-                    <tr key={ticket.id} onClick={() => openTicket(ticket)} style={{ cursor: 'pointer' }}>
-                      <td style={styles.tdStrong}>TKT-{ticket.ticket_number}</td>
+          {/* Empty State */}
+          {!loading && !error && filteredTickets.length === 0 && (
+            <EmptyState
+              title="No tickets found"
+              description="Try adjusting your filters or create a new ticket."
+              action={
+                <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
+                  Create Ticket
+                </Button>
+              }
+            />
+          )}
 
-                      <td style={styles.td}>
-                        <div style={styles.ticketTitle}>{ticket.description || 'No description'}</div>
-                        <div style={styles.ticketSubtitle}>
-                          {ticket.reporter_name || ticket.reporter_phone || 'No reporter info'}
-                        </div>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={styles.projectChip}>{ticket.project_code || '-'}</span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={{ ...styles.badge, ...getStatusStyle(ticket.status) }}>
-                          {ticket.status}
-                        </span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={{ ...styles.badge, ...getPriorityStyle(ticket.priority) }}>
-                          {(ticket.priority || 'LOW').toUpperCase()}
-                        </span>
-                      </td>
-
-                      <td style={styles.td}>
+          {/* Ticket List */}
+          {!loading && !error && filteredTickets.length > 0 && (
+            <div style={styles.ticketList}>
+              {filteredTickets.map((ticket) => (
+                <div
+                  key={ticket.id}
+                  onClick={() => openTicket(ticket)}
+                  style={{
+                    ...styles.ticketRow,
+                    ...(selectedTicket?.id === ticket.id ? styles.ticketRowActive : {}),
+                  }}
+                >
+                  <div style={styles.ticketRowTop}>
+                    <div style={styles.ticketRowMain}>
+                      <span style={styles.ticketNumber}>#{ticket.ticket_number}</span>
+                      <span style={styles.ticketProject}>{ticket.project_code || 'N/A'}</span>
+                      <StatusBadge status={ticket.status} size="sm" />
+                      {ticket.priority && (
+                        <StatusBadge status={ticket.priority.toUpperCase()} size="sm" />
+                      )}
+                    </div>
+                    {!isMobile && (
+                      <div style={styles.ticketRowActions}>
                         <select
                           value={ticket.assigned_worker_id || ''}
-                          onChange={(e) => assignWorker(ticket.id, e.target.value)}
-                          style={styles.inlineSelect}
-                          disabled={actionLoadingId === ticket.id || ticket.status === 'CLOSED'}
+                          onChange={(e) => {
+                            e.stopPropagation()
+                            assignWorker(ticket.id, e.target.value)
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={styles.workerSelect}
                         >
-                          <option value="">Unassigned</option>
-                          {workers.map((worker) => (
-                            <option key={worker.id} value={worker.id}>
-                              {worker.full_name}
-                            </option>
+                          <option value="">Assign Worker</option>
+                          {workers.filter(w => w.is_active).map((w) => (
+                            <option key={w.id} value={w.id}>{w.full_name}</option>
                           ))}
                         </select>
-                      </td>
-
-                      <td style={styles.td}>
-                        {ticket.created_at ? formatDate(ticket.created_at) : '-'}
-                      </td>
-
-                      <td style={styles.td}>
-                        {ticket.status === 'CLOSED' ? (
-                          <span style={styles.doneText}>Done</span>
-                        ) : (
-                          <button
-                            onClick={() => closeTicket(ticket.id)}
-                            style={styles.closeButton}
-                            disabled={actionLoadingId === ticket.id}
+                        {ticket.status !== 'CLOSED' && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              closeTicket(ticket.id)
+                            }}
+                            loading={actionLoadingId === ticket.id}
                           >
-                            {actionLoadingId === ticket.id ? 'Saving...' : 'Close'}
-                          </button>
+                            Close
+                          </Button>
                         )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {!loading && !error && filteredTickets.length > 0 && isMobile && (
-            <div style={styles.mobileCards}>
-              {filteredTickets.map((ticket) => (
-                <div key={ticket.id} onClick={() => openTicket(ticket)} style={styles.mobileCard}>
-                  <div style={styles.mobileCardTop}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={styles.mobileTicketNumber}>#{ticket.ticket_number}</div>
-                        {/* Attachment indicator */}
-                        <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#C1121F' }}>📷</div>
                       </div>
-                      <div style={styles.mobileProject}>
-                        {ticket.project_code || '-'}
-                      </div>
-                    </div>
-
-                    <span style={{ ...styles.badge, ...getStatusStyle(ticket.status) }}>
-                      {ticket.status}
-                    </span>
-                  </div>
-
-                  <div style={styles.mobileDescription}>
-                    {ticket.description || 'No description'}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
-                    <span style={{ ...styles.badge, ...getPriorityStyle(ticket.priority) }}>
-                      {(ticket.priority || 'LOW').toUpperCase()}
-                    </span>
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>
-                      {ticket.assigned_worker_id ? getWorkerName(ticket.assigned_worker_id) : 'Unassigned'}
-                    </span>
-                  </div>
-
-                  <div style={styles.mobileActions}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        assignWorker(ticket.id, 'temp')
-                        setSelectedTicket(ticket)
-                        openTicket(ticket)
-                      }}
-                      style={{ ...styles.mobileActionButton, flex: 1 }}
-                      disabled={actionLoadingId === ticket.id}
-                    >
-                      {ticket.status === 'CLOSED' ? '✓ Done' : 'Assign'}
-                    </button>
-                    {ticket.status !== 'CLOSED' && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          closeTicket(ticket.id)
-                        }}
-                        style={{ ...styles.mobileActionButton, ...styles.mobileActionButtonSecondary, flex: 1 }}
-                        disabled={actionLoadingId === ticket.id}
-                      >
-                        Close
-                      </button>
                     )}
+                  </div>
+                  <div style={styles.ticketDescription}>{ticket.description || '-'}</div>
+                  <div style={styles.ticketMeta}>
+                    <span>{ticket.reporter_name || ticket.reporter_phone || 'Unknown'}</span>
+                    <span>{ticket.created_at ? new Date(ticket.created_at).toLocaleDateString() : '-'}</span>
+                    <span>{getWorkerName(ticket.assigned_worker_id)}</span>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
+      {/* Ticket Detail Drawer */}
+      <Drawer
+        open={!!selectedTicket}
+        onClose={closeDrawer}
+        title={`Ticket #${selectedTicket?.ticket_number}`}
+        subtitle={selectedTicket?.project_name || selectedTicket?.project_code}
+        isMobile={isMobile}
+      >
+        {selectedTicket && (
+          <div style={styles.drawerContent}>
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Status</div>
+              <select
+                value={draftStatus}
+                onChange={(e) => setDraftStatus(e.target.value)}
+                style={styles.drawerSelect}
+              >
+                {statusOptions.filter(s => s !== 'ALL').map((status) => (
+                  <option key={status} value={status}>{status.replace('_', ' ')}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Priority</div>
+              <select
+                value={draftPriority}
+                onChange={(e) => setDraftPriority(e.target.value)}
+                style={styles.drawerSelect}
+              >
+                {priorityOptions.filter(p => p !== 'ALL').map((priority) => (
+                  <option key={priority} value={priority}>{priority}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Assigned Worker</div>
+              <div style={styles.drawerValue}>
+                {getWorkerName(selectedTicket.assigned_worker_id)}
+              </div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Description</div>
+              <div style={styles.drawerDescription}>
+                {selectedTicket.description || 'No description'}
+              </div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Reporter</div>
+              <div style={styles.drawerValue}>
+                {selectedTicket.reporter_name && (
+                  <div>{selectedTicket.reporter_name}</div>
+                )}
+                {selectedTicket.reporter_phone && (
+                  <div style={styles.drawerPhone}>{selectedTicket.reporter_phone}</div>
+                )}
+              </div>
+            </div>
+
+            <div style={styles.drawerSection}>
+              <div style={styles.drawerLabel}>Created</div>
+              <div style={styles.drawerValue}>
+                {selectedTicket.created_at ? new Date(selectedTicket.created_at).toLocaleString() : '-'}
+              </div>
+            </div>
+
+            {/* Attachments */}
+            {selectedTicketAttachments.length > 0 && (
+              <div style={styles.drawerSection}>
+                <div style={styles.drawerLabel}>Attachments ({selectedTicketAttachments.length})</div>
+                <div style={styles.attachmentGrid}>
+                  {selectedTicketAttachments.map((attachment) => (
+                    <button
+                      key={attachment.id}
+                      onClick={() => setSelectedImageUrl(getImageUrl(attachment))}
+                      style={styles.attachmentThumb}
+                    >
+                      {attachment.mime_type.startsWith('image/') ? (
+                        <img
+                          src={getImageUrl(attachment)}
+                          alt={attachment.file_name}
+                          style={styles.attachmentImg}
+                          crossOrigin="anonymous"
+                        />
+                      ) : (
+                        <div style={styles.attachmentFile}>{attachment.file_name}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={styles.drawerActions}>
+              <Button
+                variant="primary"
+                onClick={saveTicketChanges}
+                loading={savingTicket}
+                style={{ width: '100%' }}
+              >
+                Save Changes
+              </Button>
+              {selectedTicket.status !== 'CLOSED' && (
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    closeTicket(selectedTicket.id)
+                    closeDrawer()
+                  }}
+                  style={{ width: '100%' }}
+                >
+                  Close Ticket
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      {/* Add Ticket Modal */}
       {showAddTicketModal && (
         <>
           <div style={styles.modalOverlay} onClick={() => setShowAddTicketModal(false)} />
-          <div style={styles.addTicketModal}>
-            <div style={styles.addTicketModalHeader}>
-              <h3 style={styles.addTicketModalTitle}>Create New Ticket</h3>
-              <button
-                onClick={() => setShowAddTicketModal(false)}
-                style={styles.addTicketModalClose}
-              >
-                ✕
+          <div style={styles.modal}>
+            <div style={styles.modalHeader}>
+              <h2 style={styles.modalTitle}>Create New Ticket</h2>
+              <button onClick={() => setShowAddTicketModal(false)} style={styles.modalClose}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
               </button>
             </div>
-
-            <form onSubmit={handleCreateTicket} style={styles.addTicketForm}>
+            <form onSubmit={handleCreateTicket} style={styles.modalForm}>
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Project *</label>
+                <label style={styles.formLabel}>Project</label>
                 <select
                   value={addTicketForm.project_code}
-                  onChange={(e) =>
-                    setAddTicketForm({
-                      ...addTicketForm,
-                      project_code: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setAddTicketForm({ ...addTicketForm, project_code: e.target.value })}
                   style={styles.formSelect}
                 >
                   <option value="">Select a project</option>
                   {projects.map((p) => (
                     <option key={p.id} value={p.project_code}>
-                      {p.project_code} - {p.name}
+                      {p.name} ({p.project_code})
                     </option>
                   ))}
                 </select>
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Description *</label>
+                <label style={styles.formLabel}>Description</label>
                 <textarea
                   value={addTicketForm.description}
-                  onChange={(e) =>
-                    setAddTicketForm({
-                      ...addTicketForm,
-                      description: e.target.value,
-                    })
-                  }
-                  placeholder="Enter ticket description (min 3 characters)"
+                  onChange={(e) => setAddTicketForm({ ...addTicketForm, description: e.target.value })}
+                  placeholder="Describe the issue..."
                   style={styles.formTextarea}
+                  rows={4}
                 />
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Reporter Name</label>
+                <label style={styles.formLabel}>Reporter Name (optional)</label>
                 <input
                   type="text"
                   value={addTicketForm.reporter_name}
-                  onChange={(e) =>
-                    setAddTicketForm({
-                      ...addTicketForm,
-                      reporter_name: e.target.value,
-                    })
-                  }
-                  placeholder="Enter reporter name"
+                  onChange={(e) => setAddTicketForm({ ...addTicketForm, reporter_name: e.target.value })}
+                  placeholder="Enter name"
                   style={styles.formInput}
                 />
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Reporter Phone</label>
+                <label style={styles.formLabel}>Reporter Phone (optional)</label>
                 <input
                   type="tel"
                   value={addTicketForm.reporter_phone}
-                  onChange={(e) =>
-                    setAddTicketForm({
-                      ...addTicketForm,
-                      reporter_phone: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setAddTicketForm({ ...addTicketForm, reporter_phone: e.target.value })}
                   placeholder="Enter phone number"
                   style={styles.formInput}
                 />
@@ -953,1009 +860,306 @@ export default function TicketsPage() {
                 <div style={styles.formError}>{addTicketError}</div>
               )}
 
-              <div style={styles.formActions}>
-                <button
-                  type="button"
-                  onClick={() => setShowAddTicketModal(false)}
-                  style={styles.formCancelButton}
-                >
+              <div style={styles.modalActions}>
+                <Button variant="secondary" onClick={() => setShowAddTicketModal(false)}>
                   Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={addingTicket}
-                  style={{
-                    ...styles.formSubmitButton,
-                    opacity: addingTicket ? 0.6 : 1,
-                    cursor: addingTicket ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {addingTicket ? 'Creating...' : 'Create Ticket'}
-                </button>
+                </Button>
+                <Button variant="primary" loading={addingTicket} onClick={() => handleCreateTicket({ preventDefault: () => {} } as React.FormEvent)}>
+                  Create Ticket
+                </Button>
               </div>
             </form>
           </div>
         </>
       )}
 
-      {selectedTicket && (
+      {/* Image Lightbox */}
+      {selectedImageUrl && (
         <>
-          <div 
-            style={styles.drawerOverlay}
-          />
-          <div
-            style={{
-              ...styles.drawer,
-              ...(isMobile ? { ...styles.drawerMobile, left: 0, right: 'auto' } : {}),
-              width: isMobile ? '100vw' : '440px',
-              right: !isMobile ? 0 : 'auto',
-            }}
-          >
-            <div style={styles.drawerHeader}>
-              <button onClick={closeDrawer} style={styles.drawerCloseButton}>
-                {isMobile ? '←' : '✕'}
-              </button>
-              <div style={{ flex: 1 }}>
-                <div style={styles.drawerTitle}>
-                  Ticket #{selectedTicket.ticket_number}
-                </div>
-                <div style={styles.drawerSubtitle}>
-                  {selectedTicket.project_code} - {selectedTicket.project_name}
-                </div>
-              </div>
-            </div>
-
-            <div style={styles.drawerContentWrapper} data-drawer-content="true">
-              {/* PRIMARY: Description - high emphasis */}
-              <div style={{...styles.drawerSection, ...styles.descriptionSection}}>
-                <div style={styles.descriptionValue}>{selectedTicket.description || 'No description provided'}</div>
-              </div>
-
-            {/* Attachments - first-class UX */}
-            <div style={styles.drawerSection}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <div style={styles.drawerLabel}>📷 Attachments</div>
-                {selectedTicketAttachments.length > 0 && (
-                  <span style={{ fontSize: '11px', background: '#FEF2F2', color: '#C1121F', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                    {selectedTicketAttachments.length}
-                  </span>
-                )}
-              </div>
-              {loadingAttachments ? (
-                <div style={{ fontSize: '13px', color: '#6B7280' }}>Loading images...</div>
-              ) : selectedTicketAttachments.length > 0 ? (
-                <div style={styles.attachmentGrid}>
-                  {selectedTicketAttachments.map((attachment) => (
-                    <button
-                      key={attachment.id}
-                      onClick={() => setSelectedImageUrl(getImageUrl(attachment))}
-                      style={styles.attachmentThumbnail}
-                      title={attachment.file_name}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={getImageUrl(attachment)}
-                        alt={attachment.file_name}
-                        style={styles.attachmentImg}
-                      />
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ fontSize: '13px', color: '#9CA3AF' }}>No images attached</div>
-              )}
-            </div>
-
-            {/* KEY ACTIONS - clear, prominent */}
-            <div style={{...styles.drawerActionsZone}}>
-              <button 
-                onClick={saveTicketChanges} 
-                style={styles.primaryActionButton} 
-                disabled={savingTicket}
-              >
-                {savingTicket ? 'Saving...' : '💾 Save Changes'}
-              </button>
-              {selectedTicket.status !== 'CLOSED' && (
-                <button 
-                  onClick={() => closeTicket(selectedTicket.id)} 
-                  style={styles.dangerActionButton} 
-                  disabled={actionLoadingId === selectedTicket.id}
-                >
-                  {actionLoadingId === selectedTicket.id ? 'Closing...' : '✓ Close Ticket'}
-                </button>
-              )}
-            </div>
-
-            {/* METADATA & CONTROLS - lighter section */}
-            <div style={styles.metadataSection}>
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Reporter</div>
-                <div style={styles.drawerValue}>
-                  {selectedTicket.reporter_name || selectedTicket.reporter_phone || '-'}
-                </div>
-              </div>
-
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Assigned Worker</div>
-                <select
-                  value={selectedTicket.assigned_worker_id || ''}
-                  onChange={(e) => assignWorker(selectedTicket.id, e.target.value)}
-                  style={styles.select}
-                >
-                  <option value="">Unassigned</option>
-                  {workers.map((worker) => (
-                    <option key={worker.id} value={worker.id}>
-                      {worker.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Status</div>
-                <select
-                  value={draftStatus}
-                  onChange={(e) => setDraftStatus(e.target.value)}
-                  style={styles.select}
-                >
-                  {statusOptions.filter((s) => s !== 'ALL').map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Priority</div>
-                <select
-                  value={draftPriority}
-                  onChange={(e) => setDraftPriority(e.target.value)}
-                  style={styles.select}
-                >
-                  <option value="LOW">LOW</option>
-                  <option value="NORMAL">NORMAL</option>
-                  <option value="URGENT">URGENT</option>
-                </select>
-              </div>
-
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Created</div>
-                <div style={styles.drawerValue}>
-                  {selectedTicket.created_at ? formatDate(selectedTicket.created_at) : '-'}
-                </div>
-              </div>
-
-              <div style={{...styles.drawerSection, borderBottom: 'none'}}>
-                <div style={styles.drawerLabel}>Closed</div>
-                <div style={styles.drawerValue}>
-                  {selectedTicket.closed_at ? formatDate(selectedTicket.closed_at) : '-'}
-                </div>
-              </div>
-            </div>
-            </div>
+          <div style={styles.lightboxOverlay} onClick={() => setSelectedImageUrl(null)} />
+          <div style={styles.lightbox}>
+            <button onClick={() => setSelectedImageUrl(null)} style={styles.lightboxClose}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </button>
+            <img src={selectedImageUrl} alt="Attachment" style={styles.lightboxImg} crossOrigin="anonymous" />
           </div>
-
-          {selectedImageUrl && (
-            <>
-              <div onClick={() => setSelectedImageUrl(null)} style={styles.imageModalOverlay} />
-              <div style={styles.imageModal}>
-                <button onClick={() => setSelectedImageUrl(null)} style={styles.imageModalClose}>
-                  ✕
-                </button>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedImageUrl} alt="Full view" style={styles.imageModalImg} />
-              </div>
-            </>
-          )}
         </>
       )}
-    </main>
+
+      {/* Mobile Bottom Actions */}
+      {isMobile && (
+        <div style={styles.mobileBottomActions}>
+          <Button variant="primary" onClick={() => setShowAddTicketModal(true)} style={{ flex: 1 }}>
+            + New Ticket
+          </Button>
+        </div>
+      )}
+    </AppShell>
   )
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
 const styles: Record<string, CSSProperties> = {
-  page: {
-    minHeight: '100dvh',
-    overflow: 'visible',
-    background: '#F5F5F7',
-    color: '#1F2937',
-    fontFamily: 'Inter, Arial, Helvetica, sans-serif',
-  },
-  appShell: {
-    display: 'grid',
-    minHeight: '100dvh',
-    overflow: 'visible',
-  },
-  shell: {
-    display: 'grid',
-    minHeight: '100dvh',
-    overflow: 'visible',
-  },
-  mainArea: {
-    padding: '24px',
-    paddingTop: 'calc(24px + env(safe-area-inset-top))',
-    WebkitOverflowScrolling: 'touch',
-    boxSizing: 'border-box',
-  },
-  mainAreaMobile: {
-    padding: '16px',
-    paddingTop: 'calc(16px + env(safe-area-inset-top))',
-  },
-  sidebar: {
-    background: '#FFFFFF',
-    borderRight: '1px solid #E5E5E9',
-    padding: '24px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'sticky',
-    top: 0,
-    height: '100%',
-    justifyContent: 'space-between',
-    overflowY: 'auto',
-    overscrollBehavior: 'contain',
-  },
-  sidebarBrand: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '28px',
-  },
-  logoBox: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: 'linear-gradient(135deg, #C1121F 0%, #8F0B16 100%)',
-    color: '#FFFFFF',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    fontSize: '18px',
-  },
-  sidebarTitle: {
-    fontSize: '18px',
-    fontWeight: 800,
-    color: '#1F2937',
-  },
-  sidebarSubtitle: {
-    fontSize: '12px',
-    color: '#4B5563',
-  },
-  sidebarNav: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  sidebarNavItemActive: {
-    background: '#111827',
-    color: '#FFFFFF',
-  },
-  sidebarNavLink: {
-    textDecoration: 'none',
-    color: '#374151',
-    fontWeight: 700,
-    padding: '12px 14px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-  },
-  navItemDisabled: {
-    textDecoration: 'none',
-    color: '#9CA3AF',
-    fontWeight: 700,
-    padding: '12px 14px',
-    borderRadius: '12px',
-    background: '#F8F8FB',
-    pointerEvents: 'none',
-  },
-  sidebarFooter: {
-    marginTop: 'auto',
-    fontSize: '13px',
-    color: '#4B5563',
-    padding: '12px 14px',
-  },
   content: {
     padding: '24px',
-    paddingTop: 'calc(24px + env(safe-area-inset-top))',
-    height: '100%',
-    overflow: 'auto',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    boxSizing: 'border-box',
+    paddingBottom: '100px',
   },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '16px',
-    marginBottom: '20px',
-    flexWrap: 'wrap',
-  },
-  headerActions: {
-    display: 'flex',
-    gap: '12px',
-  },
-  primaryButton: {
-    background: '#111827',
-    color: '#FFFFFF',
-    border: 'none',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    fontSize: '14px',
-    minHeight: '44px',
-    transition: 'all 0.2s ease',
-  },
-  title: {
-    margin: 0,
-    fontSize: '32px',
-    fontWeight: 800,
-    color: '#1F2937',
-    lineHeight: 1,
-  },
-  subtitle: {
-    margin: '10px 0 0 0',
-    fontSize: '16px',
-    color: '#4B5563',
-  },
-
-  mobileLink: {
-    textDecoration: 'none',
-    color: '#1F2937',
-    fontWeight: 700,
-    fontSize: '13px',
-    padding: '10px 14px',
-    borderRadius: '10px',
-    background: '#F8F8FB',
-    border: '1px solid #E5E5E9',
-    transition: 'all 0.2s ease',
-    cursor: 'pointer',
-  },
-  statsGrid: {
+  kpiGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
     gap: '16px',
-    marginBottom: '20px',
-  },
-  statCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '20px',
-    padding: '20px',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.05)',
-    minHeight: '110px',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-  },
-  statLabel: {
-    fontSize: '14px',
-    color: '#4B5563',
-    marginBottom: '12px',
-    fontWeight: 600,
-  },
-  statValue: {
-    fontSize: '42px',
-    fontWeight: 800,
-    color: '#1F2937',
-    lineHeight: 1,
-  },
-  filtersCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '20px',
-    padding: '20px',
-    marginBottom: '18px',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.05)',
-  },
-  filtersHeader: {
-    fontSize: '16px',
-    fontWeight: 800,
-    color: '#1F2937',
-    marginBottom: '16px',
-  },
-  mobileTopRow: {
-    display: 'flex',
-    gap: '10px',
-    alignItems: 'flex-start',
-  },
-  backButton: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D9D9E3',
-    color: '#1F2937',
-    textDecoration: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    flexShrink: 0,
+    marginBottom: '24px',
   },
   filtersRow: {
-    display: 'grid',
-    gap: '12px',
-    width: '100%',
-  },
-  input: {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    border: '1px solid #D9D9E3',
-    background: '#FFFFFF',
-    fontSize: '14px',
-    outline: 'none',
-    color: '#1F2937',
-    minHeight: '44px',
-    boxSizing: 'border-box',
-  },
-  select: {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    border: '1px solid #D9D9E3',
-    background: '#FFFFFF',
-    fontSize: '14px',
-    outline: 'none',
-    color: '#1F2937',
-    minHeight: '44px',
-    boxSizing: 'border-box',
-  },
-  resultCount: {
-    fontSize: '15px',
-    color: '#374151',
-    marginBottom: '12px',
-    fontWeight: 600,
-  },
-  tableCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '20px',
-    overflow: 'hidden',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.05)',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-  },
-  th: {
-    textAlign: 'left',
-    padding: '16px 16px',
-    background: '#FFFFFF',
-    color: '#4B5563',
-    fontSize: '12px',
-    fontWeight: 700,
-    borderBottom: '1px solid #D9D9E3',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-  },
-  td: {
-    padding: '16px 16px',
-    borderBottom: '1px solid #E5E5E9',
-    fontSize: '14px',
-    color: '#1F2937',
-    verticalAlign: 'top',
-  },
-  tdStrong: {
-    padding: '16px 16px',
-    borderBottom: '1px solid #E5E5E9',
-    fontSize: '14px',
-    color: '#1F2937',
-    fontWeight: 800,
-    verticalAlign: 'top',
-  },
-  ticketTitle: {
-    fontSize: '16px',
-    fontWeight: 700,
-    color: '#1F2937',
-    marginBottom: '6px',
-  },
-  ticketSubtitle: {
-    fontSize: '13px',
-    color: '#4B5563',
-    lineHeight: 1.45,
-  },
-  projectChip: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '6px 10px',
-    borderRadius: '999px',
-    background: '#F9FAFB',
-    border: '1px solid rgba(0,0,0,0.04)',
-    fontSize: '12px',
-    fontWeight: 700,
-    color: '#374151',
-  },
-  badge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '6px 10px',
-    borderRadius: '999px',
-    fontSize: '12px',
-    fontWeight: 700,
-    whiteSpace: 'nowrap',
-  },
-  inlineSelect: {
-    padding: '10px 12px',
-    borderRadius: '12px',
-    border: '1px solid #D9D9E3',
-    background: '#FFFFFF',
-    fontSize: '13px',
-    color: '#1F2937',
-    outline: 'none',
-    minWidth: '160px',
-  },
-  closeButton: {
-    background: '#111827',
-    color: '#FFFFFF',
-    border: '1px solid #111827',
-    padding: '10px 14px',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    fontSize: '13px',
-    minHeight: '44px',
-    transition: 'all 0.2s ease',
-  },
-  doneText: {
-    color: '#16A34A',
-    fontWeight: 700,
-    fontSize: '13px',
-  },
-  emptyState: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '20px',
-    padding: '28px',
-    textAlign: 'center',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.05)',
-  },
-  emptyStateTitle: {
-    fontSize: '18px',
-    fontWeight: 800,
-    color: '#1F2937',
-    marginBottom: '8px',
-  },
-  emptyStateText: {
-    fontSize: '14px',
-    color: '#4B5563',
-  },
-  infoText: {
-    margin: '0 0 12px 0',
-    color: '#4B5563',
-  },
-  errorText: {
-    margin: '0 0 12px 0',
-    color: '#DC2626',
-    fontWeight: 600,
-  },
-  mobileCards: {
-    display: 'grid',
-    gap: '14px',
-  },
-  mobileCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E5E9',
-    borderRadius: '20px',
-    padding: '16px',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.05)',
-    transition: 'all 0.2s ease',
-  },
-  mobileCardTop: {
     display: 'flex',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: '12px',
-    marginBottom: '14px',
-    alignItems: 'flex-start',
+    padding: '16px 20px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+    alignItems: 'center',
   },
-  mobileCardHeader: {
+  filterGroup: {
     display: 'flex',
     gap: '8px',
-    alignItems: 'flex-start',
-    marginBottom: '2px',
-  },
-  mobileTicketNumber: {
-    fontSize: '16px',
-    fontWeight: 800,
-    color: '#1F2937',
-    lineHeight: 1.2,
-  },
-  mobileAttachmentBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    backgroundColor: '#FEF2F2',
-    color: '#C1121F',
-    padding: '4px 8px',
-    borderRadius: '6px',
-    fontSize: '11px',
-    fontWeight: 700,
-  },
-  mobileProject: {
-    fontSize: '13px',
-    color: '#4B5563',
-    marginTop: '6px',
-  },
-  mobileDescription: {
-    fontSize: '14px',
-    color: '#1F2937',
-    lineHeight: 1.5,
-    marginBottom: '12px',
-  },
-  mobileMeta: {
-    display: 'flex',
-    gap: '10px',
-    alignItems: 'center',
     flexWrap: 'wrap',
-    marginBottom: '14px',
   },
-  mobileMetaText: {
+  filterSelect: {
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.md,
+    padding: '8px 12px',
     fontSize: '13px',
-    color: '#6B7280',
-  },
-  mobileField: {
-    marginBottom: '14px',
-  },
-  mobileFieldLabel: {
-    fontSize: '12px',
-    color: '#6B7280',
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    marginBottom: '8px',
-  },
-  mobileSelect: {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    border: '1px solid #D9D9E3',
-    background: '#FFFFFF',
-    fontSize: '14px',
-    color: '#1F2937',
+    color: theme.colors.textPrimary,
     outline: 'none',
+    cursor: 'pointer',
+    minWidth: '130px',
   },
-  mobileActions: {
+  loadingState: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
+    padding: '48px 20px',
+    color: theme.colors.textMuted,
+    fontSize: '14px',
+  },
+  loadingSpinner: {
+    width: '20px',
+    height: '20px',
+    border: `2px solid ${theme.colors.border}`,
+    borderTopColor: theme.colors.primary,
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  errorState: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '16px',
+    padding: '48px 20px',
+    color: theme.colors.error,
+    fontSize: '14px',
+  },
+  ticketList: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  ticketRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    padding: '16px 20px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
+  },
+  ticketRowActive: {
+    background: theme.colors.primaryMuted,
+    borderLeft: `3px solid ${theme.colors.primary}`,
+  },
+  ticketRowTop: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: '12px',
   },
-  mobileActionButton: {
-    background: '#111827',
-    color: '#FFFFFF',
-    border: 'none',
-    padding: '11px 14px',
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    fontSize: '13px',
-    minHeight: '44px',
-    transition: 'all 0.2s ease',
-  },
-  mobileActionButtonSecondary: {
-    background: '#F0F0F0',
-    color: '#111827',
-    border: '1px solid rgba(0,0,0,0.08)',
-  },
-  mobileAssignedText: {
-    fontSize: '13px',
-    color: '#374151',
-    fontWeight: 600,
-  },
-  drawerOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.25)',
-    zIndex: 50,
-    pointerEvents: 'none',
-  },
-  drawer: {
-    position: 'fixed',
-    top: 0,
-    right: 0,
-    width: '440px',
-    maxWidth: '100%',
-    height: '100dvh',
-    background: '#FFFFFF',
-    borderLeft: '1px solid #E5E5E9',
-    zIndex: 60,
-    padding: '20px',
-    paddingTop: 'calc(20px + env(safe-area-inset-top))',
-    boxShadow: '-12px 0 40px rgba(0,0,0,0.08)',
-    boxSizing: 'border-box',
+  ticketRowMain: {
     display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
+    alignItems: 'center',
+    gap: '10px',
+    flexWrap: 'wrap',
   },
-  drawerMobile: {
-    width: '100%',
-    left: 0,
-    right: 'auto',
-    height: '100dvh',
-    borderLeft: 'none',
-    boxShadow: 'none',
+  ticketRowActions: {
     display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
+    alignItems: 'center',
+    gap: '8px',
   },
-  drawerHeader: {
-    background: '#FFFFFF',
-    paddingTop: '4px',
-    paddingBottom: '12px',
-    zIndex: 50,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '16px',
-    marginBottom: '18px',
-    borderBottom: '1px solid #E5E5E9',
-    paddingLeft: '16px',
-    paddingRight: '16px',
-    marginLeft: '0',
-    marginRight: '0',
-    flex: '0 0 auto',
-  },
-  drawerContentWrapper: {
-    flex: '1 1 0%',
-    minHeight: 0,
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    paddingLeft: '16px',
-    paddingRight: '16px',
-    paddingBottom: '120px',
-  },
-  drawerTitle: {
-    fontSize: '24px',
-    fontWeight: 800,
-    color: '#1F2937',
-    marginBottom: '6px',
-    lineHeight: 1.2,
-  },
-  drawerSubtitle: {
-    color: '#4B5563',
+  ticketNumber: {
     fontSize: '14px',
-    fontWeight: '500',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
   },
-  drawerCloseButton: {
-    background: '#F8F8FB',
-    color: '#1F2937',
-    border: '1px solid #E5E5E9',
-    borderRadius: '12px',
-    width: '40px',
-    height: '40px',
+  ticketProject: {
+    fontSize: '13px',
+    color: theme.colors.primary,
+    fontWeight: 500,
+  },
+  ticketDescription: {
+    fontSize: '14px',
+    color: theme.colors.textSecondary,
+    lineHeight: 1.5,
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  },
+  ticketMeta: {
+    display: 'flex',
+    gap: '16px',
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+  },
+  workerSelect: {
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.sm,
+    padding: '6px 10px',
+    fontSize: '12px',
+    color: theme.colors.textPrimary,
+    outline: 'none',
     cursor: 'pointer',
-    fontSize: '16px',
-    flexShrink: 0,
+    minWidth: '120px',
+  },
+  drawerContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
   },
   drawerSection: {
-    marginBottom: '18px',
-    paddingBottom: '16px',
-    borderBottom: '1px solid #E5E5E9',
-    paddingLeft: '16px',
-    paddingRight: '16px',
-    marginLeft: '0',
-    marginRight: '0',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
   },
   drawerLabel: {
-    color: '#4B5563',
-    fontSize: '11px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    marginBottom: '10px',
-    fontWeight: 700,
   },
   drawerValue: {
-    color: '#1F2937',
-    fontSize: '15px',
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
+  },
+  drawerDescription: {
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
     lineHeight: 1.6,
-    fontWeight: '500',
+    background: theme.colors.surfaceElevated,
+    padding: '12px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+  },
+  drawerPhone: {
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+  },
+  drawerSelect: {
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.md,
+    padding: '10px 14px',
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
+    outline: 'none',
+    cursor: 'pointer',
   },
   drawerActions: {
-    marginTop: '6px',
-    paddingTop: '14px',
     display: 'flex',
+    flexDirection: 'column',
     gap: '10px',
-    flexDirection: 'column',
-    borderTop: '1px solid #E5E5E9',
-  },
-  descriptionSection: {
-    marginBottom: '20px !important',
-    paddingBottom: '20px !important',
-    borderBottom: '2px solid rgba(193, 18, 31, 0.15) !important',
-  },
-  descriptionValue: {
-    fontSize: '16px',
-    lineHeight: 1.7,
-    color: '#1F2937',
-    fontWeight: '500',
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-  },
-  drawerActionsZone: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    marginBottom: '24px',
-    paddingBottom: '24px',
-    borderBottom: '1px solid #E5E5E9',
-  },
-  primaryActionButton: {
-    background: '#111827',
-    color: '#FFFFFF',
-    border: 'none',
-    padding: '14px 16px',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    fontSize: '15px',
-    minHeight: '48px',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 4px 12px rgba(17, 24, 39, 0.15)',
-  },
-  dangerActionButton: {
-    background: '#C1121F',
-    color: '#FFFFFF',
-    border: 'none',
-    padding: '14px 16px',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    fontSize: '15px',
-    minHeight: '48px',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 4px 12px rgba(193, 18, 31, 0.2)',
-  },
-  metadataSection: {
-    background: '#F8F8FB',
-    borderRadius: '12px',
-    padding: '16px',
-    marginTop: '0',
-    marginBottom: '100px',
-  },
-  primarySaveButton: {
-    background: '#111827',
-    color: '#FFFFFF',
-    border: 'none',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    minHeight: '44px',
-    transition: 'all 0.2s ease',
+    paddingTop: '12px',
+    borderTop: `1px solid ${theme.colors.border}`,
   },
   attachmentGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
-    gap: '12px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+    gap: '10px',
   },
-  attachmentThumbnail: {
-    background: '#F8F8FB',
-    border: '2px solid #E5E5E9',
-    borderRadius: '12px',
-    padding: 0,
-    cursor: 'pointer',
+  attachmentThumb: {
+    width: '100%',
+    aspectRatio: '1',
+    borderRadius: theme.radius.md,
     overflow: 'hidden',
-    height: '90px',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    cursor: 'pointer',
+    padding: 0,
   },
   attachmentImg: {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
   },
-  imageModalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.8)',
-    zIndex: 100,
+  attachmentFile: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  imageModal: {
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    zIndex: 101,
-    maxWidth: '90vw',
-    maxHeight: '90vh',
-    backgroundColor: '#FFFFFF',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-  },
-  imageModalImg: {
-    width: '100%',
     height: '100%',
-    objectFit: 'contain',
-    maxWidth: '90vw',
-    maxHeight: '80vh',
-  },
-  imageModalClose: {
-    position: 'absolute',
-    top: '12px',
-    right: '12px',
-    background: 'rgba(0,0,0,0.6)',
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: '6px',
-    width: '32px',
-    height: '32px',
-    fontSize: '18px',
-    cursor: 'pointer',
-    zIndex: 102,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontSize: '11px',
+    color: theme.colors.textMuted,
+    padding: '8px',
+    textAlign: 'center',
+    wordBreak: 'break-word',
   },
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    background: 'rgba(0,0,0,0.5)',
-    zIndex: 150,
+    background: 'rgba(0, 0, 0, 0.7)',
+    zIndex: 100,
   },
-  addTicketModal: {
+  modal: {
     position: 'fixed',
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
     width: '90%',
-    maxWidth: '500px',
-    background: '#FFFFFF',
-    borderRadius: '12px',
-    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-    zIndex: 200,
+    maxWidth: '480px',
+    background: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    border: `1px solid ${theme.colors.border}`,
+    zIndex: 101,
     maxHeight: '90vh',
     overflow: 'auto',
-    paddingTop: 'env(safe-area-inset-top)',
-    paddingBottom: 'env(safe-area-inset-bottom)',
   },
-  addTicketModalHeader: {
+  modalHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '16px',
-    borderBottom: '1px solid #E5E7EB',
-    position: 'sticky',
-    top: 0,
-    background: '#FFFFFF',
-    zIndex: 1,
+    padding: '20px',
+    borderBottom: `1px solid ${theme.colors.border}`,
   },
-  addTicketModalTitle: {
+  modalTitle: {
     fontSize: '18px',
-    fontWeight: '600' as const,
-    color: '#1F2937',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
     margin: 0,
   },
-  addTicketModalClose: {
-    background: 'none',
-    border: 'none',
-    fontSize: '20px',
-    color: '#4B5563',
-    cursor: 'pointer',
-    padding: '4px',
+  modalClose: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    borderRadius: theme.radius.sm,
+    background: 'transparent',
+    border: 'none',
+    color: theme.colors.textMuted,
+    cursor: 'pointer',
   },
-  addTicketForm: {
-    padding: '16px',
+  modalForm: {
+    padding: '20px',
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
@@ -1966,73 +1170,94 @@ const styles: Record<string, CSSProperties> = {
     gap: '6px',
   },
   formLabel: {
-    fontSize: '14px',
-    fontWeight: '500' as const,
-    color: '#1F2937',
-  },
-  formInput: {
-    padding: '10px 12px',
-    borderRadius: '6px',
-    border: '1px solid #D9D9E3',
-    fontSize: '14px',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box' as const,
+    fontSize: '13px',
+    fontWeight: 500,
+    color: theme.colors.textSecondary,
   },
   formSelect: {
-    padding: '10px 12px',
-    borderRadius: '6px',
-    border: '1px solid #D9D9E3',
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.md,
+    padding: '10px 14px',
     fontSize: '14px',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box' as const,
-    background: '#FFFFFF',
+    color: theme.colors.textPrimary,
+    outline: 'none',
     cursor: 'pointer',
   },
-  formTextarea: {
-    padding: '10px 12px',
-    borderRadius: '6px',
-    border: '1px solid #D9D9E3',
+  formInput: {
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.md,
+    padding: '10px 14px',
     fontSize: '14px',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box' as const,
+    color: theme.colors.textPrimary,
+    outline: 'none',
+  },
+  formTextarea: {
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.md,
+    padding: '12px 14px',
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
+    outline: 'none',
+    resize: 'vertical',
     minHeight: '100px',
-    resize: 'vertical' as const,
+    lineHeight: 1.5,
   },
   formError: {
     padding: '10px 12px',
-    background: '#FEE2E2',
-    color: '#DC2626',
-    borderRadius: '6px',
+    background: theme.colors.errorMuted,
+    color: theme.colors.error,
+    borderRadius: theme.radius.md,
     fontSize: '13px',
   },
-  formActions: {
+  modalActions: {
     display: 'flex',
     gap: '10px',
     justifyContent: 'flex-end',
     marginTop: '8px',
   },
-  formCancelButton: {
-    padding: '10px 16px',
-    background: '#F8F8FB',
-    color: '#1F2937',
-    border: '1px solid #D9D9E3',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontWeight: 700,
-    fontSize: '14px',
-    minHeight: '44px',
-    transition: 'all 0.2s ease',
+  lightboxOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0, 0, 0, 0.9)',
+    zIndex: 200,
   },
-  formSubmitButton: {
-    padding: '10px 16px',
-    background: '#111827',
-    color: '#FFFFFF',
+  lightbox: {
+    position: 'fixed',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    zIndex: 201,
+    maxWidth: '90vw',
+    maxHeight: '90vh',
+  },
+  lightboxClose: {
+    position: 'absolute',
+    top: '-40px',
+    right: 0,
+    background: 'transparent',
     border: 'none',
-    borderRadius: '6px',
+    color: '#fff',
     cursor: 'pointer',
-    fontWeight: 700,
-    fontSize: '14px',
-    minHeight: '44px',
-    transition: 'all 0.2s ease',
+  },
+  lightboxImg: {
+    maxWidth: '90vw',
+    maxHeight: '85vh',
+    objectFit: 'contain',
+    borderRadius: theme.radius.lg,
+  },
+  mobileBottomActions: {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: '16px 20px',
+    paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
+    background: theme.colors.surface,
+    borderTop: `1px solid ${theme.colors.border}`,
+    display: 'flex',
+    gap: '10px',
   },
 }
