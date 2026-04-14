@@ -282,7 +282,6 @@ async function resetSessionCompletely(from: string, supabaseAdmin: SupabaseClien
     .from('sessions')
     .update({
       is_active: false,
-      project_id: null,
       active_ticket_id: null,
       last_activity_at: nowIso,
       updated_at: nowIso,
