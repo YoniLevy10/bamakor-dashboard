@@ -29,7 +29,12 @@ export function ProjectFilterSection({
       title="Projects"
       subtitle="Filter tickets by project"
       actions={
-        <Button variant="ghost" size="sm" onClick={() => onProjectSelect('ALL')}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onProjectSelect('ALL')}
+          disabled={selectedProjectCode === 'ALL'}
+        >
           Show All
         </Button>
       }
@@ -39,7 +44,9 @@ export function ProjectFilterSection({
         {projectCounts.map((project) => (
           <button
             key={project.id}
-            onClick={() => onProjectSelect(project.project_code)}
+            onClick={() =>
+              onProjectSelect(selectedProjectCode === project.project_code ? 'ALL' : project.project_code)
+            }
             style={{
               ...styles.projectChip,
               ...(selectedProjectCode === project.project_code ? styles.projectChipActive : {}),

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
 import { toast } from '@/lib/error-handler'
+import { Button, SearchInput, theme } from '../components/ui'
 
 type ProjectRow = {
   id: string
@@ -211,9 +212,6 @@ export default function QrPage() {
         <section style={styles.content}>
           <div style={styles.topBar}>
             <div style={styles.mobileTopRow}>
-              <Link href="/" style={styles.backButton}>
-                ←
-              </Link>
               <div>
                 <h1 style={styles.title}>QR Codes</h1>
                 <p style={styles.subtitle}>
@@ -223,9 +221,9 @@ export default function QrPage() {
             </div>
 
             <div style={styles.topActions}>
-              <button onClick={loadProjects} style={styles.secondaryButton}>
+              <Button variant="secondary" onClick={loadProjects}>
                 Refresh
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -265,9 +263,9 @@ export default function QrPage() {
               flexDirection: isMobile ? 'column' : 'row',
             }}
           >
-            <input
+            <SearchInput
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={setSearchTerm}
               placeholder="Search by project name, code, address or QR identifier..."
               style={styles.searchInput}
             />
@@ -621,13 +619,13 @@ const styles: Record<string, CSSProperties> = {
     flexWrap: 'wrap',
   },
   secondaryButton: {
-    background: '#FFFFFF',
-    color: '#111827',
-    border: '1px solid #D1D5DB',
+    background: theme.colors.surface,
+    color: theme.colors.textSecondary,
+    border: `1px solid ${theme.colors.border}`,
     borderRadius: '12px',
     padding: '10px 14px',
     cursor: 'pointer',
-    fontWeight: 700,
+    fontWeight: 600,
     textDecoration: 'none',
   },
   primaryLinkButton: {
@@ -834,13 +832,13 @@ const styles: Record<string, CSSProperties> = {
     marginTop: '8px',
   },
   secondaryButtonSmall: {
-    background: '#FFFFFF',
-    color: '#111827',
-    border: '1px solid #D1D5DB',
+    background: theme.colors.surface,
+    color: theme.colors.textSecondary,
+    border: `1px solid ${theme.colors.border}`,
     borderRadius: '10px',
     padding: '10px 12px',
     cursor: 'pointer',
-    fontWeight: 700,
+    fontWeight: 600,
     fontSize: '13px',
   },
   primaryActionButton: {
@@ -1010,19 +1008,5 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     gap: '10px',
     alignItems: 'flex-start',
-  },
-  backButton: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    color: '#111827',
-    textDecoration: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    flexShrink: 0,
   },
 }

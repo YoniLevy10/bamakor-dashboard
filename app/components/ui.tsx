@@ -316,11 +316,6 @@ export function MobileHeader({
   return (
     <header style={mobileHeaderStyles.container}>
       <div style={mobileHeaderStyles.left}>
-        <Link href="/" style={mobileHeaderStyles.backButton}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-        </Link>
         <div>
           <h1 style={mobileHeaderStyles.title}>{title}</h1>
           {subtitle && <p style={mobileHeaderStyles.subtitle}>{subtitle}</p>}
@@ -353,19 +348,6 @@ const mobileHeaderStyles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-  },
-  backButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '40px',
-    height: '40px',
-    borderRadius: theme.radius.md,
-    background: theme.colors.surface,
-    color: theme.colors.textSecondary,
-    textDecoration: 'none',
-    border: `1px solid ${theme.colors.border}`,
-    transition: 'all 0.15s ease',
   },
   title: {
     fontSize: '18px',
@@ -1152,15 +1134,15 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
   container: {
     position: 'fixed',
     top: 0,
-    left: 0,
+    right: 0,
     width: '300px',
     height: '100dvh',
     background: theme.colors.background,
-    borderRight: `1px solid ${theme.colors.border}`,
+    borderLeft: `1px solid ${theme.colors.border}`,
     zIndex: 101,
     display: 'flex',
     flexDirection: 'column',
-    animation: 'slideInLeft 0.25s ease',
+    animation: 'slideInRight 0.25s ease',
     boxShadow: theme.shadows.xl,
   },
   header: {

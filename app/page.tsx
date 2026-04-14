@@ -482,10 +482,28 @@ export default function HomePage() {
 
     await asyncHandler(
       async () => {
+        const workerChanged = (selectedTicket.assigned_worker_id || '') !== (draftWorkerId || '')
+
+        // If worker assignment changed, use API route to ensure SMS is sent exactly once.
+        if (workerChanged && draftWorkerId) {
+          const response = await fetch('/api/assign-ticket', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_id: selectedTicket.id, worker_id: draftWorkerId }),
+          })
+
+          if (!response.ok) {
+            const result = await response.json().catch(() => ({}))
+            throw new Error((result as { error?: string }).error || 'Failed to assign worker')
+          }
+        }
+
         const payload: Record<string, string | null> = {
           description: draftDescription,
           status: draftStatus,
-          assigned_worker_id: draftWorkerId || null,
+          // If assignment changed and a worker was selected, assignment was handled via /api/assign-ticket.
+          // Keep direct DB updates for unassign (draftWorkerId empty).
+          assigned_worker_id: workerChanged && draftWorkerId ? selectedTicket.assigned_worker_id : (draftWorkerId || null),
         }
 
         if (draftStatus === 'CLOSED') {
@@ -700,12 +718,14 @@ export default function HomePage() {
 
   const filteredTickets = useMemo(() => {
     return tickets.filter((ticket) => {
+      const q = searchTerm.trim().toLowerCase()
       const matchesSearch =
-        searchTerm.trim() === '' ||
-        ticket.reporter_phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (ticket.project_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (ticket.project_code || '').toLowerCase().includes(searchTerm.toLowerCase())
+        !q ||
+        String(ticket.ticket_number).toLowerCase().includes(q) ||
+        ticket.reporter_phone.toLowerCase().includes(q) ||
+        ticket.description.toLowerCase().includes(q) ||
+        (ticket.project_name || '').toLowerCase().includes(q) ||
+        (ticket.project_code || '').toLowerCase().includes(q)
 
       const matchesStatus =
         statusFilter === 'ALL' || ticket.status === statusFilter
@@ -816,7 +836,7 @@ export default function HomePage() {
       {isMobile && (
         <MobileHeader
           title="Dashboard"
-          subtitle="Welcome back"
+          subtitle="Hello Sarah"
           onMenuClick={() => setMenuOpen(true)}
         />
       )}

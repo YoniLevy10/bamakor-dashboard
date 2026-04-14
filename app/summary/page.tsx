@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
+import { Button } from '../components/ui'
 
 type TicketRow = {
   id: string
@@ -269,9 +270,6 @@ export default function SummaryPage() {
           <div style={styles.topBar}>
             <div style={styles.brandWrap}>
               <div style={styles.mobileTopRow}>
-                <Link href="/" style={styles.backButton}>
-                  ←
-                </Link>
                 <div>
                   <h1 style={{ ...styles.title, ...(isMobile ? styles.titleMobile : {}) }}>
                     Summary
@@ -284,9 +282,9 @@ export default function SummaryPage() {
             </div>
 
             <div style={styles.topActions}>
-              <button onClick={loadData} style={styles.secondaryButton}>
+              <Button variant="secondary" onClick={loadData}>
                 Refresh
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -567,20 +565,7 @@ const styles: Record<string, CSSProperties> = {
     gap: '10px',
     alignItems: 'flex-start',
   },
-  backButton: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    color: '#111827',
-    textDecoration: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    flexShrink: 0,
-  },
+  // backButton removed (mobile headers no longer show arrow icons)
   mainArea: {
     padding: '24px',
     width: '100%',
@@ -638,17 +623,7 @@ const styles: Record<string, CSSProperties> = {
   subtitleMobile: {
     fontSize: '13px',
   },
-  secondaryButton: {
-    padding: '10px 14px',
-    fontSize: '13px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    color: '#2F2F33',
-    cursor: 'pointer',
-    fontWeight: 700,
-    transition: 'all 0.2s ease',
-  },
+  // secondaryButton removed (using shared Button component)
   secondaryLinkButton: {
     padding: '10px 14px',
     fontSize: '13px',

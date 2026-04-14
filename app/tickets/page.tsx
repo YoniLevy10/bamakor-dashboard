@@ -255,6 +255,13 @@ export default function TicketsPage() {
 
         toast.success('Ticket closed')
         await fetchData()
+
+        // Keep drawer open and reflect status immediately
+        setSelectedTicket((prev) => {
+          if (!prev || prev.id !== ticketId) return prev
+          return { ...prev, status: 'CLOSED', closed_at: new Date().toISOString() }
+        })
+        setDraftStatus('CLOSED')
         return true
       },
       { context: 'Failed to close ticket', showErrorToast: true }
@@ -422,7 +429,17 @@ export default function TicketsPage() {
       }
 
       await fetchData()
-      closeDrawer()
+      toast.success('Changes saved')
+
+      // Keep drawer open and update selected ticket in-place
+      setSelectedTicket((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          priority: draftPriority,
+          status: draftStatus,
+        }
+      })
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save changes'
       toast.error(errorMessage)
@@ -503,9 +520,6 @@ export default function TicketsPage() {
               <>
                 <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
                   + New Ticket
-                </Button>
-                <Button variant="secondary" onClick={fetchData}>
-                  Refresh
                 </Button>
               </>
             }
@@ -780,7 +794,6 @@ export default function TicketsPage() {
                   variant="danger"
                   onClick={() => {
                     closeTicket(selectedTicket.id)
-                    closeDrawer()
                   }}
                   style={{ width: '100%' }}
                 >

@@ -110,7 +110,7 @@ export function AddTicketModal({
             <input
               type="tel"
               value={reporterPhone}
-              onChange={(e) => onReporterPhoneChange(e.target.value)}
+              onChange={(e) => onReporterPhoneChange(e.target.value.replace(/[^\d]/g, ''))}
               placeholder="Enter phone number"
               style={styles.formInput}
             />
