@@ -196,6 +196,118 @@ async function expireInactiveSessions(supabaseAdmin: SupabaseClient) {
   }
 }
 
+type SessionRow = {
+  id: string
+  phone_number: string
+  project_id: string | null
+  active_ticket_id: string | null
+  is_active: boolean
+}
+
+async function getActiveSession(from: string, supabaseAdmin: SupabaseClient): Promise<SessionRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from('sessions')
+    .select('id, phone_number, project_id, active_ticket_id, is_active')
+    .eq('phone_number', from)
+    .eq('is_active', true)
+    .order('last_activity_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('❌ Error fetching active session:', error)
+    return null
+  }
+
+  return (data as SessionRow | null) || null
+}
+
+async function resetSessionCompletely(from: string, supabaseAdmin: SupabaseClient, reason: string) {
+  const nowIso = new Date().toISOString()
+  console.log('🧼 SESSION_RESET: Clearing WhatsApp session state', { from, reason })
+
+  // 1) Clear any pending multi-match selection state (prevents being stuck on "reply 1/2/3")
+  await clearPendingSelection(from, supabaseAdmin)
+
+  // 2) Deactivate all active sessions for this phone (prevents old project/ticket context leaking)
+  const { error } = await supabaseAdmin
+    .from('sessions')
+    .update({
+      is_active: false,
+      project_id: null,
+      active_ticket_id: null,
+      last_activity_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq('phone_number', from)
+    .eq('is_active', true)
+
+  if (error) {
+    console.error('⚠️ SESSION_RESET_FAILED: Could not deactivate sessions', { from, reason, error })
+  }
+}
+
+async function getTicketStatus(ticketId: string, supabaseAdmin: SupabaseClient): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('tickets')
+    .select('status')
+    .eq('id', ticketId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('⚠️ Failed to fetch ticket status:', { ticketId, error })
+    return null
+  }
+
+  return (data as { status?: string } | null)?.status || null
+}
+
+async function findRecentTicketForPhone(from: string, supabaseAdmin: SupabaseClient): Promise<{ id: string; status: string; created_at: string } | null> {
+  // Product rule: sessions reset after ticket creation, but user may send an image immediately after.
+  // So we allow attaching an image to the most recent ticket for this phone within a short window.
+  const windowMinutes = 10
+  const sinceIso = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString()
+
+  const { data, error } = await supabaseAdmin
+    .from('tickets')
+    .select('id, status, created_at')
+    .eq('reporter_phone', from)
+    .gte('created_at', sinceIso)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('⚠️ Failed to find recent ticket for phone:', { from, error })
+    return null
+  }
+
+  if (!data?.id || !data?.created_at || !data?.status) return null
+  return data as { id: string; status: string; created_at: string }
+}
+
+async function logIncomingFreeTextToTicket(
+  ticketId: string,
+  from: string,
+  textBody: string,
+  supabaseAdmin: SupabaseClient
+) {
+  try {
+    const { error } = await supabaseAdmin.from('ticket_logs').insert({
+      ticket_id: ticketId,
+      action_type: 'USER_MESSAGE',
+      notes: textBody,
+      created_by: 'whatsapp_user',
+      meta: { phone: from },
+    })
+
+    if (error) {
+      console.error('⚠️ Failed to insert USER_MESSAGE log (non-blocking):', { ticketId, error })
+    }
+  } catch (e) {
+    console.error('⚠️ Unexpected error inserting USER_MESSAGE log (non-blocking):', e)
+  }
+}
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
   const mode = searchParams.get('hub.mode')
@@ -362,6 +474,8 @@ export async function POST(req: NextRequest) {
                 })
               }
 
+              // Product rule: after image confirmation, reset to default state
+              await resetSessionCompletely(from, supabaseAdmin, 'image_processed_success')
               return NextResponse.json(
                 {
                   received: true,
@@ -406,6 +520,8 @@ export async function POST(req: NextRequest) {
           })
         }
 
+        // Product rule: reset to default state after image attempt
+        await resetSessionCompletely(from, supabaseAdmin, 'image_processed_failure')
         return NextResponse.json(
           {
             received: true,
@@ -418,8 +534,86 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      // Case B: No context - guide user to start flow
-      console.log('📍 Image received but no active ticket context - guiding user to start')
+      // Case B: No session/ticket context - attach to most recent ticket for this phone (short window)
+      const recentTicket = await findRecentTicketForPhone(from, supabaseAdmin)
+      if (recentTicket && recentTicket.status !== 'CLOSED') {
+        const ticketId = recentTicket.id
+        let failureReason = ''
+
+        console.log(`📍 No active session. Found recent ticket for ${from} - attaching image to ticket: ${ticketId}`)
+
+        console.log(`⏳ PIPELINE_STEP: 1/4 Downloading image from WhatsApp (mediaId: ${mediaId})`)
+        const mediaData = await downloadWhatsAppMedia(mediaId, 'image')
+
+        if (!mediaData) {
+          failureReason = 'DOWNLOAD_FAILED'
+        } else {
+          console.log(`⏳ PIPELINE_STEP: 2/4 Uploading to Supabase Storage`)
+          const uploadResult = await uploadWhatsAppMediaToStorage(
+            ticketId,
+            mediaData.buffer,
+            mediaData.fileName,
+            mediaData.mimeType
+          )
+
+          if (uploadResult) {
+            console.log(`⏳ PIPELINE_STEP: 3/4 Creating attachment database record`)
+            const attachmentCreated = await createAttachmentRecord(
+              supabaseAdmin,
+              ticketId,
+              mediaData.fileName,
+              uploadResult.filePath,
+              uploadResult.fileSize,
+              mediaData.mimeType,
+              mediaId,
+              'whatsapp_image'
+            )
+
+            if (attachmentCreated) {
+              console.log(`⏳ PIPELINE_STEP: 4/4 Sending WhatsApp confirmation`)
+              try {
+                await sendWhatsAppTextMessage(
+                  from,
+                  '✅ התמונה התקבלה וצורפה לתקלה.\n\nצוות כבר טוען על זה — תשמעו ממנו בקרוב!'
+                )
+              } catch (sendError) {
+                console.error('⚠️ PIPELINE_WARNING: Failed to send confirmation (recent ticket attach)', sendError)
+              }
+
+              await resetSessionCompletely(from, supabaseAdmin, 'recent_ticket_image_processed_success')
+
+              return NextResponse.json(
+                { received: true, type: 'image_attached_to_recent_ticket', ticketId, status: 'SUCCESS' },
+                { status: 200 }
+              )
+            } else {
+              failureReason = 'DB_INSERT_FAILED'
+            }
+          } else {
+            failureReason = 'STORAGE_UPLOAD_FAILED'
+          }
+        }
+
+        console.log(`📤 PIPELINE_FALLBACK: recent-ticket attach failed`, { failureReason, ticketId })
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            '⚠️ לא הצלחנו להוסיף את התמונה, אך התקלה שלך התקבלה.\n\nאם תרצו, נסו לשלוח את התמונה שוב או פנו למנהלת הבניין.'
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send recent-ticket fallback message:', sendError)
+        }
+
+        await resetSessionCompletely(from, supabaseAdmin, 'recent_ticket_image_processed_failure')
+
+        return NextResponse.json(
+          { received: true, type: 'image_failed_recent_ticket', ticketId, status: 'PARTIAL_FAILURE', failureReason },
+          { status: 200 }
+        )
+      }
+
+      // Case C: No context and no recent ticket - guide user to start flow
+      console.log('📍 Image received but no session context and no recent ticket - guiding user to start')
 
       try {
         await sendWhatsAppTextMessage(
@@ -468,6 +662,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
+    // Product rule: WhatsApp session is single-purpose and short-lived.
+    // Free-text should never be auto-logged into a previous ticket; after reset, it restarts project search flow.
     // STEP 1: START_<PROJECT_CODE> or START_<PROJECT_CODE>_<BUILDING>
     if (textBody.toUpperCase().startsWith('START_')) {
       const parsedStart = parseStartCode(textBody)
@@ -620,6 +816,13 @@ export async function POST(req: NextRequest) {
           const selectedProject = candidates[selectedIndex]
           console.log('✅ Creating session for selected building:', selectedProject.name)
 
+          // Ensure only one active session per phone_number
+          await supabaseAdmin
+            .from('sessions')
+            .update({ is_active: false, active_ticket_id: null, last_activity_at: new Date().toISOString() })
+            .eq('phone_number', from)
+            .eq('is_active', true)
+
           const { data: createdSession, error: sessionCreateError } = await supabaseAdmin
             .from('sessions')
             .insert({
@@ -745,6 +948,13 @@ export async function POST(req: NextRequest) {
         const matchedProject = searchResults[0]
         console.log('✅ Found 1 matching building:', matchedProject.name)
 
+        // Ensure only one active session per phone_number
+        await supabaseAdmin
+          .from('sessions')
+          .update({ is_active: false, active_ticket_id: null, last_activity_at: new Date().toISOString() })
+          .eq('phone_number', from)
+          .eq('is_active', true)
+
         const { data: createdSession, error: sessionCreateError } = await supabaseAdmin
           .from('sessions')
           .insert({
@@ -846,6 +1056,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Product rule: never keep active_ticket_id for text follow-ups.
+    // Session is only used to bridge: (project identified) -> (ticket description) -> ticket created.
+
     const { data: existingProject, error: existingProjectError } = await supabaseAdmin
       .from('projects')
       .select('project_code, qr_identifier')
@@ -883,18 +1096,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ticket creation failed' }, { status: 500 })
     }
 
-    const { error: sessionUpdateError } = await supabaseAdmin
-      .from('sessions')
-      .update({
-        active_ticket_id: createdTicket.id,
-        is_active: true,
-        last_activity_at: new Date().toISOString(),
-      })
-      .eq('id', session.id)
-
-    if (sessionUpdateError) {
-      console.error('❌ Error updating session after ticket creation:', sessionUpdateError)
-    }
+    // Immediately reset session after ticket creation confirmation is sent (single-purpose session).
 
     const { error: logError } = await supabaseAdmin
       .from('ticket_logs')
@@ -962,6 +1164,10 @@ export async function POST(req: NextRequest) {
     } catch (sendError) {
       console.error('⚠️ Failed to send ticket-created reply:', sendError)
     }
+
+    // Product rule: if no image is sent, session must reset after ticket creation confirmation.
+    // If an image is sent right after, it will attach via recent-ticket lookup (short window).
+    await resetSessionCompletely(from, supabaseAdmin, 'ticket_created_text_flow_reset')
 
     return NextResponse.json(
       {
