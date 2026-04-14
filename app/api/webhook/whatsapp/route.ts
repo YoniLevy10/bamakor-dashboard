@@ -196,6 +196,94 @@ async function expireInactiveSessions(supabaseAdmin: SupabaseClient) {
   }
 }
 
+type SessionRow = {
+  id: string
+  phone_number: string
+  project_id: string | null
+  active_ticket_id: string | null
+  is_active: boolean
+}
+
+async function getActiveSession(from: string, supabaseAdmin: SupabaseClient): Promise<SessionRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from('sessions')
+    .select('id, phone_number, project_id, active_ticket_id, is_active')
+    .eq('phone_number', from)
+    .eq('is_active', true)
+    .order('last_activity_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('❌ Error fetching active session:', error)
+    return null
+  }
+
+  return (data as SessionRow | null) || null
+}
+
+async function resetSessionCompletely(from: string, supabaseAdmin: SupabaseClient, reason: string) {
+  const nowIso = new Date().toISOString()
+  console.log('🧼 SESSION_RESET: Clearing WhatsApp session state', { from, reason })
+
+  // 1) Clear any pending multi-match selection state (prevents being stuck on "reply 1/2/3")
+  await clearPendingSelection(from, supabaseAdmin)
+
+  // 2) Deactivate all active sessions for this phone (prevents old project/ticket context leaking)
+  const { error } = await supabaseAdmin
+    .from('sessions')
+    .update({
+      is_active: false,
+      active_ticket_id: null,
+      last_activity_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq('phone_number', from)
+    .eq('is_active', true)
+
+  if (error) {
+    console.error('⚠️ SESSION_RESET_FAILED: Could not deactivate sessions', { from, reason, error })
+  }
+}
+
+async function getTicketStatus(ticketId: string, supabaseAdmin: SupabaseClient): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('tickets')
+    .select('status')
+    .eq('id', ticketId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('⚠️ Failed to fetch ticket status:', { ticketId, error })
+    return null
+  }
+
+  return (data as { status?: string } | null)?.status || null
+}
+
+async function logIncomingFreeTextToTicket(
+  ticketId: string,
+  from: string,
+  textBody: string,
+  supabaseAdmin: SupabaseClient
+) {
+  try {
+    const { error } = await supabaseAdmin.from('ticket_logs').insert({
+      ticket_id: ticketId,
+      action_type: 'USER_MESSAGE',
+      notes: textBody,
+      created_by: 'whatsapp_user',
+      meta: { phone: from },
+    })
+
+    if (error) {
+      console.error('⚠️ Failed to insert USER_MESSAGE log (non-blocking):', { ticketId, error })
+    }
+  } catch (e) {
+    console.error('⚠️ Unexpected error inserting USER_MESSAGE log (non-blocking):', e)
+  }
+}
+
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
   const mode = searchParams.get('hub.mode')
@@ -284,22 +372,12 @@ export async function POST(req: NextRequest) {
       console.log('🖼️ Image message received - downloading and attaching to ticket')
 
       // Check if user has an active session/ticket context
-      const { data: session, error: sessionError } = await supabaseAdmin
-        .from('sessions')
-        .select('id, phone_number, project_id, active_ticket_id, is_active')
-        .eq('phone_number', from)
-        .eq('is_active', true)
-        .order('last_activity_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (sessionError) {
-        console.error('❌ Error fetching session for image attachment:', sessionError)
-      }
+      const session = await getActiveSession(from, supabaseAdmin)
 
       // Case A: Active ticket exists - attach image to it
       if (session?.active_ticket_id) {
         const ticketId = session.active_ticket_id
+        const ticketStatus = await getTicketStatus(ticketId, supabaseAdmin)
         let failureReason = ''
 
         console.log(`📍 Active ticket found for ${from} - attaching image to ticket: ${ticketId}`)
@@ -362,12 +440,18 @@ export async function POST(req: NextRequest) {
                 })
               }
 
+              // If the ticket is already closed, reset session after image pipeline completes
+              if (ticketStatus === 'CLOSED') {
+                await resetSessionCompletely(from, supabaseAdmin, 'ticket_closed_image_processed_success')
+              }
+
               return NextResponse.json(
                 {
                   received: true,
                   type: 'image_attached_to_existing_ticket',
                   ticketId,
                   status: 'SUCCESS',
+                  ticketStatus,
                 },
                 { status: 200 }
               )
@@ -406,6 +490,11 @@ export async function POST(req: NextRequest) {
           })
         }
 
+        // If the ticket is already closed, reset session after image pipeline completes (even on failure)
+        if (ticketStatus === 'CLOSED') {
+          await resetSessionCompletely(from, supabaseAdmin, 'ticket_closed_image_processed_failure')
+        }
+
         return NextResponse.json(
           {
             received: true,
@@ -413,6 +502,7 @@ export async function POST(req: NextRequest) {
             ticketId,
             status: 'PARTIAL_FAILURE',
             failureReason,
+            ticketStatus,
           },
           { status: 200 }
         )
@@ -466,6 +556,41 @@ export async function POST(req: NextRequest) {
     // If no text body and no valid media, ignore
     if (!textBody) {
       return NextResponse.json({ received: true }, { status: 200 })
+    }
+
+    // GLOBAL SESSION SAFETY: if user has a session tied to a ticket, prevent context leakage
+    // - If ticket is CLOSED: reset immediately so new messages start project search flow again.
+    // - If ticket is still open: treat free-text as a follow-up message to the same ticket (do not create a new ticket).
+    const activeSession = await getActiveSession(from, supabaseAdmin)
+    if (activeSession?.active_ticket_id) {
+      const ticketId = activeSession.active_ticket_id
+      const ticketStatus = await getTicketStatus(ticketId, supabaseAdmin)
+
+      if (ticketStatus === 'CLOSED') {
+        // No image was sent (this is free-text); reset immediately before processing as a new conversation.
+        await resetSessionCompletely(from, supabaseAdmin, 'ticket_closed_free_text_reset')
+      } else {
+        // Ticket still active: capture the message without opening a new ticket.
+        await logIncomingFreeTextToTicket(ticketId, from, textBody, supabaseAdmin)
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            '✅ קיבלנו את ההודעה והעברנו אותה לטיפול.\n\nאם תרצו לפתוח תקלה חדשה, סרקו שוב את קוד ה-QR או כתבו את כתובת הבניין (רחוב ומספר).'
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send follow-up confirmation:', sendError)
+        }
+
+        return NextResponse.json(
+          {
+            received: true,
+            type: 'followup_text_logged',
+            ticketId,
+            ticketStatus,
+          },
+          { status: 200 }
+        )
+      }
     }
 
     // STEP 1: START_<PROJECT_CODE> or START_<PROJECT_CODE>_<BUILDING>
@@ -590,19 +715,7 @@ export async function POST(req: NextRequest) {
     }
 
     // STEP 2: create ticket from active session
-    const { data: session, error: sessionError } = await supabaseAdmin
-      .from('sessions')
-      .select('id, phone_number, project_id, active_ticket_id, is_active')
-      .eq('phone_number', from)
-      .eq('is_active', true)
-      .order('last_activity_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (sessionError) {
-      console.error('❌ Error fetching session:', sessionError)
-      return NextResponse.json({ error: 'Session lookup failed' }, { status: 500 })
-    }
+    const session = await getActiveSession(from, supabaseAdmin)
 
     if (!session) {
       // STEP 2.5: PENDING SELECTION HANDLING (user replies with number 1/2/3)
@@ -689,27 +802,12 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      // If there's a pending selection but message is NOT numeric, send reminder
+      // If there's a pending selection but message is NOT numeric:
+      // treat this as a new free-text attempt (restart search flow) to avoid being stuck.
       if (pendingSelection && !numericSelection) {
-        console.log('⚠️ Pending selection exists but message is not numeric')
-
-        try {
-          await sendWhatsAppTextMessage(
-            from,
-            `⚠️ השיבו רק עם מספר האפשרות: 1, 2 או 3`
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send pending-reminder message:', sendError)
-        }
-
-        return NextResponse.json(
-          {
-            received: true,
-            type: 'pending_reminder',
-            from,
-          },
-          { status: 200 }
-        )
+        console.log('♻️ Pending selection exists but user sent free-text - restarting search flow')
+        await clearPendingSelection(from, supabaseAdmin)
+        // Continue to building search below (no early return).
       }
 
       // NO PENDING SELECTION: Do building search
