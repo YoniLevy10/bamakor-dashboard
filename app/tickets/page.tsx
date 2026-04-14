@@ -863,7 +863,12 @@ export default function TicketsPage() {
                 <input
                   type="tel"
                   value={addTicketForm.reporter_phone}
-                  onChange={(e) => setAddTicketForm({ ...addTicketForm, reporter_phone: e.target.value })}
+                  onChange={(e) =>
+                    setAddTicketForm({
+                      ...addTicketForm,
+                      reporter_phone: e.target.value.replace(/[^\d]/g, ''),
+                    })
+                  }
                   placeholder="Enter phone number"
                   style={styles.formInput}
                 />
@@ -877,7 +882,7 @@ export default function TicketsPage() {
                 <Button variant="secondary" onClick={() => setShowAddTicketModal(false)}>
                   Cancel
                 </Button>
-                <Button variant="primary" loading={addingTicket} onClick={() => handleCreateTicket({ preventDefault: () => {} } as React.FormEvent)}>
+                <Button variant="primary" loading={addingTicket} type="submit">
                   Create Ticket
                 </Button>
               </div>

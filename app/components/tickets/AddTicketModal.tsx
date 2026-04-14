@@ -125,7 +125,7 @@ export function AddTicketModal({
             <Button
               variant="primary"
               loading={loading}
-              onClick={() => onSubmit({ preventDefault: () => {} } as React.FormEvent)}
+              type="submit"
             >
               Create Ticket
             </Button>

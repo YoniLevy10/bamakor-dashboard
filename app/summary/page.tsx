@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Button } from '../components/ui'
@@ -46,6 +47,7 @@ type WorkerRow = {
 }
 
 export default function SummaryPage() {
+  const router = useRouter()
   const [tickets, setTickets] = useState<TicketRow[]>([])
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [workers, setWorkers] = useState<WorkerRow[]>([])
@@ -215,7 +217,7 @@ export default function SummaryPage() {
       if (filter.worker) params.append('worker', filter.worker)
       if (params.toString()) url += `?${params.toString()}`
     }
-    window.location.href = url
+    router.push(url)
   }
 
   function getStatusStyle(status: string): CSSProperties {

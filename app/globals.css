@@ -166,6 +166,64 @@ select:focus {
   box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.15);
 }
 
+/* ============================================================================
+   UI POLISH: interactive states (no behavior changes)
+   ========================================================================== */
+
+[data-ui="button"] {
+  transform: translateY(0);
+  will-change: transform, box-shadow, background-color, border-color;
+}
+
+[data-ui="button"]:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+}
+
+[data-ui="button"]:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+}
+
+[data-ui="button"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(196, 30, 58, 0.18);
+}
+
+[data-ui="button"][data-variant="primary"]:hover:not(:disabled) {
+  filter: brightness(0.98);
+}
+
+[data-ui="button"][data-variant="secondary"]:hover:not(:disabled) {
+  background-color: rgba(15, 20, 25, 0.02);
+}
+
+[data-ui="button"][data-variant="ghost"]:hover:not(:disabled) {
+  background-color: rgba(15, 20, 25, 0.04);
+}
+
+[data-ui="button"][data-variant="danger"]:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+[data-ui="card"] {
+  will-change: box-shadow, transform, border-color;
+}
+
+[data-ui="card"]:hover {
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.07);
+  border-color: rgba(203, 213, 225, 0.9);
+}
+
+[data-ui="search"]:focus-within [data-ui="input"] {
+  border-color: rgba(196, 30, 58, 0.35) !important;
+  box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.12) !important;
+}
+
+[data-ui="icon-button"]:hover {
+  filter: brightness(0.96);
+}
+
 /* Drawer animations */
 @keyframes slideInRight {
   from {

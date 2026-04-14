@@ -515,8 +515,8 @@ const kpiStyles: Record<string, CSSProperties> = {
 // BUTTONS
 // ============================================================================
 
-export function Button({ 
-  children, 
+export function Button({
+  children,
   variant = 'secondary',
   size = 'md',
   disabled,
@@ -524,14 +524,11 @@ export function Button({
   onClick,
   style: customStyle,
   ...props
-}: { 
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
   size?: 'sm' | 'md' | 'lg'
-  disabled?: boolean
   loading?: boolean
-  onClick?: () => void
-  style?: CSSProperties
 }) {
   const variantStyles: Record<string, CSSProperties> = {
     primary: {
@@ -567,6 +564,9 @@ export function Button({
     <button
       onClick={onClick}
       disabled={disabled || loading}
+      data-ui="button"
+      data-variant={variant}
+      data-size={size}
       style={{
         ...buttonStyles.base,
         ...variantStyles[variant],
@@ -672,7 +672,7 @@ export function Card({
   style?: CSSProperties
 }) {
   return (
-    <div style={{ ...cardStyles.container, ...customStyle }}>
+    <div data-ui="card" style={{ ...cardStyles.container, ...customStyle }}>
       {(title || actions) && (
         <div style={cardStyles.header}>
           <div>
@@ -894,7 +894,7 @@ export function Drawer({
             {title && <div style={drawerStyles.title}>{title}</div>}
             {subtitle && <div style={drawerStyles.subtitle}>{subtitle}</div>}
           </div>
-          <button onClick={onClose} style={drawerStyles.closeButton}>
+          <button onClick={onClose} style={drawerStyles.closeButton} data-ui="icon-button" aria-label="Close">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 6 6 18" />
               <path d="m6 6 12 12" />
@@ -1231,7 +1231,7 @@ export function SearchInput({
   style?: CSSProperties
 }) {
   return (
-    <div style={{ ...searchStyles.container, ...customStyle }}>
+    <div data-ui="search" style={{ ...searchStyles.container, ...customStyle }}>
       <svg 
         width="18" 
         height="18" 
@@ -1252,6 +1252,7 @@ export function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         style={searchStyles.input}
+        data-ui="input"
       />
     </div>
   )
