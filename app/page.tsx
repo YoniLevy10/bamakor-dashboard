@@ -15,7 +15,6 @@ import {
 import { DashboardStats } from './components/dashboard/DashboardStats'
 import { ProjectFilterSection } from './components/dashboard/ProjectFilterSection'
 import { QrManagementSection } from './components/dashboard/QrManagementSection'
-import { TicketsList } from './components/tickets/TicketsList'
 import { TicketDetailDrawer } from './components/tickets/TicketDetailDrawer'
 import { AddTicketModal } from './components/tickets/AddTicketModal'
 import { ImageLightbox } from './components/shared/ImageLightbox'
@@ -889,23 +888,20 @@ export default function HomePage() {
           />
         )}
 
-        {/* Tickets List */}
-        <TicketsList
-          tickets={tickets}
-          filteredTickets={filteredTickets}
-          loading={loading}
-          error={error}
-          searchTerm={searchTerm}
-          statusFilter={statusFilter}
-          onSearchChange={setSearchTerm}
-          onStatusFilterChange={setStatusFilter}
-          onTicketClick={openTicket}
-          onCreateClick={() => setShowAddTicketModal(true)}
-          onRetry={() => loadTickets(activeSource)}
-          selectedTicketId={selectedTicket?.id}
-          workersMap={workersMap}
-          isMobile={isMobile}
-        />
+        {/* Dashboard Quick Actions */}
+        <div style={styles.quickActionsContainer}>
+          <div style={styles.quickActionCard}>
+            <h3 style={styles.quickActionTitle}>Dashboard Overview</h3>
+            <p style={styles.quickActionDescription}>
+              View summary statistics and project filters above
+            </p>
+            <div style={styles.quickActionButtons}>
+              <Link href="/tickets" style={styles.quickActionLink}>
+                Go to Tickets Workspace →
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Ticket Detail Drawer */}
@@ -979,6 +975,43 @@ const styles: Record<string, CSSProperties> = {
   content: {
     padding: '24px',
     paddingBottom: '100px',
+  },
+  quickActionsContainer: {
+    marginTop: '32px',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+    gap: '20px',
+  },
+  quickActionCard: {
+    padding: '24px',
+    background: theme.colors.surface,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.lg,
+    textAlign: 'center',
+  },
+  quickActionTitle: {
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+    margin: '0 0 8px 0',
+  },
+  quickActionDescription: {
+    fontSize: '14px',
+    color: theme.colors.textMuted,
+    margin: '8px 0 16px 0',
+    lineHeight: '1.5',
+  },
+  quickActionButtons: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'center',
+  },
+  quickActionLink: {
+    fontSize: '14px',
+    fontWeight: 500,
+    color: theme.colors.primary,
+    textDecoration: 'none',
+    transition: 'color 0.2s ease',
   },
   mobileBottomActions: {
     position: 'fixed',
