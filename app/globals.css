@@ -29,11 +29,11 @@
   --color-text-muted: #64748B;
   --color-text-inverse: #FFFFFF;
   
-  /* Primary - Original Brand Crimson with Depth */
-  --color-primary: #C41E3A;
-  --color-primary-hover: #A91B32;
-  --color-primary-muted: rgba(196, 30, 58, 0.08);
-  --color-primary-text: #C41E3A;
+  /* Primary - Modern Red with Better Contrast */
+  --color-primary: #DC2626;
+  --color-primary-hover: #B91C1C;
+  --color-primary-muted: rgba(220, 38, 38, 0.08);
+  --color-primary-text: #DC2626;
   
   /* Secondary */
   --color-secondary: #F1F5F9;
@@ -163,7 +163,7 @@ input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.15);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
 /* ============================================================================
@@ -176,26 +176,26 @@ select:focus {
 }
 
 [data-ui="button"]:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
 }
 
 [data-ui="button"]:active:not(:disabled) {
   transform: translateY(0);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 [data-ui="button"]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(196, 30, 58, 0.18);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
 }
 
 [data-ui="button"][data-variant="primary"]:hover:not(:disabled) {
-  filter: brightness(0.98);
+  filter: brightness(0.96);
 }
 
 [data-ui="button"][data-variant="secondary"]:hover:not(:disabled) {
-  background-color: rgba(15, 20, 25, 0.02);
+  background-color: rgba(15, 20, 25, 0.04);
 }
 
 [data-ui="button"][data-variant="ghost"]:hover:not(:disabled) {
@@ -216,8 +216,8 @@ select:focus {
 }
 
 [data-ui="search"]:focus-within [data-ui="input"] {
-  border-color: rgba(196, 30, 58, 0.35) !important;
-  box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.12) !important;
+  border-color: rgba(220, 38, 38, 0.35) !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
 }
 
 [data-ui="icon-button"]:hover {
@@ -285,4 +285,38 @@ select:focus {
   50% {
     opacity: 0.5;
   }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Card hover enhancement */
+[data-ui="card"] {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
