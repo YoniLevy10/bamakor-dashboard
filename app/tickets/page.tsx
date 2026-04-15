@@ -118,14 +118,43 @@ export default function TicketsPage() {
       const params = new URLSearchParams(window.location.search)
       const projectParam = params.get('project')
       const workerParam = params.get('worker')
+      const statusParam = params.get('status')
+      const priorityParam = params.get('priority')
       if (projectParam) {
         setProjectFilter(decodeURIComponent(projectParam))
       }
       if (workerParam) {
         setWorkerFilter(decodeURIComponent(workerParam))
       }
+      if (statusParam) {
+        setStatusFilter(decodeURIComponent(statusParam))
+      }
+      if (priorityParam) {
+        setPriorityFilter(decodeURIComponent(priorityParam))
+      }
     }
   }, [])
+
+  // Update URL when filters change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams()
+      if (projectFilter !== 'ALL') {
+        params.set('project', projectFilter)
+      }
+      if (workerFilter !== 'ALL') {
+        params.set('worker', workerFilter)
+      }
+      if (statusFilter !== 'ALL') {
+        params.set('status', statusFilter)
+      }
+      if (priorityFilter !== 'ALL') {
+        params.set('priority', priorityFilter)
+      }
+      const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname
+      window.history.replaceState(null, '', newUrl)
+    }
+  }, [projectFilter, workerFilter, statusFilter, priorityFilter])
 
   useEffect(() => {
     fetchData()
