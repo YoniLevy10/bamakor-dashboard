@@ -102,6 +102,8 @@ export default function TicketsPage() {
   const [addingTicket, setAddingTicket] = useState(false)
   const [addTicketError, setAddTicketError] = useState('')
   const [projects, setProjects] = useState<{ id: string; name: string; project_code: string }[]>([])
+  const [updatingStatusTicketId, setUpdatingStatusTicketId] = useState<string | null>(null)
+  const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -267,6 +269,47 @@ export default function TicketsPage() {
       { context: 'Failed to close ticket', showErrorToast: true }
     )
     setActionLoadingId(null)
+  }
+
+  async function changeStatusInline(ticketId: string, newStatus: string) {
+    setUpdatingStatusTicketId(ticketId)
+    await asyncHandler(
+      async () => {
+        const payload: Record<string, string | null> = { status: newStatus }
+        if (newStatus === 'CLOSED') {
+          payload.closed_at = new Date().toISOString()
+        } else {
+          payload.closed_at = null
+        }
+
+        const { error } = await supabase
+          .from('tickets')
+          .update(payload)
+          .eq('id', ticketId)
+
+        if (error) throw error
+
+        toast.success(`Status changed to ${newStatus}`)
+        await fetchData()
+        setOpenStatusDropdown(null)
+        return true
+      },
+      { context: 'Failed to update status', showErrorToast: true }
+    )
+    setUpdatingStatusTicketId(null)
+  }
+
+  function getTicketAge(createdAt?: string): string {
+    if (!createdAt) return '-'
+    const now = new Date()
+    const created = new Date(createdAt)
+    const diffMs = now.getTime() - created.getTime()
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffHours / 24)
+    
+    if (diffDays > 0) return `${diffDays}d`
+    if (diffHours > 0) return `${diffHours}h`
+    return 'now'
   }
 
   function openTicket(ticket: TicketRow) {
@@ -640,21 +683,67 @@ export default function TicketsPage() {
               {filteredTickets.map((ticket) => (
                 <div
                   key={ticket.id}
-                  onClick={() => openTicket(ticket)}
                   style={{
                     ...styles.ticketRow,
                     ...(selectedTicket?.id === ticket.id ? styles.ticketRowActive : {}),
                   }}
                 >
+                  {/* Row Header: Number | Status | Worker | Age | Actions */}
                   <div style={styles.ticketRowTop}>
                     <div style={styles.ticketRowMain}>
                       <span style={styles.ticketNumber}>#{ticket.ticket_number}</span>
-                      <span style={styles.ticketProject}>{ticket.project_code || 'N/A'}</span>
-                      <StatusBadge status={ticket.status} size="sm" />
-                      {ticket.priority && (
-                        <StatusBadge status={ticket.priority.toUpperCase()} size="sm" />
-                      )}
+                      <span style={styles.ticketProject}>{ticket.project_code || '—'}</span>
+                      
+                      {/* Inline Status Dropdown */}
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setOpenStatusDropdown(openStatusDropdown === ticket.id ? null : ticket.id)
+                          }}
+                          style={{
+                            ...styles.inlineStatusButton,
+                            opacity: updatingStatusTicketId === ticket.id ? 0.6 : 1,
+                          }}
+                          disabled={updatingStatusTicketId === ticket.id}
+                          title="Click to change status"
+                        >
+                          {ticket.status}
+                        </button>
+                        
+                        {openStatusDropdown === ticket.id && (
+                          <div style={styles.statusDropdown}>
+                            {statusOptions.filter(s => s !== 'ALL').map((status) => (
+                              <button
+                                key={status}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  changeStatusInline(ticket.id, status)
+                                }}
+                                style={{
+                                  ...styles.dropdownOption,
+                                  background: ticket.status === status ? theme.colors.primaryMuted : '#fff',
+                                  fontWeight: ticket.status === status ? '700' : '600',
+                                }}
+                              >
+                                {status.replace('_', ' ')}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Assigned Worker */}
+                      <span style={styles.workerDisplay}>
+                        {getWorkerName(ticket.assigned_worker_id)}
+                      </span>
+
+                      {/* Ticket Age */}
+                      <span style={styles.ticketAge}>
+                        {getTicketAge(ticket.created_at)}
+                      </span>
                     </div>
+                    
                     {!isMobile && (
                       <div style={styles.ticketRowActions}>
                         <select
@@ -666,7 +755,7 @@ export default function TicketsPage() {
                           onClick={(e) => e.stopPropagation()}
                           style={styles.workerSelect}
                         >
-                          <option value="">Assign Worker</option>
+                          <option value="">Reassign</option>
                           {workers.filter(w => w.is_active).map((w) => (
                             <option key={w.id} value={w.id}>{w.full_name}</option>
                           ))}
@@ -676,9 +765,9 @@ export default function TicketsPage() {
                             variant="secondary"
                             size="sm"
                             onClick={() => {
-                              closeTicket(ticket.id)
+                              changeStatusInline(ticket.id, 'CLOSED')
                             }}
-                            loading={actionLoadingId === ticket.id}
+                            loading={updatingStatusTicketId === ticket.id}
                           >
                             Close
                           </Button>
@@ -686,11 +775,9 @@ export default function TicketsPage() {
                       </div>
                     )}
                   </div>
-                  <div style={styles.ticketDescription}>{ticket.description || '-'}</div>
+                  <div style={styles.ticketDescription}>{ticket.description || '—'}</div>
                   <div style={styles.ticketMeta}>
                     <span>{ticket.reporter_name || ticket.reporter_phone || 'Unknown'}</span>
-                    <span>{ticket.created_at ? new Date(ticket.created_at).toLocaleDateString() : '-'}</span>
-                    <span>{getWorkerName(ticket.assigned_worker_id)}</span>
                   </div>
                 </div>
               ))}
@@ -1060,6 +1147,59 @@ const styles: Record<string, CSSProperties> = {
     gap: '16px',
     fontSize: '12px',
     color: theme.colors.textMuted,
+  },
+  inlineStatusButton: {
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.sm,
+    padding: '6px 10px',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    textAlign: 'center',
+    minWidth: '90px',
+    position: 'relative',
+  },
+  statusDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    marginTop: '4px',
+    background: '#fff',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.sm,
+    boxShadow: `0 4px 12px rgba(15, 20, 25, 0.1)`,
+    zIndex: 10,
+    overflow: 'hidden',
+    minWidth: '130px',
+  },
+  dropdownOption: {
+    width: '100%',
+    textAlign: 'left',
+    padding: '8px 10px',
+    border: 'none',
+    background: '#fff',
+    fontSize: '12px',
+    color: theme.colors.textPrimary,
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
+  },
+  workerDisplay: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: theme.colors.primary,
+    background: theme.colors.primaryMuted,
+    padding: '4px 8px',
+    borderRadius: theme.radius.sm,
+    whiteSpace: 'nowrap',
+  },
+  ticketAge: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+    fontWeight: 600,
+    minWidth: '50px',
   },
   workerSelect: {
     background: theme.colors.surfaceElevated,
