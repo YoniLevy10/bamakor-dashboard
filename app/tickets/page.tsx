@@ -105,6 +105,7 @@ export default function TicketsPage() {
   const [updatingStatusTicketId, setUpdatingStatusTicketId] = useState<string | null>(null)
   const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null)
   const [openWorkerReassignDropdown, setOpenWorkerReassignDropdown] = useState<string | null>(null)
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -340,6 +341,54 @@ export default function TicketsPage() {
     if (diffDays > 0) return `${diffDays}d`
     if (diffHours > 0) return `${diffHours}h`
     return 'now'
+  }
+
+  function toggleTicketSelection(ticketId: string) {
+    const newSelected = new Set(selectedTicketIds)
+    if (newSelected.has(ticketId)) {
+      newSelected.delete(ticketId)
+    } else {
+      newSelected.add(ticketId)
+    }
+    setSelectedTicketIds(newSelected)
+  }
+
+  function selectAllFiltered() {
+    const allIds = new Set(filteredTickets.map((t) => t.id))
+    setSelectedTicketIds(allIds)
+  }
+
+  function clearSelection() {
+    setSelectedTicketIds(new Set())
+  }
+
+  async function changeStatusBatch(newStatus: string) {
+    if (selectedTicketIds.size === 0) return
+    const ticketIds = Array.from(selectedTicketIds)
+    
+    await asyncHandler(
+      async () => {
+        const payload: Record<string, string | null> = { status: newStatus }
+        if (newStatus === 'CLOSED') {
+          payload.closed_at = new Date().toISOString()
+        } else {
+          payload.closed_at = null
+        }
+
+        const { error } = await supabase
+          .from('tickets')
+          .update(payload)
+          .in('id', ticketIds)
+
+        if (error) throw error
+
+        toast.success(`Updated ${ticketIds.length} tickets to ${newStatus}`)
+        clearSelection()
+        await fetchData()
+        return true
+      },
+      { context: `Failed to update status for batch`, showErrorToast: true }
+    )
   }
 
   function openTicket(ticket: TicketRow) {
@@ -724,7 +773,51 @@ export default function TicketsPage() {
 
           {/* Ticket List */}
           {!loading && !error && filteredTickets.length > 0 && (
-            <div style={styles.ticketList}>
+            <>
+              {/* Batch Action Toolbar */}
+              {selectedTicketIds.size > 0 && (
+                <div style={styles.batchToolbar}>
+                  <div style={styles.batchToolbarLeft}>
+                    <span style={styles.batchToolbarText}>
+                      {selectedTicketIds.size} selected
+                    </span>
+                  </div>
+                  <div style={styles.batchToolbarRight}>
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          changeStatusBatch(e.target.value)
+                          e.target.value = ''
+                        }
+                      }}
+                      style={styles.batchStatusSelect}
+                    >
+                      <option value="">Change Status</option>
+                      {statusOptions
+                        .filter((s) => s !== 'ALL')
+                        .map((status) => (
+                          <option key={status} value={status}>
+                            {status.replace('_', ' ')}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      onClick={() => selectAllFiltered()}
+                      style={styles.batchButton}
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => clearSelection()}
+                      style={styles.batchButtonSecondary}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div style={styles.ticketList}>
               {filteredTickets.map((ticket) => (
                 <div
                   key={ticket.id}
@@ -736,6 +829,20 @@ export default function TicketsPage() {
                   {/* Row Header: Number | Status | Worker | Age | Actions */}
                   <div style={styles.ticketRowTop}>
                     <div style={styles.ticketRowMain}>
+                      {/* Checkbox for Batch Selection */}
+                      <input
+                        type="checkbox"
+                        checked={selectedTicketIds.has(ticket.id)}
+                        onChange={() => toggleTicketSelection(ticket.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          cursor: 'pointer',
+                          accentColor: theme.colors.primary,
+                        }}
+                      />
+
                       <span style={styles.ticketNumber}>#{ticket.ticket_number}</span>
                       <span style={styles.ticketProject}>{ticket.project_code || '—'}</span>
                       
@@ -924,7 +1031,8 @@ export default function TicketsPage() {
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            </>
           )}
         </Card>
       </div>
@@ -1176,6 +1284,62 @@ const styles: Record<string, CSSProperties> = {
   content: {
     padding: '24px',
     paddingBottom: '100px',
+  },
+  batchToolbar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 20px',
+    background: theme.colors.primaryMuted,
+    borderBottom: `2px solid ${theme.colors.primary}`,
+    gap: '12px',
+  },
+  batchToolbarLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  batchToolbarText: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+  },
+  batchToolbarRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  batchStatusSelect: {
+    background: theme.colors.surface,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.sm,
+    padding: '6px 10px',
+    fontSize: '12px',
+    color: theme.colors.textPrimary,
+    cursor: 'pointer',
+    outline: 'none',
+  },
+  batchButton: {
+    background: theme.colors.primary,
+    border: 'none',
+    borderRadius: theme.radius.sm,
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.textInverse,
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
+  },
+  batchButtonSecondary: {
+    background: theme.colors.surfaceElevated,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.sm,
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
   },
   kpiGrid: {
     display: 'grid',
