@@ -457,40 +457,118 @@ export default function ProjectsPage() {
           )}
 
           {!loading && !error && filteredProjects.length > 0 && (
-            <div style={styles.projectGrid}>
+            <div
+              style={{
+                ...styles.projectGrid,
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
+                padding: isMobile ? '12px' : '20px',
+                gap: isMobile ? '12px' : '16px',
+              }}
+            >
               {filteredProjects.map((project) => (
                 <div
                   key={project.id}
                   onClick={() => openDetailDrawer(project)}
-                  style={styles.projectCard}
+                  style={{
+                    ...styles.projectCard,
+                    padding: isMobile ? '16px' : '20px',
+                  }}
                 >
-                  <div style={styles.projectCardHeader}>
+                  <div
+                    style={{
+                      ...styles.projectCardHeader,
+                      flexDirection: isMobile ? 'column' : 'row',
+                      gap: isMobile ? '8px' : '0',
+                    }}
+                  >
                     <div>
-                      <div style={styles.projectName}>{project.name}</div>
+                      <div
+                        style={{
+                          ...styles.projectName,
+                          fontSize: isMobile ? '15px' : '16px',
+                        }}
+                      >
+                        {project.name}
+                      </div>
                       <div style={styles.projectCode}>{project.project_code}</div>
                     </div>
                     <StatusBadge status={project.is_active ? 'ACTIVE' : 'INACTIVE'} size="sm" />
                   </div>
 
-                  <div style={styles.projectMeta}>
+                  <div
+                    style={{
+                      ...styles.projectMeta,
+                      gap: isMobile ? '10px' : '12px',
+                    }}
+                  >
                     <div style={styles.projectMetaItem}>
-                      <span style={styles.projectMetaLabel}>Address</span>
-                      <span style={styles.projectMetaValue}>{project.address || '-'}</span>
+                      <span
+                        style={{
+                          ...styles.projectMetaLabel,
+                          fontSize: isMobile ? '10px' : '11px',
+                        }}
+                      >
+                        Address
+                      </span>
+                      <span
+                        style={{
+                          ...styles.projectMetaValue,
+                          fontSize: isMobile ? '12px' : '13px',
+                        }}
+                      >
+                        {project.address || '-'}
+                      </span>
                     </div>
                     <div style={styles.projectMetaItem}>
-                      <span style={styles.projectMetaLabel}>Start Code</span>
-                      <span style={styles.projectMetaCode}>{getStartCode(project)}</span>
+                      <span
+                        style={{
+                          ...styles.projectMetaLabel,
+                          fontSize: isMobile ? '10px' : '11px',
+                        }}
+                      >
+                        Start Code
+                      </span>
+                      <span
+                        style={{
+                          ...styles.projectMetaCode,
+                          fontSize: isMobile ? '12px' : '13px',
+                        }}
+                      >
+                        {getStartCode(project)}
+                      </span>
                     </div>
                   </div>
 
-                  <div style={styles.projectActions} onClick={(e) => e.stopPropagation()}>
-                    <Button variant="secondary" size="sm" onClick={() => openEditDrawer(project)}>
+                  <div
+                    style={{
+                      ...styles.projectActions,
+                      gap: isMobile ? '6px' : '8px',
+                      flexDirection: isMobile ? 'column' : 'row',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button
+                      variant="secondary"
+                      size={isMobile ? 'md' : 'sm'}
+                      onClick={() => openEditDrawer(project)}
+                      style={{ flex: isMobile ? 1 : 'auto' }}
+                    >
                       Edit
                     </Button>
-                    <Button variant="secondary" size="sm" onClick={() => toggleProjectStatus(project)}>
+                    <Button
+                      variant="secondary"
+                      size={isMobile ? 'md' : 'sm'}
+                      onClick={() => toggleProjectStatus(project)}
+                      style={{ flex: isMobile ? 1 : 'auto' }}
+                    >
                       {project.is_active ? 'Deactivate' : 'Activate'}
                     </Button>
-                    <Button variant="secondary" size="sm" onClick={() => copyText(getStartCode(project), 'Code copied')}>
+                    <Button
+                      variant="secondary"
+                      size={isMobile ? 'md' : 'sm'}
+                      onClick={() => copyText(getStartCode(project), 'Code copied')}
+                      style={{ flex: isMobile ? 1 : 'auto' }}
+                    >
                       Copy Code
                     </Button>
                   </div>
@@ -841,10 +919,12 @@ const styles: Record<string, CSSProperties> = {
     background: theme.colors.surfaceElevated,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
-    padding: '10px 14px',
-    fontSize: '14px',
+    padding: '12px 14px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
     outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
   },
   formHint: {
     fontSize: '12px',
