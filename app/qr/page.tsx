@@ -31,6 +31,7 @@ export default function QrPage() {
   const [isMobile, setIsMobile] = useState(false)
   const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [openCopyMenuProjectId, setOpenCopyMenuProjectId] = useState<string | null>(null)
 
   const qrRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
@@ -364,26 +365,45 @@ export default function QrPage() {
                     </div>
 
                     <div style={styles.cardActions}>
-                      <button
-                        onClick={() => copyText(qrIdentifier, 'START code copied')}
-                        style={styles.secondaryButtonSmall}
-                      >
-                        Copy START Code
-                      </button>
-
-                      <button
-                        onClick={() => copyText(whatsappLink, 'WhatsApp link copied')}
-                        style={styles.secondaryButtonSmall}
-                      >
-                        Copy WhatsApp Link
-                      </button>
-
-                      <button
-                        onClick={() => copyText(reportLink, 'Report form link copied')}
-                        style={styles.secondaryButtonSmall}
-                      >
-                        Copy Report Link
-                      </button>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <button
+                          onClick={() => setOpenCopyMenuProjectId(openCopyMenuProjectId === project.id ? null : project.id)}
+                          style={styles.secondaryButtonSmall}
+                        >
+                          Copy (▼)
+                        </button>
+                        {openCopyMenuProjectId === project.id && (
+                          <div style={styles.dropdownMenu}>
+                            <button
+                              onClick={() => {
+                                copyText(qrIdentifier, 'START code copied')
+                                setOpenCopyMenuProjectId(null)
+                              }}
+                              style={styles.dropdownItem}
+                            >
+                              Copy START Code
+                            </button>
+                            <button
+                              onClick={() => {
+                                copyText(whatsappLink, 'WhatsApp link copied')
+                                setOpenCopyMenuProjectId(null)
+                              }}
+                              style={styles.dropdownItem}
+                            >
+                              Copy WhatsApp Link
+                            </button>
+                            <button
+                              onClick={() => {
+                                copyText(reportLink, 'Report form link copied')
+                                setOpenCopyMenuProjectId(null)
+                              }}
+                              style={styles.dropdownItem}
+                            >
+                              Copy Report Link
+                            </button>
+                          </div>
+                        )}
+                      </div>
 
                       <button
                         onClick={() => downloadQr(project.project_code)}
@@ -400,14 +420,17 @@ export default function QrPage() {
                       >
                         Open WhatsApp
                       </a>
+                    </div>
 
+                    {/* Secondary link below buttons */}
+                    <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'flex-end' }}>
                       <a
                         href={reportLink}
                         target="_blank"
                         rel="noreferrer"
-                        style={styles.secondaryLinkActionButton}
+                        style={{ ...styles.secondaryLinkActionButton, fontSize: '12px', padding: '6px 10px' }}
                       >
-                        Open Report Form
+                        View Report Form →
                       </a>
                     </div>
                   </div>
@@ -826,7 +849,8 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     gap: '10px',
     flexWrap: 'wrap',
-    marginTop: '8px',
+    marginTop: '12px',
+    alignItems: 'stretch',
   },
   secondaryButtonSmall: {
     background: theme.colors.surface,
@@ -837,6 +861,8 @@ const styles: Record<string, CSSProperties> = {
     cursor: 'pointer',
     fontWeight: 600,
     fontSize: '13px',
+    whiteSpace: 'nowrap',
+    position: 'relative',
   },
   primaryActionButton: {
     background: '#B91C1C',
@@ -849,6 +875,33 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '13px',
     display: 'inline-flex',
     alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    marginTop: '4px',
+    background: '#FFFFFF',
+    border: `1px solid #E5E7EB`,
+    borderRadius: '10px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
+    zIndex: 10,
+    overflow: 'hidden',
+    minWidth: '180px',
+  },
+  dropdownItem: {
+    width: '100%',
+    textAlign: 'left',
+    background: '#FFFFFF',
+    border: 'none',
+    padding: '10px 12px',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: '#111827',
+    cursor: 'pointer',
+    transition: 'background-color 0.15s ease',
   },
   secondaryLinkActionButton: {
     background: '#FFFFFF',
