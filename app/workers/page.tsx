@@ -427,11 +427,11 @@ export default function WorkersPage() {
             actions={
               <>
                 <Button variant="primary" onClick={openCreateDrawer}>
-                  Add Worker
+                  + New Worker
                 </Button>
-                <Button variant="secondary" onClick={initializePage}>
-                  Refresh
-                </Button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', color: '#64748B', fontSize: '18px', cursor: 'pointer', userSelect: 'none' }} title="Language Settings">
+                  🌐
+                </div>
               </>
             }
           />

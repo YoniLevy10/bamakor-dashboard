@@ -407,6 +407,22 @@ export default function TicketsPage() {
     }
   }
 
+  function sanitizePhoneKeystroke(raw: string) {
+    const trimmed = raw.replace(/\s|-/g, '')
+    const hasPlus = trimmed.startsWith('+')
+    const digits = trimmed.replace(/[^\d]/g, '')
+    return hasPlus ? `+${digits}` : digits
+  }
+
+  function normalizePhone(raw: string) {
+    const s = sanitizePhoneKeystroke(raw)
+    if (!s) return ''
+    if (s.startsWith('+972')) return s
+    if (s.startsWith('972')) return `+${s}`
+    if (s.startsWith('05')) return s
+    return s
+  }
+
   async function saveTicketChanges() {
     if (!selectedTicket) return
 
@@ -521,6 +537,9 @@ export default function TicketsPage() {
                 <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
                   + New Ticket
                 </Button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', color: '#64748B', fontSize: '18px', cursor: 'pointer', userSelect: 'none' }} title="Language Settings">
+                  🌐
+                </div>
               </>
             }
           />
@@ -863,11 +882,18 @@ export default function TicketsPage() {
                 <input
                   type="tel"
                   value={addTicketForm.reporter_phone}
+                  inputMode="tel"
                   onChange={(e) =>
                     setAddTicketForm({
                       ...addTicketForm,
-                      reporter_phone: e.target.value.replace(/[^\d]/g, ''),
+                      reporter_phone: sanitizePhoneKeystroke(e.target.value),
                     })
+                  }
+                  onBlur={() =>
+                    setAddTicketForm((prev) => ({
+                      ...prev,
+                      reporter_phone: normalizePhone(prev.reporter_phone),
+                    }))
                   }
                   placeholder="Enter phone number"
                   style={styles.formInput}

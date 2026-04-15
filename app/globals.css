@@ -1,43 +1,43 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Refined Light Theme - Original Brand Colors */
+  /* Refined Light Theme - Original Brand Colors with Enhanced Hierarchy */
   
   /* Typography */
   --font-sans: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'Geist Mono', 'JetBrains Mono', monospace;
   
-  /* Base Colors - Clean Light Theme */
-  --color-background: #FFFFFF;
-  --color-foreground: #111827;
+  /* Base Colors - Clean Light Theme with Better Depth */
+  --color-background: #F8FAFC;
+  --color-foreground: #0F1419;
   
-  /* Surface Colors */
+  /* Surface Colors - Enhanced Layering */
   --color-surface: #FFFFFF;
-  --color-surface-elevated: #FFFFFF;
-  --color-surface-hover: #F9FAFB;
-  --color-surface-active: #F3F4F6;
-  --color-muted: #F9FAFB;
+  --color-surface-elevated: #F1F5F9;
+  --color-surface-hover: #EEF2F7;
+  --color-surface-active: #E2E8F0;
+  --color-muted: #F8FAFC;
   
-  /* Border Colors */
-  --color-border: #E5E7EB;
-  --color-border-subtle: #F3F4F6;
-  --color-border-strong: #D1D5DB;
+  /* Border Colors - More Defined */
+  --color-border: #E2E8F0;
+  --color-border-subtle: #EBF0F5;
+  --color-border-strong: #CBD5E1;
   
-  /* Text Colors */
-  --color-text-primary: #111827;
-  --color-text-secondary: #4B5563;
-  --color-text-muted: #6B7280;
+  /* Text Colors - Better Hierarchy */
+  --color-text-primary: #0F1419;
+  --color-text-secondary: #3F4751;
+  --color-text-muted: #64748B;
   --color-text-inverse: #FFFFFF;
   
-  /* Primary - Original Brand Crimson */
+  /* Primary - Original Brand Crimson with Depth */
   --color-primary: #C41E3A;
   --color-primary-hover: #A91B32;
-  --color-primary-muted: rgba(196, 30, 58, 0.1);
+  --color-primary-muted: rgba(196, 30, 58, 0.08);
   --color-primary-text: #C41E3A;
   
   /* Secondary */
-  --color-secondary: #F3F4F6;
-  --color-secondary-hover: #E5E7EB;
+  --color-secondary: #F1F5F9;
+  --color-secondary-hover: #E2E8F0;
   
   /* Accent - Subtle brand tint */
   --color-accent: #FEF2F2;
@@ -45,14 +45,14 @@
   --color-accent-muted: rgba(196, 30, 58, 0.08);
   --color-accent-text: #C41E3A;
   
-  /* Status Colors */
-  --color-success: #059669;
+  /* Status Colors - Modern Palette */
+  --color-success: #10B981;
   --color-success-muted: #ECFDF5;
-  --color-warning: #D97706;
+  --color-warning: #F59E0B;
   --color-warning-muted: #FFFBEB;
-  --color-error: #DC2626;
+  --color-error: #EF4444;
   --color-error-muted: #FEF2F2;
-  --color-info: #2563EB;
+  --color-info: #3B82F6;
   --color-info-muted: #EFF6FF;
   
   /* Radius */
@@ -63,8 +63,8 @@
 }
 
 :root {
-  --background: #FFFFFF;
-  --foreground: #111827;
+  --background: #F8FAFC;
+  --foreground: #0F1419;
 }
 
 * {

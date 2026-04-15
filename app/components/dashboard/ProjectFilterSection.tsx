@@ -28,52 +28,60 @@ export function ProjectFilterSection({
     <Card
       title="Projects"
       subtitle="Filter tickets by project"
-      actions={
+      style={{ marginBottom: '20px' }}
+    >
+      <div style={styles.header}>
+        <div style={styles.projectScroll}>
+          {projectCounts.map((project) => (
+            <button
+              key={project.id}
+              onClick={() =>
+                onProjectSelect(selectedProjectCode === project.project_code ? 'ALL' : project.project_code)
+              }
+              style={{
+                ...styles.projectChip,
+                ...(selectedProjectCode === project.project_code ? styles.projectChipActive : {}),
+              }}
+              title={`Click to ${selectedProjectCode === project.project_code ? 'deselect' : 'filter by'} ${project.name}`}
+            >
+              <div style={styles.projectChipName}>{project.name}</div>
+              <div style={styles.projectChipCode}>{project.project_code}</div>
+              <div style={styles.projectChipCount}>
+                {project.open > 0 && (
+                  <span style={styles.projectChipOpenCount}>{project.open}</span>
+                )}
+                {project.total}
+              </div>
+            </button>
+          ))}
+        </div>
         <Button
           variant="secondary"
           size="sm"
           onClick={() => onProjectSelect('ALL')}
-          disabled={selectedProjectCode === 'ALL'}
+          title="Show all projects"
+          style={{ flexShrink: 0 }}
         >
           Show All
         </Button>
-      }
-      style={{ marginBottom: '20px' }}
-    >
-      <div style={styles.projectScroll}>
-        {projectCounts.map((project) => (
-          <button
-            key={project.id}
-            onClick={() =>
-              onProjectSelect(selectedProjectCode === project.project_code ? 'ALL' : project.project_code)
-            }
-            style={{
-              ...styles.projectChip,
-              ...(selectedProjectCode === project.project_code ? styles.projectChipActive : {}),
-            }}
-          >
-            <div style={styles.projectChipName}>{project.name}</div>
-            <div style={styles.projectChipCode}>{project.project_code}</div>
-            <div style={styles.projectChipCount}>
-              {project.open > 0 && (
-                <span style={styles.projectChipOpenCount}>{project.open}</span>
-              )}
-              {project.total}
-            </div>
-          </button>
-        ))}
       </div>
     </Card>
   )
 }
 
 const styles: Record<string, CSSProperties> = {
+  header: {
+    display: 'flex',
+    gap: '16px',
+    alignItems: 'stretch',
+  },
   projectScroll: {
     display: 'flex',
     gap: '12px',
     overflowX: 'auto',
     paddingBottom: '8px',
     WebkitOverflowScrolling: 'touch',
+    flex: 1,
   },
   projectChip: {
     display: 'flex',
@@ -92,6 +100,7 @@ const styles: Record<string, CSSProperties> = {
   projectChipActive: {
     borderColor: theme.colors.primary,
     background: theme.colors.primaryMuted,
+    boxShadow: theme.shadows.md,
   },
   projectChipName: {
     fontSize: '14px',

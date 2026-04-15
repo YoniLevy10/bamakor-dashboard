@@ -221,9 +221,9 @@ export default function QrPage() {
             </div>
 
             <div style={styles.topActions}>
-              <Button variant="secondary" onClick={loadProjects}>
-                Refresh
-              </Button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', color: '#64748B', fontSize: '18px', cursor: 'pointer', userSelect: 'none' }} title="Language Settings">
+                🌐
+              </div>
             </div>
           </div>
 

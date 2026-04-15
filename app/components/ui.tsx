@@ -523,13 +523,17 @@ export function Button({
   loading,
   onClick,
   style: customStyle,
+  title: tooltip,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
+  title?: string
 }) {
+  const [hovered, setHovered] = useState(false)
+
   const variantStyles: Record<string, CSSProperties> = {
     primary: {
       background: theme.colors.primary,
@@ -559,6 +563,27 @@ export function Button({
     md: { padding: '11px 20px', fontSize: theme.typography.fontSize.base, height: '42px' },
     lg: { padding: '14px 28px', fontSize: theme.typography.fontSize.lg, height: '50px' },
   }
+
+  const hoverStateStyles: Record<string, CSSProperties> = {
+    primary: {
+      background: hovered && !disabled ? theme.colors.primaryHover : theme.colors.primary,
+      transform: hovered && !disabled ? 'scale(1.02)' : 'scale(1)',
+      boxShadow: hovered && !disabled ? theme.shadows.hover : theme.shadows.md,
+    },
+    secondary: {
+      background: hovered && !disabled ? theme.colors.surfaceHover : theme.colors.surface,
+      borderColor: hovered && !disabled ? theme.colors.primary : theme.colors.border,
+    },
+    ghost: {
+      background: hovered && !disabled ? theme.colors.surfaceActive : 'transparent',
+      color: hovered && !disabled ? theme.colors.primary : theme.colors.textSecondary,
+    },
+    danger: {
+      background: hovered && !disabled ? theme.colors.error : theme.colors.errorMuted,
+      color: hovered && !disabled ? theme.colors.textInverse : theme.colors.error,
+      borderColor: hovered && !disabled ? theme.colors.error : theme.colors.error,
+    },
+  }
   
   return (
     <button
@@ -567,9 +592,12 @@ export function Button({
       data-ui="button"
       data-variant={variant}
       data-size={size}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         ...buttonStyles.base,
         ...variantStyles[variant],
+        ...hoverStateStyles[variant],
         ...sizeStyles[size],
         opacity: disabled ? 0.5 : 1,
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -604,6 +632,57 @@ const buttonStyles: Record<string, CSSProperties> = {
     borderTopColor: 'currentColor',
     borderRadius: '50%',
     animation: 'spin 0.6s linear infinite',
+  },
+}
+
+// ============================================================================
+// TOOLTIP
+// ============================================================================
+
+export function Tooltip({ 
+  text, 
+  children 
+}: { 
+  text: string
+  children: ReactNode 
+}) {
+  const [visible, setVisible] = useState(false)
+  
+  return (
+    <div style={tooltipStyles.wrapper}>
+      <div 
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+      >
+        {children}
+      </div>
+      {visible && (
+        <div style={tooltipStyles.tooltip}>{text}</div>
+      )}
+    </div>
+  )
+}
+
+const tooltipStyles: Record<string, CSSProperties> = {
+  wrapper: {
+    position: 'relative',
+    display: 'inline-block',
+  },
+  tooltip: {
+    position: 'absolute',
+    bottom: '100%',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    marginBottom: '8px',
+    padding: '8px 12px',
+    background: theme.colors.textPrimary,
+    color: theme.colors.textInverse,
+    fontSize: theme.typography.fontSize.xs,
+    borderRadius: theme.radius.sm,
+    whiteSpace: 'nowrap',
+    zIndex: 1000,
+    boxShadow: theme.shadows.lg,
+    pointerEvents: 'none',
   },
 }
 
@@ -1134,15 +1213,15 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
   container: {
     position: 'fixed',
     top: 0,
-    right: 0,
+    left: 0,
     width: '300px',
     height: '100dvh',
     background: theme.colors.background,
-    borderLeft: `1px solid ${theme.colors.border}`,
+    borderRight: `1px solid ${theme.colors.border}`,
     zIndex: 101,
     display: 'flex',
     flexDirection: 'column',
-    animation: 'slideInRight 0.25s ease',
+    animation: 'slideInLeft 0.25s ease',
     boxShadow: theme.shadows.xl,
   },
   header: {

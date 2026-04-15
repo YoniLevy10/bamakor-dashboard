@@ -44,6 +44,22 @@ export function AddTicketModal({
 }: AddTicketModalProps) {
   if (!open) return null
 
+  function sanitizePhoneKeystroke(raw: string) {
+    const trimmed = raw.replace(/\s|-/g, '')
+    const hasPlus = trimmed.startsWith('+')
+    const digits = trimmed.replace(/[^\d]/g, '')
+    return hasPlus ? `+${digits}` : digits
+  }
+
+  function normalizePhone(raw: string) {
+    const s = sanitizePhoneKeystroke(raw)
+    if (!s) return ''
+    if (s.startsWith('+972')) return s
+    if (s.startsWith('972')) return `+${s}`
+    if (s.startsWith('05')) return s
+    return s
+  }
+
   return (
     <>
       <div style={styles.modalOverlay} onClick={onClose} />
@@ -110,7 +126,9 @@ export function AddTicketModal({
             <input
               type="tel"
               value={reporterPhone}
-              onChange={(e) => onReporterPhoneChange(e.target.value.replace(/[^\d]/g, ''))}
+              inputMode="tel"
+              onChange={(e) => onReporterPhoneChange(sanitizePhoneKeystroke(e.target.value))}
+              onBlur={() => onReporterPhoneChange(normalizePhone(reporterPhone))}
               placeholder="Enter phone number"
               style={styles.formInput}
             />

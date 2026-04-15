@@ -501,9 +501,8 @@ export default function HomePage() {
         const payload: Record<string, string | null> = {
           description: draftDescription,
           status: draftStatus,
-          // If assignment changed and a worker was selected, assignment was handled via /api/assign-ticket.
-          // Keep direct DB updates for unassign (draftWorkerId empty).
-          assigned_worker_id: workerChanged && draftWorkerId ? selectedTicket.assigned_worker_id : (draftWorkerId || null),
+          // Always set to draftWorkerId - the API already handled SMS notification
+          assigned_worker_id: draftWorkerId || null,
         }
 
         if (draftStatus === 'CLOSED') {
@@ -835,8 +834,8 @@ export default function HomePage() {
     <AppShell isMobile={isMobile}>
       {isMobile && (
         <MobileHeader
-          title="Dashboard"
-          subtitle="Hello Sarah"
+          title="Bamakor"
+          subtitle="Hello Sarah 👋"
           onMenuClick={() => setMenuOpen(true)}
         />
       )}
@@ -859,6 +858,12 @@ export default function HomePage() {
                 <Button variant="secondary" onClick={exportCurrentViewToCsv}>
                   Export CSV
                 </Button>
+                <Button variant="secondary" onClick={refreshData} title="Manually refresh dashboard">
+                  ↻ Refresh
+                </Button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', color: '#64748B', fontSize: '18px', cursor: 'pointer', userSelect: 'none' }} title="Language Settings">
+                  🌐
+                </div>
               </>
             }
           />
