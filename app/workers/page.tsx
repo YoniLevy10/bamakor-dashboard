@@ -498,30 +498,71 @@ export default function WorkersPage() {
           )}
 
           {!loading && !error && filteredWorkers.length > 0 && (
-            <div style={styles.workerGrid}>
+            <div
+              style={{
+                ...styles.workerGrid,
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
+                padding: isMobile ? '12px' : '20px',
+                gap: isMobile ? '12px' : '16px',
+              }}
+            >
               {filteredWorkers.map((worker) => (
                 <div
                   key={worker.id}
                   onClick={() => openDetailDrawer(worker)}
-                  style={styles.workerCard}
+                  style={{
+                    ...styles.workerCard,
+                    padding: isMobile ? '16px' : '20px',
+                  }}
                 >
-                  <div style={styles.workerCardHeader}>
-                    <div style={styles.workerAvatar}>
+                  <div
+                    style={{
+                      ...styles.workerCardHeader,
+                      gap: isMobile ? '10px' : '12px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        ...styles.workerAvatar,
+                        width: isMobile ? '44px' : '48px',
+                        height: isMobile ? '44px' : '48px',
+                        fontSize: isMobile ? '14px' : '16px',
+                      }}
+                    >
                       {worker.full_name.charAt(0).toUpperCase()}
                     </div>
                     <div style={styles.workerInfo}>
-                      <div style={styles.workerName}>{worker.full_name}</div>
-                      <div style={styles.workerRole}>{worker.role || 'No role set'}</div>
+                      <div
+                        style={{
+                          ...styles.workerName,
+                          fontSize: isMobile ? '14px' : '15px',
+                        }}
+                      >
+                        {worker.full_name}
+                      </div>
+                      <div
+                        style={{
+                          ...styles.workerRole,
+                          fontSize: isMobile ? '12px' : '13px',
+                        }}
+                      >
+                        {worker.role || 'No role set'}
+                      </div>
                     </div>
                     <StatusBadge status={worker.is_active ? 'ACTIVE' : 'INACTIVE'} size="sm" />
                   </div>
 
-                  <div style={styles.workerMeta}>
+                  <div
+                    style={{
+                      ...styles.workerMeta,
+                      gap: isMobile ? '8px' : '10px',
+                    }}
+                  >
                     <div style={styles.workerMetaItem}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                       </svg>
-                      <span>{worker.phone}</span>
+                      <span style={{ fontSize: isMobile ? '12px' : '13px' }}>{worker.phone}</span>
                     </div>
                     {worker.email && (
                       <div style={styles.workerMetaItem}>
@@ -529,16 +570,33 @@ export default function WorkersPage() {
                           <rect width="20" height="16" x="2" y="4" rx="2" />
                           <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
                         </svg>
-                        <span>{worker.email}</span>
+                        <span style={{ fontSize: isMobile ? '12px' : '13px' }}>{worker.email}</span>
                       </div>
                     )}
                   </div>
 
-                  <div style={styles.workerActions} onClick={(e) => e.stopPropagation()}>
-                    <Button variant="secondary" size="sm" onClick={() => openEditDrawer(worker)}>
+                  <div
+                    style={{
+                      ...styles.workerActions,
+                      gap: isMobile ? '6px' : '8px',
+                      flexDirection: isMobile ? 'column' : 'row',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button
+                      variant="secondary"
+                      size={isMobile ? 'md' : 'sm'}
+                      onClick={() => openEditDrawer(worker)}
+                      style={{ flex: isMobile ? 1 : 'auto' }}
+                    >
                       Edit
                     </Button>
-                    <Button variant="secondary" size="sm" onClick={() => toggleWorkerStatus(worker)}>
+                    <Button
+                      variant="secondary"
+                      size={isMobile ? 'md' : 'sm'}
+                      onClick={() => toggleWorkerStatus(worker)}
+                      style={{ flex: isMobile ? 1 : 'auto' }}
+                    >
                       {worker.is_active ? 'Deactivate' : 'Activate'}
                     </Button>
                   </div>
@@ -873,10 +931,12 @@ const styles: Record<string, CSSProperties> = {
     background: theme.colors.surfaceElevated,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
-    padding: '10px 14px',
-    fontSize: '14px',
+    padding: '12px 14px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
     outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
   },
   checkboxLabel: {
     display: 'flex',
