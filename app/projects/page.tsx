@@ -388,9 +388,6 @@ export default function ProjectsPage() {
                 <Button variant="primary" onClick={openCreateDrawer}>
                   + New Project
                 </Button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', color: '#64748B', fontSize: '18px', cursor: 'pointer', userSelect: 'none' }} title="Language Settings">
-                  🌐
-                </div>
               </>
             }
           />

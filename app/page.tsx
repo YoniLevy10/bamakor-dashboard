@@ -835,7 +835,7 @@ export default function HomePage() {
       {isMobile && (
         <MobileHeader
           title="Bamakor"
-          subtitle="Hello Sarah 👋"
+          subtitle="Hello Sarah"
           onMenuClick={() => setMenuOpen(true)}
         />
       )}
@@ -859,11 +859,8 @@ export default function HomePage() {
                   Export CSV
                 </Button>
                 <Button variant="secondary" onClick={refreshData} title="Manually refresh dashboard">
-                  ↻ Refresh
+                  Refresh
                 </Button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', color: '#64748B', fontSize: '18px', cursor: 'pointer', userSelect: 'none' }} title="Language Settings">
-                  🌐
-                </div>
               </>
             }
           />

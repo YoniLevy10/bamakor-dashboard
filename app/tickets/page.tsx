@@ -537,9 +537,6 @@ export default function TicketsPage() {
                 <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
                   + New Ticket
                 </Button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', color: '#64748B', fontSize: '18px', cursor: 'pointer', userSelect: 'none' }} title="Language Settings">
-                  🌐
-                </div>
               </>
             }
           />
