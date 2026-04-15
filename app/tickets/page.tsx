@@ -776,13 +776,23 @@ export default function TicketsPage() {
             <>
               {/* Batch Action Toolbar */}
               {selectedTicketIds.size > 0 && (
-                <div style={styles.batchToolbar}>
+                <div
+                  style={{
+                    ...styles.batchToolbar,
+                    flexDirection: isMobile ? 'column' : 'row',
+                  }}
+                >
                   <div style={styles.batchToolbarLeft}>
                     <span style={styles.batchToolbarText}>
                       {selectedTicketIds.size} selected
                     </span>
                   </div>
-                  <div style={styles.batchToolbarRight}>
+                  <div
+                    style={{
+                      ...styles.batchToolbarRight,
+                      flexWrap: isMobile ? 'wrap' : 'nowrap',
+                    }}
+                  >
                     <select
                       onChange={(e) => {
                         if (e.target.value) {
@@ -790,7 +800,10 @@ export default function TicketsPage() {
                           e.target.value = ''
                         }
                       }}
-                      style={styles.batchStatusSelect}
+                      style={{
+                        ...styles.batchStatusSelect,
+                        flex: isMobile ? '1 0 100%' : 'auto',
+                      }}
                     >
                       <option value="">Change Status</option>
                       {statusOptions
@@ -803,15 +816,23 @@ export default function TicketsPage() {
                     </select>
                     <button
                       onClick={() => selectAllFiltered()}
-                      style={styles.batchButton}
+                      style={{
+                        ...styles.batchButton,
+                        flex: isMobile ? '1' : 'auto',
+                        minWidth: isMobile ? '48px' : 'auto',
+                      }}
                     >
-                      Select All
+                      {isMobile ? 'All' : 'Select All'}
                     </button>
                     <button
                       onClick={() => clearSelection()}
-                      style={styles.batchButtonSecondary}
+                      style={{
+                        ...styles.batchButtonSecondary,
+                        flex: isMobile ? '1' : 'auto',
+                        minWidth: isMobile ? '48px' : 'auto',
+                      }}
                     >
-                      Clear
+                      {isMobile ? 'X' : 'Clear'}
                     </button>
                   </div>
                 </div>
@@ -836,8 +857,8 @@ export default function TicketsPage() {
                         onChange={() => toggleTicketSelection(ticket.id)}
                         onClick={(e) => e.stopPropagation()}
                         style={{
-                          width: '18px',
-                          height: '18px',
+                          width: isMobile ? '20px' : '18px',
+                          height: isMobile ? '20px' : '18px',
                           cursor: 'pointer',
                           accentColor: theme.colors.primary,
                         }}
