@@ -697,19 +697,36 @@ export default function TicketsPage() {
           noPadding
         >
           {/* Filters */}
-          <div style={styles.filtersRow}>
+          <div
+            style={{
+              ...styles.filtersRow,
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: isMobile ? '8px' : '12px',
+              padding: isMobile ? '12px 16px' : '16px 20px',
+            }}
+          >
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder="Search tickets..."
-              style={{ maxWidth: isMobile ? '100%' : '280px' }}
+              placeholder={isMobile ? 'Search...' : 'Search tickets...'}
+              style={{ maxWidth: isMobile ? '100%' : '280px', flex: isMobile ? '1' : 'auto' }}
             />
 
-            <div style={styles.filterGroup}>
+            <div
+              style={{
+                ...styles.filterGroup,
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: isMobile ? '8px' : 'inherit',
+                width: isMobile ? '100%' : 'auto',
+              }}
+            >
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                style={styles.filterSelect}
+                style={{
+                  ...styles.filterSelect,
+                  flex: isMobile ? '1' : 'auto',
+                }}
               >
                 {statusOptions.map((s) => (
                   <option key={s} value={s}>{s === 'ALL' ? 'All Status' : s.replace('_', ' ')}</option>
@@ -719,7 +736,10 @@ export default function TicketsPage() {
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                style={styles.filterSelect}
+                style={{
+                  ...styles.filterSelect,
+                  flex: isMobile ? '1' : 'auto',
+                }}
               >
                 {priorityOptions.map((p) => (
                   <option key={p} value={p}>{p === 'ALL' ? 'All Priority' : p}</option>
@@ -849,7 +869,13 @@ export default function TicketsPage() {
                 >
                   {/* Row Header: Number | Status | Worker | Age | Actions */}
                   <div style={styles.ticketRowTop}>
-                    <div style={styles.ticketRowMain}>
+                    <div
+                      style={{
+                        ...styles.ticketRowMain,
+                        flexWrap: isMobile ? 'wrap' : 'nowrap',
+                        gap: isMobile ? '8px' : '10px',
+                      }}
+                    >
                       {/* Checkbox for Batch Selection */}
                       <input
                         type="checkbox"
@@ -857,18 +883,35 @@ export default function TicketsPage() {
                         onChange={() => toggleTicketSelection(ticket.id)}
                         onClick={(e) => e.stopPropagation()}
                         style={{
-                          width: isMobile ? '20px' : '18px',
-                          height: isMobile ? '20px' : '18px',
+                          width: isMobile ? '22px' : '18px',
+                          height: isMobile ? '22px' : '18px',
                           cursor: 'pointer',
                           accentColor: theme.colors.primary,
+                          flexShrink: 0,
                         }}
                       />
 
-                      <span style={styles.ticketNumber}>#{ticket.ticket_number}</span>
-                      <span style={styles.ticketProject}>{ticket.project_code || '—'}</span>
+                      <span
+                        style={{
+                          ...styles.ticketNumber,
+                          fontSize: isMobile ? '16px' : '14px',
+                          fontWeight: 700,
+                        }}
+                      >
+                        #{ticket.ticket_number}
+                      </span>
+                      
+                      {!isMobile && (
+                        <span style={styles.ticketProject}>{ticket.project_code || '—'}</span>
+                      )}
                       
                       {/* Inline Status Dropdown */}
-                      <div style={{ position: 'relative' }}>
+                      <div
+                        style={{
+                          position: 'relative',
+                          flex: isMobile ? '1 0 48%' : 'auto',
+                        }}
+                      >
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -877,6 +920,9 @@ export default function TicketsPage() {
                           style={{
                             ...styles.inlineStatusButton,
                             opacity: updatingStatusTicketId === ticket.id ? 0.6 : 1,
+                            fontSize: isMobile ? '12px' : '13px',
+                            padding: isMobile ? '8px 10px' : '6px 10px',
+                            minWidth: isMobile ? '70px' : '90px',
                           }}
                           disabled={updatingStatusTicketId === ticket.id}
                           title="Click to change status"
@@ -885,7 +931,12 @@ export default function TicketsPage() {
                         </button>
                         
                         {openStatusDropdown === ticket.id && (
-                          <div style={styles.statusDropdown}>
+                          <div
+                            style={{
+                              ...styles.statusDropdown,
+                              right: isMobile ? 0 : 'auto',
+                            }}
+                          >
                             {statusOptions.filter(s => s !== 'ALL').map((status) => (
                               <button
                                 key={status}
@@ -907,7 +958,13 @@ export default function TicketsPage() {
                       </div>
 
                       {/* Assigned Worker with Load Indicator */}
-                      <div style={{ position: 'relative' }}>
+                      <div
+                        style={{
+                          position: 'relative',
+                          flex: isMobile ? '1 0 48%' : 'auto',
+                          order: isMobile ? 3 : undefined,
+                        }}
+                      >
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -923,7 +980,10 @@ export default function TicketsPage() {
                             alignItems: 'center',
                             gap: '4px',
                             justifyContent: 'space-between',
-                            paddingRight: '6px',
+                            paddingRight: isMobile ? '8px' : '6px',
+                            fontSize: isMobile ? '12px' : '13px',
+                            padding: isMobile ? '8px 8px' : '4px 8px',
+                            minWidth: isMobile ? '70px' : 'auto',
                           }}
                           title={ticket.assigned_worker_id ? 'Click to reassign' : 'Unassigned'}
                         >
@@ -947,7 +1007,14 @@ export default function TicketsPage() {
                         </button>
 
                         {openWorkerReassignDropdown === ticket.id && (
-                          <div style={styles.workerReassignDropdown}>
+                          <div
+                            style={{
+                              ...styles.workerReassignDropdown,
+                              right: isMobile ? 0 : 'auto',
+                              maxHeight: isMobile ? '60vh' : 'auto',
+                              overflowY: isMobile ? 'auto' : 'visible',
+                            }}
+                          >
                             <div
                               style={{
                                 padding: '8px 10px',
@@ -1009,10 +1076,12 @@ export default function TicketsPage() {
                         )}
                       </div>
 
-                      {/* Ticket Age */}
-                      <span style={styles.ticketAge}>
-                        {getTicketAge(ticket.created_at)}
-                      </span>
+                      {/* Ticket Age - Hide on Mobile */}
+                      {!isMobile && (
+                        <span style={styles.ticketAge}>
+                          {getTicketAge(ticket.created_at)}
+                        </span>
+                      )}
                     </div>
                     
                     {!isMobile && (
@@ -1046,8 +1115,24 @@ export default function TicketsPage() {
                       </div>
                     )}
                   </div>
-                  <div style={styles.ticketDescription}>{ticket.description || '—'}</div>
-                  <div style={styles.ticketMeta}>
+                  <div
+                    style={{
+                      ...styles.ticketDescription,
+                      fontSize: isMobile ? '13px' : '14px',
+                      lineHeight: isMobile ? 1.4 : 1.5,
+                      marginTop: isMobile ? '8px' : '4px',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {ticket.description || '—'}
+                  </div>
+                  <div
+                    style={{
+                      ...styles.ticketMeta,
+                      fontSize: isMobile ? '12px' : '12px',
+                      marginTop: isMobile ? '6px' : '4px',
+                    }}
+                  >
                     <span>{ticket.reporter_name || ticket.reporter_phone || 'Unknown'}</span>
                   </div>
                 </div>
@@ -1710,19 +1795,23 @@ const styles: Record<string, CSSProperties> = {
     background: theme.colors.surfaceElevated,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
-    padding: '10px 14px',
-    fontSize: '14px',
+    padding: '12px 14px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
     outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
   },
   formTextarea: {
     background: theme.colors.surfaceElevated,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
     padding: '12px 14px',
-    fontSize: '14px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
     outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
     resize: 'vertical',
     minHeight: '100px',
     lineHeight: 1.5,
