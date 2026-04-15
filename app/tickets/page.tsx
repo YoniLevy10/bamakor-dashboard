@@ -104,6 +104,7 @@ export default function TicketsPage() {
   const [projects, setProjects] = useState<{ id: string; name: string; project_code: string }[]>([])
   const [updatingStatusTicketId, setUpdatingStatusTicketId] = useState<string | null>(null)
   const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null)
+  const [openWorkerReassignDropdown, setOpenWorkerReassignDropdown] = useState<string | null>(null)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -558,6 +559,21 @@ export default function TicketsPage() {
     return worker?.full_name || 'Unassigned'
   }
 
+  function getWorkerLoad(workerId?: string | null): { active: number; total: number } {
+    if (!workerId) return { active: 0, total: 0 }
+    const activeTickets = tickets.filter(
+      (t) => t.assigned_worker_id === workerId && t.status !== 'CLOSED'
+    ).length
+    const totalTickets = tickets.filter((t) => t.assigned_worker_id === workerId).length
+    return { active: activeTickets, total: totalTickets }
+  }
+
+  function getWorkerCapacityColor(active: number): string {
+    if (active <= 3) return theme.colors.success
+    if (active <= 6) return theme.colors.warning
+    return theme.colors.error
+  }
+
   return (
     <AppShell isMobile={isMobile}>
       {isMobile && (
@@ -733,10 +749,108 @@ export default function TicketsPage() {
                         )}
                       </div>
 
-                      {/* Assigned Worker */}
-                      <span style={styles.workerDisplay}>
-                        {getWorkerName(ticket.assigned_worker_id)}
-                      </span>
+                      {/* Assigned Worker with Load Indicator */}
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setOpenWorkerReassignDropdown(
+                              openWorkerReassignDropdown === ticket.id ? null : ticket.id
+                            )
+                          }}
+                          style={{
+                            ...styles.workerDisplay,
+                            cursor: 'pointer',
+                            border: `1px solid ${theme.colors.border}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            justifyContent: 'space-between',
+                            paddingRight: '6px',
+                          }}
+                          title={ticket.assigned_worker_id ? 'Click to reassign' : 'Unassigned'}
+                        >
+                          <span>{getWorkerName(ticket.assigned_worker_id)}</span>
+                          {ticket.assigned_worker_id && (
+                            (() => {
+                              const { active } = getWorkerLoad(ticket.assigned_worker_id)
+                              return (
+                                <span
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    color: getWorkerCapacityColor(active),
+                                  }}
+                                >
+                                  {active}
+                                </span>
+                              )
+                            })()
+                          )}
+                        </button>
+
+                        {openWorkerReassignDropdown === ticket.id && (
+                          <div style={styles.workerReassignDropdown}>
+                            <div
+                              style={{
+                                padding: '8px 10px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                color: theme.colors.textMuted,
+                                borderBottom: `1px solid ${theme.colors.border}`,
+                              }}
+                            >
+                              Active Tickets
+                            </div>
+                            {workers
+                              .filter((w) => w.is_active)
+                              .map((w) => {
+                                const { active } = getWorkerLoad(w.id)
+                                const isAssigned = ticket.assigned_worker_id === w.id
+                                return (
+                                  <button
+                                    key={w.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (!isAssigned) {
+                                        assignWorker(ticket.id, w.id)
+                                        setOpenWorkerReassignDropdown(null)
+                                      }
+                                    }}
+                                    style={{
+                                      width: '100%',
+                                      textAlign: 'left',
+                                      padding: '8px 10px',
+                                      border: 'none',
+                                      background: isAssigned ? theme.colors.primaryMuted : '#fff',
+                                      fontSize: '12px',
+                                      color: theme.colors.textPrimary,
+                                      cursor: isAssigned ? 'default' : 'pointer',
+                                      transition: 'background 0.15s ease',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      opacity: isAssigned ? 0.6 : 1,
+                                    }}
+                                  >
+                                    <span style={{ fontWeight: isAssigned ? 700 : 600 }}>
+                                      {w.full_name}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        color: getWorkerCapacityColor(active),
+                                      }}
+                                    >
+                                      {active}
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                          </div>
+                        )}
+                      </div>
 
                       {/* Ticket Age */}
                       <span style={styles.ticketAge}>
@@ -1194,6 +1308,19 @@ const styles: Record<string, CSSProperties> = {
     padding: '4px 8px',
     borderRadius: theme.radius.sm,
     whiteSpace: 'nowrap',
+  },
+  workerReassignDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    marginTop: '4px',
+    background: '#fff',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.sm,
+    boxShadow: `0 4px 12px rgba(15, 20, 25, 0.1)`,
+    zIndex: 10,
+    overflow: 'hidden',
+    minWidth: '140px',
   },
   ticketAge: {
     fontSize: '12px',
