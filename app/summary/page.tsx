@@ -324,74 +324,104 @@ export default function SummaryPage() {
               <div style={styles.card}>
                 <div style={styles.cardHeader}>
                   <div>
-                    <div style={styles.cardTitle}>Recent Tickets</div>
-                    <div style={styles.cardSubtitle}>Latest ticket activity</div>
+                    <div style={styles.cardTitle}>System Health</div>
+                    <div style={styles.cardSubtitle}>Key performance indicators</div>
                   </div>
                 </div>
 
-                {recentTickets.length === 0 ? (
-                  <p style={styles.infoText}>No tickets found.</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {recentTickets.map((ticket) => (
-                      <div
-                        key={ticket.id}
-                        onClick={() => navigateToTickets()}
-                        style={{
-                          ...styles.ticketItem,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <div style={styles.ticketItemHeader}>
-                          <div style={styles.ticketNumber}>#{ticket.ticket_number}</div>
-                          <div style={styles.ticketProject}>{ticket.project_code}</div>
-                          <span style={{ ...styles.badge, ...getStatusStyle(ticket.status) }}>{ticket.status}</span>
-                        </div>
-                        <div style={styles.ticketDetail}>{ticket.description || '-'}</div>
-                        <div style={styles.ticketMeta}>
-                          Created: {new Date(ticket.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                        </div>
-                      </div>
-                    ))}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  <div style={styles.insightCard}>
+                    <div style={styles.insightLabel}>Resolution Rate (Last 7 days)</div>
+                    <div style={styles.insightValue}>
+                      {summary.weekOpened > 0 ? 
+                        `${Math.round((summary.weekClosed / summary.weekOpened) * 100)}%` : 
+                        'N/A'}
+                    </div>
+                    <div style={styles.insightDescription}>
+                      {summary.weekClosed} of {summary.weekOpened} closed
+                    </div>
                   </div>
-                )}
+
+                  <div style={styles.insightCard}>
+                    <div style={styles.insightLabel}>Pending Assignments</div>
+                    <div style={styles.insightValue}>{summary.openNow}</div>
+                    <div style={styles.insightDescription}>
+                      Tickets awaiting worker assignment
+                    </div>
+                  </div>
+
+                  <div style={styles.insightCard}>
+                    <div style={styles.insightLabel}>Active Workers</div>
+                    <div style={styles.insightValue}>{workerLoad.length}</div>
+                    <div style={styles.insightDescription}>
+                      Workers with assigned tasks
+                    </div>
+                  </div>
+
+                  <div style={styles.insightCard}>
+                    <div style={styles.insightLabel}>Projects on Track</div>
+                    <div style={styles.insightValue}>
+                      {projectStats.length > 0 ? 
+                        Math.max(0, projectStats.length - projectsRequiringAttention.length) : 
+                        0}
+                    </div>
+                    <div style={styles.insightDescription}>
+                      Projects with no open issues
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div style={styles.card}>
                 <div style={styles.cardHeader}>
                   <div>
-                    <div style={styles.cardTitle}>Projects Requiring Attention</div>
-                    <div style={styles.cardSubtitle}>Projects with open or in-progress tickets</div>
+                    <div style={styles.cardTitle}>Top Priority Projects</div>
+                    <div style={styles.cardSubtitle}>Projects with highest workload</div>
                   </div>
                 </div>
 
                 {projectsRequiringAttention.length === 0 ? (
-                  <p style={styles.infoText}>All projects are up to date!</p>
+                  <div style={styles.emptyInsight}>
+                    <div style={styles.emptyInsightTitle}>All clear!</div>
+                    <div style={styles.emptyInsightText}>No projects have pending tickets</div>
+                  </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {projectsRequiringAttention.map((project) => (
-                      <div
-                        key={project.id}
-                        style={styles.projectItem}
-                      >
-                        <div style={styles.projectItemHeader}>
-                          <div>
-                            <div style={styles.projectName}>{project.name}</div>
-                            <div style={styles.projectCode}>{project.project_code}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {projectsRequiringAttention.slice(0, 4).map((project, idx) => {
+                      const workloadPercent = summary.openNow > 0 ? Math.round((project.open / summary.openNow) * 100) : 0
+                      return (
+                        <div key={project.id} style={styles.priorityProjectRow}>
+                          <div style={styles.priorityProjectRank}>{idx + 1}</div>
+                          <div style={styles.priorityProjectInfo}>
+                            <div style={styles.priorityProjectName}>{project.name}</div>
+                            <div style={styles.priorityProjectCode}>{project.project_code}</div>
                           </div>
-                          <div style={styles.projectStats}>
-                            <span style={{ marginRight: '12px' }}>{project.open} Open</span>
-                            <span>{project.assigned} In Progress</span>
+                          <div style={styles.priorityProjectBar}>
+                            <div 
+                              style={{
+                                height: '4px',
+                                background: '#E5E7EB',
+                                borderRadius: '2px',
+                                overflow: 'hidden'
+                              }}
+                            >
+                              <div 
+                                style={{
+                                  height: '100%',
+                                  background: '#C41E3A',
+                                  width: `${workloadPercent}%`,
+                                  transition: 'width 0.2s ease'
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div style={styles.priorityProjectStats}>
+                            <span style={styles.priorityStatOpen}>{project.open}</span>
+                            <span style={styles.priorityStatAssigned}>{project.assigned}</span>
                           </div>
                         </div>
-                        <button
-                          onClick={() => navigateToTickets({ project: project.project_code })}
-                          style={styles.smallButton}
-                        >
-                          View Tickets
-                        </button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -399,32 +429,52 @@ export default function SummaryPage() {
               <div style={styles.card}>
                 <div style={styles.cardHeader}>
                   <div>
-                    <div style={styles.cardTitle}>Worker Load</div>
-                    <div style={styles.cardSubtitle}>Open tickets per worker</div>
+                    <div style={styles.cardTitle}>Team Capacity</div>
+                    <div style={styles.cardSubtitle}>Worker load distribution</div>
                   </div>
                 </div>
 
                 {workerLoad.length === 0 ? (
-                  <p style={styles.infoText}>No worker assignments.</p>
+                  <div style={styles.emptyInsight}>
+                    <div style={styles.emptyInsightTitle}>No active assignments</div>
+                    <div style={styles.emptyInsightText}>All workers are currently available</div>
+                  </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {workerLoad.map((worker) => (
-                      <div
-                        key={worker.id}
-                        style={styles.workerItem}
-                      >
-                        <div style={styles.workerItemHeader}>
-                          <div style={styles.workerName}>{worker.full_name}</div>
-                          <div style={styles.workerTicketCount}>{worker.assigned_tickets} Open</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {workerLoad.slice(0, 5).map((worker) => {
+                      const maxLoad = Math.max(...workerLoad.map((w) => w.assigned_tickets))
+                      const loadPercent = (worker.assigned_tickets / (maxLoad || 1)) * 100
+                      const isHighLoad = loadPercent > 70
+                      
+                      return (
+                        <div key={worker.id} style={styles.workerLoadRow}>
+                          <div style={styles.workerLoadName}>{worker.full_name}</div>
+                          <div style={styles.workerLoadBar}>
+                            <div 
+                              style={{
+                                height: '6px',
+                                background: '#E5E7EB',
+                                borderRadius: '3px',
+                                overflow: 'hidden',
+                                position: 'relative'
+                              }}
+                            >
+                              <div 
+                                style={{
+                                  height: '100%',
+                                  background: isHighLoad ? '#DC2626' : '#10B981',
+                                  width: `${loadPercent}%`,
+                                  transition: 'width 0.2s ease'
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div style={styles.workerLoadCount}>
+                            {worker.assigned_tickets} {isHighLoad ? '(High)' : 'active'}
+                          </div>
                         </div>
-                        <button
-                          onClick={() => navigateToTickets({ worker: worker.id })}
-                          style={styles.smallButton}
-                        >
-                          View Assigned
-                        </button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -857,6 +907,114 @@ const styles: Record<string, CSSProperties> = {
     color: '#B91C1C',
     margin: 0,
     fontWeight: 600,
+  },
+  // New insight-focused styles
+  insightCard: {
+    background: '#F9FAFB',
+    border: '1px solid #E5E7EB',
+    borderRadius: '12px',
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  insightLabel: {
+    fontSize: '12px',
+    color: '#6B7280',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  insightValue: {
+    fontSize: '32px',
+    fontWeight: 800,
+    color: '#111827',
+    lineHeight: 1,
+  },
+  insightDescription: {
+    fontSize: '12px',
+    color: '#4B5563',
+    lineHeight: 1.4,
+  },
+  emptyInsight: {
+    textAlign: 'center',
+    padding: '24px 12px',
+  },
+  emptyInsightTitle: {
+    fontSize: '16px',
+    fontWeight: 700,
+    color: '#111827',
+    marginBottom: '4px',
+  },
+  emptyInsightText: {
+    fontSize: '14px',
+    color: '#6B7280',
+  },
+  priorityProjectRow: {
+    display: 'grid',
+    gridTemplateColumns: '24px 1fr 120px 80px',
+    gap: '12px',
+    alignItems: 'center',
+    padding: '12px',
+    background: '#F9FAFB',
+    border: '1px solid #E5E7EB',
+    borderRadius: '12px',
+  },
+  priorityProjectRank: {
+    fontSize: '14px',
+    fontWeight: 800,
+    color: '#C41E3A',
+    textAlign: 'center',
+  },
+  priorityProjectInfo: {
+    minWidth: 0,
+  },
+  priorityProjectName: {
+    fontSize: '14px',
+    fontWeight: 700,
+    color: '#111827',
+    marginBottom: '2px',
+  },
+  priorityProjectCode: {
+    fontSize: '12px',
+    color: '#6B7280',
+  },
+  priorityProjectBar: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  priorityProjectStats: {
+    display: 'flex',
+    gap: '6px',
+    fontSize: '12px',
+    fontWeight: 600,
+  },
+  priorityStatOpen: {
+    color: '#DC2626',
+  },
+  priorityStatAssigned: {
+    color: '#2563EB',
+  },
+  workerLoadRow: {
+    display: 'grid',
+    gridTemplateColumns: '140px 1fr 100px',
+    gap: '12px',
+    alignItems: 'center',
+  },
+  workerLoadName: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#111827',
+  },
+  workerLoadBar: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  workerLoadCount: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#4B5563',
+    textAlign: 'right',
   },
 }
 
