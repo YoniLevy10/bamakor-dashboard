@@ -12,9 +12,6 @@ import {
   Card,
   Button,
   StatusBadge,
-  PriorityDot,
-  SearchInput,
-  Drawer,
   LoadingSpinner,
   theme 
 } from './components/ui'
@@ -84,16 +81,13 @@ export default function DashboardPage() {
   const [draftStatus, setDraftStatus] = useState('NEW')
   const [draftWorkerId, setDraftWorkerId] = useState('')
   const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentRow[]>([])
-  const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
 
   const [showAddTicketModal, setShowAddTicketModal] = useState(false)
-  const [addTicketForm, setAddTicketForm] = useState({
-    project_code: '',
-    description: '',
-    reporter_name: '',
-    reporter_phone: '',
-  })
+  const [addTicketProjectCode, setAddTicketProjectCode] = useState('')
+  const [addTicketDescription, setAddTicketDescription] = useState('')
+  const [addTicketReporterName, setAddTicketReporterName] = useState('')
+  const [addTicketReporterPhone, setAddTicketReporterPhone] = useState('')
   const [addingTicket, setAddingTicket] = useState(false)
   const [addTicketError, setAddTicketError] = useState('')
 
@@ -189,8 +183,7 @@ export default function DashboardPage() {
       const open = projectTickets.filter((t) => t.status !== 'CLOSED').length
       const total = projectTickets.length
       const progress = total > 0 ? Math.round(((total - open) / total) * 100) : 0
-      const lastActivity = projectTickets[0]?.created_at
-      return { ...project, open, total, progress, lastActivity }
+      return { ...project, open, total, progress }
     }).filter(p => p.total > 0).sort((a, b) => b.open - a.open).slice(0, 6)
   }, [projects, tickets])
 
@@ -212,7 +205,6 @@ export default function DashboardPage() {
     const diffMins = Math.floor(diffMs / 60000)
     const diffHours = Math.floor(diffMins / 60)
     const diffDays = Math.floor(diffHours / 24)
-
     if (diffMins < 1) return 'Just now'
     if (diffMins < 60) return `${diffMins}m ago`
     if (diffHours < 24) return `${diffHours}h ago`
@@ -228,11 +220,11 @@ export default function DashboardPage() {
   }
 
   function formatDate() {
-    return new Date().toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      month: 'long', 
-      day: 'numeric' 
-    })
+    return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  }
+
+  function getImageUrl(attachment: AttachmentRow): string {
+    return attachment.signed_url || attachment.file_url || ''
   }
 
   async function loadTicketLogs(ticketId: string) {
@@ -247,7 +239,6 @@ export default function DashboardPage() {
   }
 
   async function loadTicketAttachments(ticketId: string) {
-    setLoadingAttachments(true)
     try {
       const { data } = await supabase
         .from('ticket_attachments')
@@ -275,7 +266,6 @@ export default function DashboardPage() {
     } catch {
       setSelectedTicketAttachments([])
     }
-    setLoadingAttachments(false)
   }
 
   function openTicket(ticket: TicketRow) {
@@ -309,7 +299,6 @@ export default function DashboardPage() {
             body: JSON.stringify({ ticket_id: selectedTicket.id, worker_id: draftWorkerId }),
           })
         }
-
         const payload: Record<string, string | null> = {
           description: draftDescription,
           status: draftStatus,
@@ -320,12 +309,7 @@ export default function DashboardPage() {
         } else {
           payload.closed_at = null
         }
-
-        const { error } = await supabase
-          .from('tickets')
-          .update(payload)
-          .eq('id', selectedTicket.id)
-
+        const { error } = await supabase.from('tickets').update(payload).eq('id', selectedTicket.id)
         if (error) throw error
         toast.success('Ticket saved')
         await loadData()
@@ -336,32 +320,56 @@ export default function DashboardPage() {
     setSavingTicket(false)
   }
 
+  async function handleCloseTicket() {
+    if (!selectedTicket) return
+    setSavingTicket(true)
+    await asyncHandler(
+      async () => {
+        const response = await fetch('/api/close-ticket', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticket_id: selectedTicket.id }),
+        })
+        if (!response.ok) {
+          const result = await response.json()
+          throw new Error(result.error || 'Failed to close ticket')
+        }
+        toast.success('Ticket closed')
+        await loadData()
+        closeDrawer()
+        return true
+      },
+      { context: 'Failed to close ticket', showErrorToast: true }
+    )
+    setSavingTicket(false)
+  }
+
   async function handleCreateTicket(e: React.FormEvent) {
     e.preventDefault()
-    if (!addTicketForm.project_code || !addTicketForm.description.trim()) {
+    if (!addTicketProjectCode || !addTicketDescription.trim()) {
       setAddTicketError('Please fill in all required fields')
       return
     }
     setAddingTicket(true)
     setAddTicketError('')
-
     try {
       const formData = new FormData()
-      formData.append('project_code', addTicketForm.project_code)
-      formData.append('description', addTicketForm.description)
-      if (addTicketForm.reporter_name) formData.append('reporter_name', addTicketForm.reporter_name)
-      if (addTicketForm.reporter_phone) formData.append('reporter_phone', addTicketForm.reporter_phone)
+      formData.append('project_code', addTicketProjectCode)
+      formData.append('description', addTicketDescription)
+      if (addTicketReporterName) formData.append('reporter_name', addTicketReporterName)
+      if (addTicketReporterPhone) formData.append('reporter_phone', addTicketReporterPhone)
       formData.append('source', 'manual')
-
       const response = await fetch('/api/create-ticket', { method: 'POST', body: formData })
       if (!response.ok) {
         const result = await response.json()
         throw new Error(result.error || 'Failed to create ticket')
       }
-
       const result = await response.json()
       toast.success(`Ticket #${result.ticketNumber} created`)
-      setAddTicketForm({ project_code: '', description: '', reporter_name: '', reporter_phone: '' })
+      setAddTicketProjectCode('')
+      setAddTicketDescription('')
+      setAddTicketReporterName('')
+      setAddTicketReporterPhone('')
       setShowAddTicketModal(false)
       await loadData()
     } catch (err) {
@@ -387,7 +395,6 @@ export default function DashboardPage() {
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
       <div style={styles.content}>
-        {/* Hero Section */}
         <div style={styles.hero}>
           <div style={styles.heroText}>
             <h1 style={styles.heroTitle}>{getGreeting()}</h1>
@@ -412,58 +419,24 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            {/* KPI Cards */}
             <div style={{
               ...styles.kpiGrid,
               gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             }}>
-              <KpiCard
-                label="Total Tickets"
-                value={stats.total}
-                accent="primary"
-                active={activeKpi === 'ALL'}
-                onClick={() => setActiveKpi('ALL')}
-              />
-              <KpiCard
-                label="Open"
-                value={stats.open}
-                accent="warning"
-                active={activeKpi === 'NEW'}
-                onClick={() => setActiveKpi('NEW')}
-              />
-              <KpiCard
-                label="In Progress"
-                value={stats.inProgress}
-                accent="primary"
-                active={activeKpi === 'IN_PROGRESS'}
-                onClick={() => setActiveKpi('IN_PROGRESS')}
-              />
-              <KpiCard
-                label="Resolved"
-                value={stats.closed}
-                accent="success"
-                active={activeKpi === 'CLOSED'}
-                onClick={() => setActiveKpi('CLOSED')}
-              />
+              <KpiCard label="Total Tickets" value={stats.total} accent="primary" active={activeKpi === 'ALL'} onClick={() => setActiveKpi('ALL')} />
+              <KpiCard label="Open" value={stats.open} accent="warning" active={activeKpi === 'NEW'} onClick={() => setActiveKpi('NEW')} />
+              <KpiCard label="In Progress" value={stats.inProgress} accent="primary" active={activeKpi === 'IN_PROGRESS'} onClick={() => setActiveKpi('IN_PROGRESS')} />
+              <KpiCard label="Resolved" value={stats.closed} accent="success" active={activeKpi === 'CLOSED'} onClick={() => setActiveKpi('CLOSED')} />
             </div>
 
-            {/* Main Grid */}
-            <div style={{
-              ...styles.mainGrid,
-              gridTemplateColumns: isMobile ? '1fr' : '1fr 340px',
-            }}>
-              {/* Project Status Section */}
+            <div style={{ ...styles.mainGrid, gridTemplateColumns: isMobile ? '1fr' : '1fr 340px' }}>
               <Card title="Project Status" subtitle="Active projects with pending work">
                 <div style={styles.projectList}>
                   {projectStats.length === 0 ? (
                     <p style={styles.emptyText}>No projects with tickets yet</p>
                   ) : (
                     projectStats.map((project) => (
-                      <Link 
-                        href={`/tickets?project=${encodeURIComponent(project.project_code)}`}
-                        key={project.id} 
-                        style={styles.projectCard}
-                      >
+                      <Link href={`/tickets?project=${encodeURIComponent(project.project_code)}`} key={project.id} style={styles.projectCard}>
                         <div style={styles.projectHeader}>
                           <div>
                             <div style={styles.projectName}>{project.name}</div>
@@ -475,12 +448,7 @@ export default function DashboardPage() {
                         </div>
                         <div style={styles.progressBarContainer}>
                           <div style={styles.progressBarBg}>
-                            <div 
-                              style={{
-                                ...styles.progressBarFill,
-                                width: `${project.progress}%`,
-                              }} 
-                            />
+                            <div style={{ ...styles.progressBarFill, width: `${project.progress}%` }} />
                           </div>
                           <span style={styles.progressLabel}>{project.progress}% complete</span>
                         </div>
@@ -490,7 +458,6 @@ export default function DashboardPage() {
                 </div>
               </Card>
 
-              {/* Recent Activity */}
               <Card title="Recent Activity" subtitle="Latest ticket updates">
                 <div style={styles.activityList}>
                   {recentActivity.map((activity) => (
@@ -498,9 +465,7 @@ export default function DashboardPage() {
                       <div style={styles.activityIcon}>
                         {activity.type === 'created' && (
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.success} strokeWidth="2">
-                            <circle cx="12" cy="12" r="10" />
-                            <path d="M12 8v8" />
-                            <path d="M8 12h8" />
+                            <circle cx="12" cy="12" r="10" /><path d="M12 8v8" /><path d="M8 12h8" />
                           </svg>
                         )}
                         {activity.type === 'closed' && (
@@ -510,8 +475,7 @@ export default function DashboardPage() {
                         )}
                         {activity.type === 'updated' && (
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.info} strokeWidth="2">
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                            <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                           </svg>
                         )}
                       </div>
@@ -531,15 +495,10 @@ export default function DashboardPage() {
               </Card>
             </div>
 
-            {/* Recent Tickets Table */}
-            <Card 
-              title="Recent Tickets" 
+            <Card
+              title="Recent Tickets"
               subtitle={activeKpi === 'ALL' ? 'All tickets' : `Filtered by ${activeKpi.toLowerCase()}`}
-              actions={
-                <Link href="/tickets" style={styles.viewAllLink}>
-                  View all
-                </Link>
-              }
+              actions={<Link href="/tickets" style={styles.viewAllLink}>View all</Link>}
               noPadding
             >
               <div style={styles.tableContainer}>
@@ -556,33 +515,21 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {filteredTickets.map((ticket) => (
-                      <tr 
-                        key={ticket.id} 
-                        style={styles.tr}
-                        onClick={() => openTicket(ticket)}
-                      >
-                        <td style={styles.td}>
-                          <span style={styles.ticketNumber}>{ticket.ticket_number}</span>
-                        </td>
-                        <td style={styles.td}>
-                          <span style={styles.projectBadge}>{ticket.project_code}</span>
-                        </td>
+                      <tr key={ticket.id} style={styles.tr} onClick={() => openTicket(ticket)}>
+                        <td style={styles.td}><span style={styles.ticketNumber}>{ticket.ticket_number}</span></td>
+                        <td style={styles.td}><span style={styles.projectBadge}>{ticket.project_code}</span></td>
                         <td style={{ ...styles.td, maxWidth: '300px' }}>
                           <span style={styles.descriptionText}>
                             {ticket.description?.slice(0, 60)}{(ticket.description?.length || 0) > 60 ? '...' : ''}
                           </span>
                         </td>
-                        <td style={styles.td}>
-                          <StatusBadge status={ticket.status} size="sm" />
-                        </td>
+                        <td style={styles.td}><StatusBadge status={ticket.status} size="sm" /></td>
                         <td style={styles.td}>
                           <span style={styles.workerName}>
                             {ticket.assigned_worker_id ? workersMap[ticket.assigned_worker_id] || 'Unknown' : '-'}
                           </span>
                         </td>
-                        <td style={styles.td}>
-                          <span style={styles.ageText}>{formatRelativeTime(ticket.created_at)}</span>
-                        </td>
+                        <td style={styles.td}><span style={styles.ageText}>{formatRelativeTime(ticket.created_at)}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -599,7 +546,6 @@ export default function DashboardPage() {
         workersMap={workersMap}
         ticketLogs={ticketLogs}
         selectedTicketAttachments={selectedTicketAttachments}
-
         drawerLoading={drawerLoading}
         savingTicket={savingTicket}
         draftDescription={draftDescription}
@@ -610,7 +556,9 @@ export default function DashboardPage() {
         onDescriptionChange={setDraftDescription}
         onStatusChange={setDraftStatus}
         onWorkerChange={setDraftWorkerId}
-        onImageClick={setSelectedImageUrl}
+        onSelectImage={setSelectedImageUrl}
+        onCloseTicket={handleCloseTicket}
+        getImageUrl={getImageUrl}
         isMobile={isMobile}
       />
 
@@ -619,20 +567,22 @@ export default function DashboardPage() {
         open={showAddTicketModal}
         onClose={() => setShowAddTicketModal(false)}
         projects={projects}
-        form={addTicketForm}
-        onFormChange={setAddTicketForm}
-        onSubmit={handleCreateTicket}
-        loading={addingTicket}
+        projectCode={addTicketProjectCode}
+        description={addTicketDescription}
+        reporterName={addTicketReporterName}
+        reporterPhone={addTicketReporterPhone}
         error={addTicketError}
-        isMobile={isMobile}
+        loading={addingTicket}
+        onProjectCodeChange={setAddTicketProjectCode}
+        onDescriptionChange={setAddTicketDescription}
+        onReporterNameChange={setAddTicketReporterName}
+        onReporterPhoneChange={setAddTicketReporterPhone}
+        onSubmit={handleCreateTicket}
       />
 
       {/* Image Lightbox */}
       {selectedImageUrl && (
-        <div 
-          style={styles.lightboxOverlay} 
-          onClick={() => setSelectedImageUrl(null)}
-        >
+        <div style={styles.lightboxOverlay} onClick={() => setSelectedImageUrl(null)}>
           <img src={selectedImageUrl} alt="Attachment" style={styles.lightboxImage} />
         </div>
       )}
@@ -641,258 +591,48 @@ export default function DashboardPage() {
 }
 
 const styles: Record<string, CSSProperties> = {
-  content: {
-    padding: '32px 40px',
-    maxWidth: '1400px',
-    margin: '0 auto',
-  },
-  hero: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '40px',
-    flexWrap: 'wrap',
-    gap: '24px',
-  },
+  content: { padding: '32px 40px', maxWidth: '1400px', margin: '0 auto' },
+  hero: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px', flexWrap: 'wrap', gap: '24px' },
   heroText: {},
-  heroTitle: {
-    fontSize: '34px',
-    fontWeight: 700,
-    color: theme.colors.textPrimary,
-    margin: 0,
-    letterSpacing: '-0.02em',
-  },
-  heroDate: {
-    fontSize: '17px',
-    color: theme.colors.textMuted,
-    margin: '8px 0 0',
-  },
-  heroStatus: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '15px',
-    color: theme.colors.textSecondary,
-    margin: '16px 0 0',
-  },
-  statusDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    background: theme.colors.warning,
-  },
-  heroActions: {
-    display: 'flex',
-    gap: '12px',
-  },
-  loadingContainer: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '80px 0',
-  },
-  kpiGrid: {
-    display: 'grid',
-    gap: '16px',
-    marginBottom: '32px',
-  },
-  mainGrid: {
-    display: 'grid',
-    gap: '24px',
-    marginBottom: '32px',
-  },
-  projectList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  projectCard: {
-    display: 'block',
-    padding: '16px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
-    textDecoration: 'none',
-    transition: 'all 0.2s ease',
-    cursor: 'pointer',
-  },
-  projectHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '12px',
-  },
-  projectName: {
-    fontSize: '15px',
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-  },
-  projectCode: {
-    fontSize: '13px',
-    color: theme.colors.textMuted,
-    marginTop: '2px',
-  },
-  projectStats: {
-    textAlign: 'right',
-  },
-  projectTicketCount: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: theme.colors.warning,
-  },
-  progressBarContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  progressBarBg: {
-    flex: 1,
-    height: '4px',
-    background: theme.colors.muted,
-    borderRadius: '2px',
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    background: theme.colors.primary,
-    borderRadius: '2px',
-    transition: 'width 0.3s ease',
-  },
-  progressLabel: {
-    fontSize: '12px',
-    color: theme.colors.textMuted,
-    flexShrink: 0,
-  },
-  activityList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  activityItem: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '12px',
-    padding: '12px 0',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  activityIcon: {
-    width: '32px',
-    height: '32px',
-    borderRadius: theme.radius.full,
-    background: theme.colors.muted,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  activityContent: {
-    flex: 1,
-    minWidth: 0,
-  },
-  activityTitle: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: theme.colors.textPrimary,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  activityBadge: {
-    fontSize: '11px',
-    fontWeight: 500,
-    color: theme.colors.textMuted,
-    background: theme.colors.muted,
-    padding: '2px 6px',
-    borderRadius: theme.radius.xs,
-  },
-  activityDesc: {
-    fontSize: '13px',
-    color: theme.colors.textMuted,
-    marginTop: '2px',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  activityTime: {
-    fontSize: '12px',
-    color: theme.colors.textMuted,
-    flexShrink: 0,
-  },
-  viewAllLink: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: theme.colors.primary,
-    textDecoration: 'none',
-  },
-  tableContainer: {
-    overflowX: 'auto',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-  },
-  th: {
-    textAlign: 'left',
-    padding: '14px 20px',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    borderBottom: `1px solid ${theme.colors.border}`,
-    background: theme.colors.muted,
-  },
-  tr: {
-    cursor: 'pointer',
-    transition: 'background 0.15s ease',
-  },
-  td: {
-    padding: '16px 20px',
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    borderBottom: `1px solid ${theme.colors.border}`,
-    verticalAlign: 'middle',
-  },
-  ticketNumber: {
-    fontWeight: 600,
-    fontVariantNumeric: 'tabular-nums',
-  },
-  projectBadge: {
-    fontSize: '12px',
-    fontWeight: 500,
-    color: theme.colors.textMuted,
-    background: theme.colors.muted,
-    padding: '4px 8px',
-    borderRadius: theme.radius.sm,
-  },
-  descriptionText: {
-    color: theme.colors.textSecondary,
-  },
-  workerName: {
-    color: theme.colors.textSecondary,
-  },
-  ageText: {
-    color: theme.colors.textMuted,
-    fontSize: '13px',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: theme.colors.textMuted,
-    padding: '32px 0',
-  },
-  lightboxOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0, 0, 0, 0.9)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 500,
-    cursor: 'pointer',
-  },
-  lightboxImage: {
-    maxWidth: '90vw',
-    maxHeight: '90vh',
-    objectFit: 'contain',
-    borderRadius: theme.radius.lg,
-  },
+  heroTitle: { fontSize: '34px', fontWeight: 700, color: theme.colors.textPrimary, margin: 0, letterSpacing: '-0.02em' },
+  heroDate: { fontSize: '17px', color: theme.colors.textMuted, margin: '8px 0 0' },
+  heroStatus: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', color: theme.colors.textSecondary, margin: '16px 0 0' },
+  statusDot: { width: '8px', height: '8px', borderRadius: '50%', background: theme.colors.warning },
+  heroActions: { display: 'flex', gap: '12px' },
+  loadingContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '80px 0' },
+  kpiGrid: { display: 'grid', gap: '16px', marginBottom: '32px' },
+  mainGrid: { display: 'grid', gap: '24px', marginBottom: '32px' },
+  projectList: { display: 'flex', flexDirection: 'column', gap: '16px' },
+  projectCard: { display: 'block', padding: '16px', borderRadius: theme.radius.md, border: `1px solid ${theme.colors.border}`, textDecoration: 'none', transition: 'all 0.2s ease', cursor: 'pointer' },
+  projectHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' },
+  projectName: { fontSize: '15px', fontWeight: 600, color: theme.colors.textPrimary },
+  projectCode: { fontSize: '13px', color: theme.colors.textMuted, marginTop: '2px' },
+  projectStats: { textAlign: 'right' },
+  projectTicketCount: { fontSize: '13px', fontWeight: 500, color: theme.colors.warning },
+  progressBarContainer: { display: 'flex', alignItems: 'center', gap: '12px' },
+  progressBarBg: { flex: 1, height: '4px', background: theme.colors.muted, borderRadius: '2px', overflow: 'hidden' },
+  progressBarFill: { height: '100%', background: theme.colors.primary, borderRadius: '2px', transition: 'width 0.3s ease' },
+  progressLabel: { fontSize: '12px', color: theme.colors.textMuted, flexShrink: 0 },
+  activityList: { display: 'flex', flexDirection: 'column', gap: '4px' },
+  activityItem: { display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px 0', borderBottom: `1px solid ${theme.colors.border}` },
+  activityIcon: { width: '32px', height: '32px', borderRadius: theme.radius.full, background: theme.colors.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  activityContent: { flex: 1, minWidth: 0 },
+  activityTitle: { fontSize: '14px', fontWeight: 500, color: theme.colors.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' },
+  activityBadge: { fontSize: '11px', fontWeight: 500, color: theme.colors.textMuted, background: theme.colors.muted, padding: '2px 6px', borderRadius: theme.radius.xs },
+  activityDesc: { fontSize: '13px', color: theme.colors.textMuted, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  activityTime: { fontSize: '12px', color: theme.colors.textMuted, flexShrink: 0 },
+  viewAllLink: { fontSize: '14px', fontWeight: 500, color: theme.colors.primary, textDecoration: 'none' },
+  tableContainer: { overflowX: 'auto' },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  th: { textAlign: 'left', padding: '14px 20px', fontSize: '12px', fontWeight: 600, color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: `1px solid ${theme.colors.border}`, background: theme.colors.muted },
+  tr: { cursor: 'pointer', transition: 'background 0.15s ease' },
+  td: { padding: '16px 20px', fontSize: '14px', color: theme.colors.textPrimary, borderBottom: `1px solid ${theme.colors.border}`, verticalAlign: 'middle' },
+  ticketNumber: { fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
+  projectBadge: { fontSize: '12px', fontWeight: 500, color: theme.colors.textMuted, background: theme.colors.muted, padding: '4px 8px', borderRadius: theme.radius.sm },
+  descriptionText: { color: theme.colors.textSecondary },
+  workerName: { color: theme.colors.textSecondary },
+  ageText: { color: theme.colors.textMuted, fontSize: '13px' },
+  emptyText: { textAlign: 'center', color: theme.colors.textMuted, padding: '32px 0' },
+  lightboxOverlay: { position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, cursor: 'pointer' },
+  lightboxImage: { maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: theme.radius.lg },
 }
