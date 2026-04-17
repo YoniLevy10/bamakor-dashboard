@@ -595,7 +595,7 @@ export default function DashboardPage() {
 
       {/* Ticket Detail Drawer */}
       <TicketDetailDrawer
-        ticket={selectedTicket}
+        selectedselectedTicket={selectedTicket}
         workersMap={workersMap}
         ticketLogs={ticketLogs}
         attachments={selectedTicketAttachments}
