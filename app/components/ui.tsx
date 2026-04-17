@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, type ReactNode, type CSSProperties } from 'react'
 
@@ -181,7 +182,13 @@ export function Sidebar() {
   return (
     <aside style={sidebarStyles.container}>
       <div style={sidebarStyles.brand}>
-        <div style={sidebarStyles.logoBox}>B</div>
+        <Image 
+          src="/apple-icon.png" 
+          alt="Bamakor" 
+          width={40} 
+          height={40} 
+          style={{ borderRadius: theme.radius.md, flexShrink: 0 }}
+        />
         <div style={sidebarStyles.brandText}>
           <div style={sidebarStyles.title}>Bamakor</div>
           <div style={sidebarStyles.subtitle}>Property Management</div>
@@ -494,7 +501,13 @@ export function MobileMenu({
       <div style={mobileMenuStyles.panel}>
         <div style={mobileMenuStyles.header}>
           <div style={mobileMenuStyles.brand}>
-            <div style={mobileMenuStyles.logoBox}>B</div>
+            <Image 
+              src="/apple-icon.png" 
+              alt="Bamakor" 
+              width={36} 
+              height={36} 
+              style={{ borderRadius: theme.radius.sm }}
+            />
             <span style={mobileMenuStyles.brandName}>Bamakor</span>
           </div>
           <button onClick={onClose} style={mobileMenuStyles.closeButton} aria-label="Close menu">
