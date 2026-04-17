@@ -599,7 +599,7 @@ export default function DashboardPage() {
         workersMap={workersMap}
         ticketLogs={ticketLogs}
         selectedTicketAttachments={selectedTicketAttachments}
-        loadingAttachments={loadingAttachments}
+
         drawerLoading={drawerLoading}
         savingTicket={savingTicket}
         draftDescription={draftDescription}
