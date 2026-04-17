@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -408,7 +408,7 @@ export default function SummaryPage() {
                               <div 
                                 style={{
                                   height: '100%',
-                                  background: '#C41E3A',
+                                  background: '#D11F45',
                                   width: `${workloadPercent}%`,
                                   transition: 'width 0.2s ease'
                                 }}
@@ -904,7 +904,7 @@ const styles: Record<string, CSSProperties> = {
     transition: 'all 0.2s ease',
   },
   errorText: {
-    color: '#B91C1C',
+    color: '#B91C3C',
     margin: 0,
     fontWeight: 600,
   },
@@ -963,7 +963,7 @@ const styles: Record<string, CSSProperties> = {
   priorityProjectRank: {
     fontSize: '14px',
     fontWeight: 800,
-    color: '#C41E3A',
+    color: '#D11F45',
     textAlign: 'center',
   },
   priorityProjectInfo: {
@@ -1017,4 +1017,5 @@ const styles: Record<string, CSSProperties> = {
     textAlign: 'right',
   },
 }
+
 

@@ -10,53 +10,53 @@ import { useState, type ReactNode, type CSSProperties } from 'react'
 
 export const theme = {
   colors: {
-    // Base - Modern Grays with better contrast and depth
-    background: '#F9FAFB',
+    // Base - Figma-aligned neutral surfaces
+    background: '#F5F7FB',
     surface: '#FFFFFF',
-    surfaceElevated: '#F3F4F6',
-    surfaceHover: '#E5E7EB',
-    surfaceActive: '#D1D5DB',
-    muted: '#F0F1F3',
+    surfaceElevated: '#F8FAFC',
+    surfaceHover: '#F1F5F9',
+    surfaceActive: '#E2E8F0',
+    muted: '#EEF2F7',
     
-    // Borders - More visible, modern depth
-    border: '#D1D5DB',
-    borderSubtle: '#E5E7EB',
-    borderStrong: '#9CA3AF',
+    // Borders - Soft and clean
+    border: '#DCE3EC',
+    borderSubtle: '#E7EDF4',
+    borderStrong: '#B9C5D5',
     
-    // Text - Enhanced hierarchy with better contrast
+    // Text
     textPrimary: '#111827',
-    textSecondary: '#374151',
-    textMuted: '#6B7280',
+    textSecondary: '#334155',
+    textMuted: '#64748B',
     textInverse: '#FFFFFF',
     
-    // Primary - Vibrant brand color with better saturation
-    primary: '#DC2626',
-    primaryHover: '#B91C1C',
-    primaryActive: '#991B1B',
-    primaryMuted: 'rgba(220, 38, 38, 0.08)',
-    primarySubtle: 'rgba(220, 38, 38, 0.15)',
-    primaryText: '#DC2626',
+    // Primary - Figma reference brand red
+    primary: '#D11F45',
+    primaryHover: '#B91C3C',
+    primaryActive: '#981B33',
+    primaryMuted: 'rgba(209, 31, 69, 0.09)',
+    primarySubtle: 'rgba(209, 31, 69, 0.2)',
+    primaryText: '#D11F45',
     
     // Status Colors - Modern, accessible palette
-    success: '#059669',
+    success: '#10B981',
     successMuted: '#ECFDF5',
-    warning: '#D97706',
+    warning: '#F59E0B',
     warningMuted: '#FFFBEB',
-    error: '#DC2626',
+    error: '#EF4444',
     errorMuted: '#FEE2E2',
-    info: '#0284C7',
+    info: '#3B82F6',
     infoMuted: '#EFF6FF',
     
     // Additional colors for modern design
-    overlay: 'rgba(15, 20, 25, 0.5)',
-    overlayLight: 'rgba(15, 20, 25, 0.25)',
+    overlay: 'rgba(15, 23, 42, 0.38)',
+    overlayLight: 'rgba(15, 23, 42, 0.2)',
   },
   radius: {
     xs: '6px',
-    sm: '8px',
+    sm: '10px',
     md: '12px',
-    lg: '16px',
-    xl: '20px',
+    lg: '14px',
+    xl: '16px',
     full: '9999px',
   },
   spacing: {
@@ -102,14 +102,14 @@ export const theme = {
   },
   shadows: {
     none: 'none',
-    xs: '0 1px 2px 0 rgba(0, 0, 0, 0.04)',
-    sm: '0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.04)',
-    md: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)',
-    lg: '0 10px 15px -3px rgba(0, 0, 0, 0.12), 0 4px 6px -4px rgba(0, 0, 0, 0.08)',
-    xl: '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-    card: '0 2px 8px rgba(0, 0, 0, 0.08)',
-    hover: '0 8px 16px rgba(0, 0, 0, 0.12)',
-    focus: '0 0 0 3px rgba(220, 38, 38, 0.1)',
+    xs: '0 1px 2px rgba(15, 23, 42, 0.03)',
+    sm: '0 1px 2px rgba(15, 23, 42, 0.04)',
+    md: '0 3px 10px rgba(15, 23, 42, 0.08)',
+    lg: '0 12px 28px rgba(15, 23, 42, 0.14)',
+    xl: '0 20px 44px rgba(15, 23, 42, 0.18)',
+    card: '0 1px 2px rgba(15, 23, 42, 0.03)',
+    hover: '0 6px 18px rgba(15, 23, 42, 0.1)',
+    focus: '0 0 0 3px rgba(209, 31, 69, 0.12)',
   },
 }
 
@@ -227,7 +227,7 @@ export function Sidebar() {
 
 const sidebarStyles: Record<string, CSSProperties> = {
   container: {
-    background: theme.colors.surface,
+    background: theme.colors.surfaceElevated,
     borderRight: `1px solid ${theme.colors.border}`,
     padding: '24px 16px',
     position: 'sticky',
@@ -248,7 +248,7 @@ const sidebarStyles: Record<string, CSSProperties> = {
     width: '48px',
     height: '48px',
     borderRadius: theme.radius.lg,
-    background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.primaryHover})`,
+    background: theme.colors.primary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -256,7 +256,7 @@ const sidebarStyles: Record<string, CSSProperties> = {
     fontWeight: 700,
     fontSize: '20px',
     flexShrink: 0,
-    boxShadow: theme.shadows.lg,
+    boxShadow: theme.shadows.sm,
   },
   title: {
     fontSize: '16px',
@@ -286,7 +286,7 @@ const sidebarStyles: Record<string, CSSProperties> = {
     textDecoration: 'none',
     fontSize: '14px',
     fontWeight: 600,
-    transition: 'all 0.2s ease-out',
+    transition: 'all 0.16s ease-out',
     border: `1px solid transparent`,
     cursor: 'pointer',
   },
@@ -487,14 +487,14 @@ const kpiStyles: Record<string, CSSProperties> = {
     textAlign: 'left',
     transition: 'all 0.2s ease-out',
     width: '100%',
-    boxShadow: theme.shadows.xs,
+    boxShadow: theme.shadows.none,
     cursor: 'pointer',
   },
   cardActive: {
     borderColor: theme.colors.primary,
     background: theme.colors.primaryMuted,
-    boxShadow: theme.shadows.md,
-    transform: 'translateY(-2px)',
+    boxShadow: theme.shadows.none,
+    transform: 'none',
   },
   label: {
     fontSize: theme.typography.fontSize.xs,
@@ -547,7 +547,7 @@ export function Button({
       background: theme.colors.primary,
       color: theme.colors.textInverse,
       border: 'none',
-      boxShadow: theme.shadows.md,
+      boxShadow: theme.shadows.sm,
     },
     secondary: {
       background: theme.colors.surface,
@@ -567,16 +567,16 @@ export function Button({
   }
   
   const sizeStyles: Record<string, CSSProperties> = {
-    sm: { padding: '8px 16px', fontSize: theme.typography.fontSize.sm, height: '36px', fontWeight: 600 },
-    md: { padding: '12px 24px', fontSize: theme.typography.fontSize.base, height: '44px', fontWeight: 600 },
-    lg: { padding: '14px 32px', fontSize: theme.typography.fontSize.lg, height: '52px', fontWeight: 600 },
+    sm: { padding: '8px 14px', fontSize: theme.typography.fontSize.sm, height: '36px', fontWeight: 600 },
+    md: { padding: '10px 18px', fontSize: theme.typography.fontSize.base, height: '40px', fontWeight: 600 },
+    lg: { padding: '12px 24px', fontSize: theme.typography.fontSize.lg, height: '46px', fontWeight: 600 },
   }
 
   const hoverStateStyles: Record<string, CSSProperties> = {
     primary: {
       background: hovered && !disabled ? theme.colors.primaryHover : theme.colors.primary,
-      transform: hovered && !disabled ? 'scale(1.02)' : 'scale(1)',
-      boxShadow: hovered && !disabled ? theme.shadows.hover : theme.shadows.md,
+      transform: 'none',
+      boxShadow: hovered && !disabled ? theme.shadows.md : theme.shadows.sm,
     },
     secondary: {
       background: hovered && !disabled ? theme.colors.surfaceHover : theme.colors.surface,
@@ -628,7 +628,7 @@ const buttonStyles: Record<string, CSSProperties> = {
     gap: '8px',
     borderRadius: theme.radius.md,
     fontWeight: 600,
-    transition: 'all 0.2s ease-out',
+    transition: 'all 0.16s ease-out',
     whiteSpace: 'nowrap',
     border: 'none',
     cursor: 'pointer',
@@ -784,7 +784,7 @@ const cardStyles: Record<string, CSSProperties> = {
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.lg,
     overflow: 'hidden',
-    boxShadow: theme.shadows.xs,
+    boxShadow: theme.shadows.none,
     transition: 'all 0.2s ease-out',
   },
   header: {
@@ -871,7 +871,7 @@ const inputStyles: Record<string, CSSProperties> = {
   },
   input: {
     background: theme.colors.surface,
-    border: `1.5px solid ${theme.colors.border}`,
+    border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
     padding: '14px 18px',
     fontSize: '15px',
@@ -881,7 +881,7 @@ const inputStyles: Record<string, CSSProperties> = {
     lineHeight: theme.typography.lineHeight.normal,
     WebkitAppearance: 'none',
     appearance: 'none',
-    boxShadow: theme.shadows.xs,
+    boxShadow: theme.shadows.none,
   },
   error: {
     fontSize: '13px',
@@ -940,7 +940,7 @@ const selectStyles: Record<string, CSSProperties> = {
   },
   select: {
     background: theme.colors.surface,
-    border: `1.5px solid ${theme.colors.border}`,
+    border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
     padding: '14px 18px',
     paddingRight: '40px',
@@ -956,7 +956,7 @@ const selectStyles: Record<string, CSSProperties> = {
     backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'8\' viewBox=\'0 0 12 8\'%3E%3Cpath fill=\'%23737373\' d=\'M1 1l5 5 5-5\'/%3E%3C/svg%3E")',
     backgroundRepeat: 'no-repeat',
     backgroundPosition: 'right 14px center',
-    boxShadow: theme.shadows.xs,
+    boxShadow: theme.shadows.none,
   },
 }
 
@@ -1263,14 +1263,14 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
     width: '44px',
     height: '44px',
     borderRadius: theme.radius.lg,
-    background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.primaryHover})`,
+    background: theme.colors.primary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: theme.colors.textInverse,
     fontWeight: 700,
     fontSize: '18px',
-    boxShadow: theme.shadows.lg,
+    boxShadow: theme.shadows.sm,
   },
   brandText: {
     fontSize: theme.typography.fontSize.lg,
@@ -1375,7 +1375,7 @@ const searchStyles: Record<string, CSSProperties> = {
   input: {
     width: '100%',
     background: theme.colors.surface,
-    border: `1.5px solid ${theme.colors.border}`,
+    border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
     padding: '14px 18px 14px 48px',
     fontSize: theme.typography.fontSize.sm,
@@ -1383,7 +1383,7 @@ const searchStyles: Record<string, CSSProperties> = {
     outline: 'none',
     transition: 'all 0.2s ease-out',
     lineHeight: theme.typography.lineHeight.normal,
-    boxShadow: theme.shadows.xs,
+    boxShadow: theme.shadows.none,
   },
 }
 

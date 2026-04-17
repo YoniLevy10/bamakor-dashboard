@@ -20,8 +20,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   viewportFit: "cover",
-  themeColor: "#0a0a0b",
-  colorScheme: "dark",
+  themeColor: "#D11F45",
+  colorScheme: "light",
   interactiveWidget: "resizes-content",
 };
 

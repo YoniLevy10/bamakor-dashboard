@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
@@ -167,7 +167,7 @@ function ReportPageContent() {
     )
 
     if (result) {
-      const successMsg = `✓ Issue submitted successfully. Ticket #${result.ticketNumber}`
+      const successMsg = `Issue submitted successfully. Ticket #${result.ticketNumber}`
 
       // Show warning if some images failed but ticket was created
       if (result.imageUploadWarning) {
@@ -258,7 +258,7 @@ function ReportPageContent() {
                   </div>
                 )}
                 {searchInput.trim().length >= 2 && searchResults.length === 1 && (
-                  <div style={styles.autoSelectNote}>✓ Auto-selected: {searchResults[0].name}</div>
+                  <div style={styles.autoSelectNote}>Auto-selected: {searchResults[0].name}</div>
                 )}
               </div>
               {selectedProjectCode && !paramProjectCode && (
@@ -339,7 +339,7 @@ function ReportPageContent() {
                         onClick={() => removeFile(idx)}
                         style={styles.fileRemoveButton}
                       >
-                        ✕
+                        x
                       </button>
                     </div>
                   ))}
@@ -599,7 +599,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   errorBox: {
     background: '#FEF2F2',
-    color: '#B91C1C',
+    color: '#B91C3C',
     border: '1px solid #FECACA',
     borderRadius: '12px',
     padding: '14px 16px',
@@ -679,3 +679,4 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '16px',
   },
 }
+

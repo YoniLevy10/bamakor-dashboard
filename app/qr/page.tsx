@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -370,7 +370,7 @@ export default function QrPage() {
                           onClick={() => setOpenCopyMenuProjectId(openCopyMenuProjectId === project.id ? null : project.id)}
                           style={styles.secondaryButtonSmall}
                         >
-                          Copy (▼)
+                          Copy (v)
                         </button>
                         {openCopyMenuProjectId === project.id && (
                           <div style={styles.dropdownMenu}>
@@ -430,7 +430,7 @@ export default function QrPage() {
                         rel="noreferrer"
                         style={{ ...styles.secondaryLinkActionButton, fontSize: '12px', padding: '6px 10px' }}
                       >
-                        View Report Form →
+                        View Report Form {'->'}
                       </a>
                     </div>
                   </div>
@@ -464,7 +464,7 @@ export default function QrPage() {
                 style={styles.closeButton}
                 aria-label="Close"
               >
-                ✕
+                x
               </button>
             </div>
 
@@ -743,7 +743,7 @@ const styles: Record<string, CSSProperties> = {
   },
   projectCode: {
     fontSize: '12px',
-    color: '#B91C1C',
+    color: '#B91C3C',
     fontWeight: 800,
     marginBottom: '6px',
     textTransform: 'uppercase',
@@ -796,11 +796,11 @@ const styles: Record<string, CSSProperties> = {
   },
   metaCode: {
     fontSize: '14px',
-    color: '#B91C1C',
+    color: '#B91C3C',
     fontWeight: 800,
     wordBreak: 'break-word',
     cursor: 'pointer',
-    borderBottom: '2px dotted #B91C1C',
+    borderBottom: '2px dotted #B91C3C',
     padding: '0 2px',
     transition: 'all 0.2s ease',
   },
@@ -865,9 +865,9 @@ const styles: Record<string, CSSProperties> = {
     position: 'relative',
   },
   primaryActionButton: {
-    background: '#B91C1C',
+    background: '#B91C3C',
     color: '#FFFFFF',
-    border: '1px solid #B91C1C',
+    border: '1px solid #B91C3C',
     borderRadius: '10px',
     padding: '10px 12px',
     textDecoration: 'none',
@@ -939,7 +939,7 @@ const styles: Record<string, CSSProperties> = {
     margin: 0,
   },
   errorText: {
-    color: '#B91C1C',
+    color: '#B91C3C',
     margin: 0,
     fontWeight: 600,
   },
@@ -1028,9 +1028,9 @@ const styles: Record<string, CSSProperties> = {
     gap: '10px',
   },
   actionButton: {
-    background: '#B91C1C',
+    background: '#B91C3C',
     color: '#FFFFFF',
-    border: '1px solid #B91C1C',
+    border: '1px solid #B91C3C',
     borderRadius: '10px',
     padding: '12px 16px',
     cursor: 'pointer',
@@ -1040,9 +1040,9 @@ const styles: Record<string, CSSProperties> = {
     transition: 'all 0.2s ease',
   },
   actionButtonLink: {
-    background: '#B91C1C',
+    background: '#B91C3C',
     color: '#FFFFFF',
-    border: '1px solid #B91C1C',
+    border: '1px solid #B91C3C',
     borderRadius: '10px',
     padding: '12px 16px',
     textDecoration: 'none',
