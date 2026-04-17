@@ -1397,6 +1397,232 @@ const activityStyles: Record<string, CSSProperties> = {
   time: {
     fontSize: '12px',
     color: theme.colors.textMuted,
+  },
+}
+
+// ============================================================
+// Skeleton Loading Components
+// ============================================================
+
+export function Skeleton({ 
+  width = '100%', 
+  height = '20px', 
+  borderRadius = theme.radius.sm 
+}: { 
+  width?: string | number
+  height?: string | number
+  borderRadius?: string 
+}) {
+  return (
+    <div
+      style={{
+        width: typeof width === 'number' ? `${width}px` : width,
+        height: typeof height === 'number' ? `${height}px` : height,
+        borderRadius,
+        background: `linear-gradient(90deg, ${theme.colors.muted} 25%, ${theme.colors.border} 50%, ${theme.colors.muted} 75%)`,
+        backgroundSize: '200% 100%',
+        animation: 'shimmer 1.5s infinite',
+      }}
+    />
+  )
+}
+
+export function SkeletonCard() {
+  return (
+    <Card>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <Skeleton width="40%" height="14px" />
+        <Skeleton width="60%" height="28px" />
+        <Skeleton width="30%" height="12px" />
+      </div>
+    </Card>
+  )
+}
+
+export function SkeletonTable({ rows = 5 }: { rows?: number }) {
+  return (
+    <Card>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <Skeleton width="30%" height="20px" />
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+            <Skeleton width="5%" height="16px" />
+            <Skeleton width="25%" height="16px" />
+            <Skeleton width="20%" height="16px" />
+            <Skeleton width="15%" height="24px" borderRadius={theme.radius.full} />
+            <Skeleton width="15%" height="16px" />
+            <Skeleton width="10%" height="16px" />
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+export function SkeletonGrid({ count = 4 }: { count?: number }) {
+  return (
+    <div style={{ 
+      display: 'grid', 
+      gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+      gap: '16px' 
+    }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonCard key={i} />
+      ))}
+    </div>
+  )
+}
+
+// ============================================================
+// Error State Component
+// ============================================================
+
+export function ErrorState({ 
+  title = 'Something went wrong',
+  message = 'Unable to load data. Please try again.',
+  onRetry 
+}: { 
+  title?: string
+  message?: string
+  onRetry?: () => void 
+}) {
+  return (
+    <Card>
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        padding: '48px 24px',
+        textAlign: 'center',
+        gap: '16px'
+      }}>
+        <div style={{
+          width: '48px',
+          height: '48px',
+          borderRadius: theme.radius.full,
+          background: '#FEE2E2',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#DC2626',
+          fontSize: '24px'
+        }}>
+          !
+        </div>
+        <div>
+          <div style={{ 
+            fontSize: '16px', 
+            fontWeight: 600, 
+            color: theme.colors.textPrimary,
+            marginBottom: '4px'
+          }}>
+            {title}
+          </div>
+          <div style={{ 
+            fontSize: '14px', 
+            color: theme.colors.textMuted 
+          }}>
+            {message}
+          </div>
+        </div>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            style={{
+              padding: '8px 16px',
+              borderRadius: theme.radius.sm,
+              border: `1px solid ${theme.colors.border}`,
+              background: theme.colors.background,
+              color: theme.colors.textPrimary,
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Try Again
+          </button>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+// ============================================================
+// Empty State Component
+// ============================================================
+
+export function EmptyState({ 
+  title,
+  message,
+  action
+}: { 
+  title: string
+  message: string
+  action?: { label: string; onClick: () => void }
+}) {
+  return (
+    <Card>
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        padding: '48px 24px',
+        textAlign: 'center',
+        gap: '16px'
+      }}>
+        <div style={{
+          width: '48px',
+          height: '48px',
+          borderRadius: theme.radius.full,
+          background: theme.colors.muted,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: theme.colors.textMuted,
+          fontSize: '20px'
+        }}>
+          ?
+        </div>
+        <div>
+          <div style={{ 
+            fontSize: '16px', 
+            fontWeight: 600, 
+            color: theme.colors.textPrimary,
+            marginBottom: '4px'
+          }}>
+            {title}
+          </div>
+          <div style={{ 
+            fontSize: '14px', 
+            color: theme.colors.textMuted 
+          }}>
+            {message}
+          </div>
+        </div>
+        {action && (
+          <button
+            onClick={action.onClick}
+            style={{
+              padding: '8px 16px',
+              borderRadius: theme.radius.sm,
+              background: theme.colors.accent,
+              color: '#FFFFFF',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              border: 'none',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {action.label}
+          </button>
+        )}
+      </div>
+    </Card>
+  )
     flexShrink: 0,
   },
 }
