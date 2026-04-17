@@ -44,10 +44,12 @@ type TicketRow = {
 type AttachmentRow = {
   id: string
   ticket_id: string
-  file_name: string
-  file_url: string
-  mime_type: string
-  created_at: string
+  file_name: string | null
+  file_url: string | null
+  mime_type: string | null
+  attachment_type: string
+  whatsapp_media_id: string | null
+  created_at: string | null
   signed_url?: string | null
 }
 
@@ -265,7 +267,7 @@ export default function TicketsPage() {
     try {
       const { data, error } = await supabase
         .from('ticket_attachments')
-        .select('id, ticket_id, file_name, file_url, mime_type, created_at')
+        .select('id, ticket_id, file_name, file_url, mime_type, attachment_type, whatsapp_media_id, created_at')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: false })
 
