@@ -276,10 +276,30 @@ export default function TicketsPage() {
         const attachmentsWithUrls = await Promise.all(
           (data || []).map(async (attachment: AttachmentRow) => {
             try {
-              console.log('[v0] Creating signed URL for:', attachment.file_url)
+              // Extract just the path if file_url contains full URL
+              let filePath = attachment.file_url
+              console.log('[v0] Original file_url:', filePath)
+              
+              // If it's a full Supabase URL, extract just the path
+              if (filePath && filePath.includes('supabase.co/storage')) {
+                // Extract path after /ticket-attachments/
+                const match = filePath.match(/\/ticket-attachments\/(.+)$/)
+                if (match) {
+                  filePath = match[1]
+                  console.log('[v0] Extracted path from URL:', filePath)
+                }
+              }
+              
+              // If it starts with ticket-attachments/, remove that prefix
+              if (filePath && filePath.startsWith('ticket-attachments/')) {
+                filePath = filePath.replace('ticket-attachments/', '')
+                console.log('[v0] Removed bucket prefix:', filePath)
+              }
+              
+              console.log('[v0] Final path for signed URL:', filePath)
               const { data: signedUrlData, error: signedError } = await supabase.storage
                 .from('ticket-attachments')
-                .createSignedUrl(attachment.file_url, 3600)
+                .createSignedUrl(filePath, 3600)
               console.log('[v0] Signed URL result:', { signedUrl: signedUrlData?.signedUrl, error: signedError })
               return { ...attachment, signed_url: signedUrlData?.signedUrl || null }
             } catch (err) {
