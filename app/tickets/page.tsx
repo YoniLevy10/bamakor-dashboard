@@ -262,31 +262,40 @@ export default function TicketsPage() {
 
   async function loadTicketAttachments(ticketId: string) {
     setLoadingAttachments(true)
+    console.log('[v0] Loading attachments for ticket:', ticketId)
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('ticket_attachments')
         .select('id, ticket_id, file_name, file_url, file_size, mime_type, created_at')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: false })
 
+      console.log('[v0] Attachments query result:', { data, error, count: data?.length })
+
       if (data && data.length > 0) {
         const attachmentsWithUrls = await Promise.all(
           (data || []).map(async (attachment: AttachmentRow) => {
             try {
-              const { data: signedUrlData } = await supabase.storage
+              console.log('[v0] Creating signed URL for:', attachment.file_url)
+              const { data: signedUrlData, error: signedError } = await supabase.storage
                 .from('ticket-attachments')
                 .createSignedUrl(attachment.file_url, 3600)
+              console.log('[v0] Signed URL result:', { signedUrl: signedUrlData?.signedUrl, error: signedError })
               return { ...attachment, signed_url: signedUrlData?.signedUrl || null }
-            } catch {
+            } catch (err) {
+              console.log('[v0] Error creating signed URL:', err)
               return { ...attachment, signed_url: null }
             }
           })
         )
+        console.log('[v0] Final attachments with URLs:', attachmentsWithUrls)
         setSelectedTicketAttachments(attachmentsWithUrls)
       } else {
+        console.log('[v0] No attachments found for ticket')
         setSelectedTicketAttachments([])
       }
-    } catch {
+    } catch (err) {
+      console.log('[v0] Error loading attachments:', err)
       setSelectedTicketAttachments([])
     }
     setLoadingAttachments(false)
