@@ -12,11 +12,12 @@ import {
   Card,
   Button,
   StatusBadge,
+  PriorityDot,
   SearchInput,
-  FilterTabs,
+  Select,
   Drawer,
   EmptyState,
-  Select,
+  LoadingSpinner,
   theme
 } from '../components/ui'
 
@@ -35,14 +36,8 @@ type TicketRow = {
   created_at?: string
   closed_at?: string | null
   projects?:
-    | {
-        name?: string | null
-        project_code?: string | null
-      }[]
-    | {
-        name?: string | null
-        project_code?: string | null
-      }
+    | { name?: string | null; project_code?: string | null }[]
+    | { name?: string | null; project_code?: string | null }
     | null
 }
 
@@ -54,10 +49,7 @@ type AttachmentRow = {
   file_size: number | null
   mime_type: string
   created_at: string
-}
-
-type AttachmentWithUrl = AttachmentRow & {
-  signed_url: string | null
+  signed_url?: string | null
 }
 
 type WorkerRow = {
@@ -69,14 +61,33 @@ type WorkerRow = {
   is_active?: boolean | null
 }
 
-const statusOptions = ['ALL', 'NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_PARTS', 'CLOSED']
-const priorityOptions = ['ALL', 'HIGH', 'MEDIUM', 'LOW']
+type ProjectRow = {
+  id: string
+  name: string
+  project_code: string
+}
+
+const statusOptions = [
+  { label: 'All Status', value: 'ALL' },
+  { label: 'New', value: 'NEW' },
+  { label: 'Assigned', value: 'ASSIGNED' },
+  { label: 'In Progress', value: 'IN_PROGRESS' },
+  { label: 'Waiting Parts', value: 'WAITING_PARTS' },
+  { label: 'Closed', value: 'CLOSED' },
+]
+
+const priorityOptions = [
+  { label: 'All Priority', value: 'ALL' },
+  { label: 'High', value: 'HIGH' },
+  { label: 'Medium', value: 'MEDIUM' },
+  { label: 'Low', value: 'LOW' },
+]
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([])
   const [workers, setWorkers] = useState<WorkerRow[]>([])
+  const [projects, setProjects] = useState<ProjectRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [priorityFilter, setPriorityFilter] = useState('ALL')
@@ -84,14 +95,13 @@ export default function TicketsPage() {
   const [workerFilter, setWorkerFilter] = useState('ALL')
   const [isMobile, setIsMobile] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [selectedTicket, setSelectedTicket] = useState<TicketRow | null>(null)
   const [draftPriority, setDraftPriority] = useState<string>('')
   const [draftStatus, setDraftStatus] = useState<string>('')
+  const [draftWorkerId, setDraftWorkerId] = useState<string>('')
   const [savingTicket, setSavingTicket] = useState(false)
-  const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentWithUrl[]>([])
+  const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentRow[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
-  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
   const [showAddTicketModal, setShowAddTicketModal] = useState(false)
   const [addTicketForm, setAddTicketForm] = useState({
     project_code: '',
@@ -101,11 +111,6 @@ export default function TicketsPage() {
   })
   const [addingTicket, setAddingTicket] = useState(false)
   const [addTicketError, setAddTicketError] = useState('')
-  const [projects, setProjects] = useState<{ id: string; name: string; project_code: string }[]>([])
-  const [updatingStatusTicketId, setUpdatingStatusTicketId] = useState<string | null>(null)
-  const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null)
-  const [openWorkerReassignDropdown, setOpenWorkerReassignDropdown] = useState<string | null>(null)
-  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -117,41 +122,20 @@ export default function TicketsPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
-      const projectParam = params.get('project')
-      const workerParam = params.get('worker')
-      const statusParam = params.get('status')
-      const priorityParam = params.get('priority')
-      if (projectParam) {
-        setProjectFilter(decodeURIComponent(projectParam))
-      }
-      if (workerParam) {
-        setWorkerFilter(decodeURIComponent(workerParam))
-      }
-      if (statusParam) {
-        setStatusFilter(decodeURIComponent(statusParam))
-      }
-      if (priorityParam) {
-        setPriorityFilter(decodeURIComponent(priorityParam))
-      }
+      if (params.get('project')) setProjectFilter(decodeURIComponent(params.get('project')!))
+      if (params.get('worker')) setWorkerFilter(decodeURIComponent(params.get('worker')!))
+      if (params.get('status')) setStatusFilter(decodeURIComponent(params.get('status')!))
+      if (params.get('priority')) setPriorityFilter(decodeURIComponent(params.get('priority')!))
     }
   }, [])
 
-  // Update URL when filters change
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams()
-      if (projectFilter !== 'ALL') {
-        params.set('project', projectFilter)
-      }
-      if (workerFilter !== 'ALL') {
-        params.set('worker', workerFilter)
-      }
-      if (statusFilter !== 'ALL') {
-        params.set('status', statusFilter)
-      }
-      if (priorityFilter !== 'ALL') {
-        params.set('priority', priorityFilter)
-      }
+      if (projectFilter !== 'ALL') params.set('project', projectFilter)
+      if (workerFilter !== 'ALL') params.set('worker', workerFilter)
+      if (statusFilter !== 'ALL') params.set('status', statusFilter)
+      if (priorityFilter !== 'ALL') params.set('priority', priorityFilter)
       const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname
       window.history.replaceState(null, '', newUrl)
     }
@@ -159,49 +143,22 @@ export default function TicketsPage() {
 
   useEffect(() => {
     fetchData()
-
-    const handleFocus = async () => {
-      await fetchData()
-    }
-
-    const backgroundRefreshInterval = setInterval(async () => {
-      await fetchData()
-    }, 10 * 60 * 1000)
-
-    window.addEventListener('focus', handleFocus)
-
-    return () => {
-      window.removeEventListener('focus', handleFocus)
-      clearInterval(backgroundRefreshInterval)
-    }
+    const interval = setInterval(fetchData, 10 * 60 * 1000)
+    return () => clearInterval(interval)
   }, [])
 
   async function fetchData() {
     setLoading(true)
-    setError('')
-
     await asyncHandler(
       async () => {
         const [ticketsResult, workersResult, projectsResult] = await Promise.all([
           supabase
             .from('tickets')
             .select(`
-          id,
-          ticket_number,
-          project_id,
-          reporter_phone,
-          reporter_name,
-          description,
-          status,
-          priority,
-          assigned_worker_id,
-          created_at,
-          closed_at,
-          projects (
-            name,
-            project_code
-          )
-        `)
+              id, ticket_number, project_id, reporter_phone, reporter_name,
+              description, status, priority, assigned_worker_id, created_at, closed_at,
+              projects (name, project_code)
+            `)
             .order('created_at', { ascending: false }),
           supabase
             .from('workers')
@@ -217,9 +174,8 @@ export default function TicketsPage() {
         if (workersResult.error) throw workersResult.error
         if (projectsResult.error) throw projectsResult.error
 
-        const normalizedTickets: TicketRow[] = ((ticketsResult.data as TicketRow[]) || []).map((ticket) => {
+        const normalizedTickets: TicketRow[] = (ticketsResult.data as TicketRow[] || []).map((ticket) => {
           const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
-
           return {
             ...ticket,
             project_code: project?.project_code || '',
@@ -229,105 +185,58 @@ export default function TicketsPage() {
 
         setTickets(normalizedTickets)
         setWorkers((workersResult.data as WorkerRow[]) || [])
-        setProjects((projectsResult.data as typeof projects) || [])
+        setProjects((projectsResult.data as ProjectRow[]) || [])
         return true
       },
-      {
-        context: 'Failed to load tickets, workers, and projects',
-        showErrorToast: true,
-        onError: (err) => setError(err),
-      }
+      { context: 'Failed to load tickets', showErrorToast: true }
     )
-
     setLoading(false)
   }
 
-  async function assignWorker(ticketId: string, workerId: string) {
-    if (!workerId) return
+  const stats = useMemo(() => {
+    const total = tickets.length
+    const open = tickets.filter((t) => t.status === 'NEW').length
+    const assigned = tickets.filter((t) => t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS').length
+    const resolved = tickets.filter((t) => t.status === 'CLOSED').length
+    return { total, open, assigned, resolved }
+  }, [tickets])
 
-    setActionLoadingId(ticketId)
-    await asyncHandler(
-      async () => {
-        const response = await fetch('/api/assign-ticket', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ticket_id: ticketId,
-            worker_id: workerId,
-          }),
-        })
+  const projectOptions = useMemo(() => {
+    const unique = Array.from(new Set(tickets.map((t) => t.project_code).filter(Boolean))) as string[]
+    return [{ label: 'All Projects', value: 'ALL' }, ...unique.map((p) => ({ label: p, value: p }))]
+  }, [tickets])
 
-        const result = await response.json()
+  const workerOptions = useMemo(() => {
+    return [
+      { label: 'All Workers', value: 'ALL' },
+      ...workers.map((w) => ({ label: w.full_name, value: w.id })),
+    ]
+  }, [workers])
 
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to assign worker')
-        }
+  const filteredTickets = useMemo(() => {
+    return tickets.filter((ticket) => {
+      const q = searchTerm.trim().toLowerCase()
+      const matchesSearch = !q ||
+        String(ticket.ticket_number).includes(q) ||
+        (ticket.project_code || '').toLowerCase().includes(q) ||
+        (ticket.project_name || '').toLowerCase().includes(q) ||
+        (ticket.description || '').toLowerCase().includes(q) ||
+        (ticket.reporter_phone || '').toLowerCase().includes(q) ||
+        (ticket.reporter_name || '').toLowerCase().includes(q)
 
-        toast.success('Worker assigned')
-        await fetchData()
-        return true
-      },
-      { context: 'Failed to assign worker', showErrorToast: true }
-    )
-    setActionLoadingId(null)
-  }
+      const matchesStatus = statusFilter === 'ALL' || ticket.status === statusFilter
+      const matchesPriority = priorityFilter === 'ALL' || (ticket.priority || '').toUpperCase() === priorityFilter
+      const matchesProject = projectFilter === 'ALL' || ticket.project_code === projectFilter
+      const matchesWorker = workerFilter === 'ALL' || ticket.assigned_worker_id === workerFilter
 
-  async function closeTicket(ticketId: string) {
-    setActionLoadingId(ticketId)
-    await asyncHandler(
-      async () => {
-        const { error } = await supabase
-          .from('tickets')
-          .update({
-            status: 'CLOSED',
-            closed_at: new Date().toISOString(),
-          })
-          .eq('id', ticketId)
+      return matchesSearch && matchesStatus && matchesPriority && matchesProject && matchesWorker
+    })
+  }, [tickets, searchTerm, statusFilter, priorityFilter, projectFilter, workerFilter])
 
-        if (error) throw error
-
-        toast.success('Ticket closed')
-        await fetchData()
-
-        // Keep drawer open and reflect status immediately
-        setSelectedTicket((prev) => {
-          if (!prev || prev.id !== ticketId) return prev
-          return { ...prev, status: 'CLOSED', closed_at: new Date().toISOString() }
-        })
-        setDraftStatus('CLOSED')
-        return true
-      },
-      { context: 'Failed to close ticket', showErrorToast: true }
-    )
-    setActionLoadingId(null)
-  }
-
-  async function changeStatusInline(ticketId: string, newStatus: string) {
-    setUpdatingStatusTicketId(ticketId)
-    await asyncHandler(
-      async () => {
-        const payload: Record<string, string | null> = { status: newStatus }
-        if (newStatus === 'CLOSED') {
-          payload.closed_at = new Date().toISOString()
-        } else {
-          payload.closed_at = null
-        }
-
-        const { error } = await supabase
-          .from('tickets')
-          .update(payload)
-          .eq('id', ticketId)
-
-        if (error) throw error
-
-        toast.success(`Status changed to ${newStatus}`)
-        await fetchData()
-        setOpenStatusDropdown(null)
-        return true
-      },
-      { context: 'Failed to update status', showErrorToast: true }
-    )
-    setUpdatingStatusTicketId(null)
+  function getWorkerName(workerId?: string | null) {
+    if (!workerId) return 'Unassigned'
+    const worker = workers.find((w) => w.id === workerId)
+    return worker?.full_name || 'Unknown'
   }
 
   function getTicketAge(createdAt?: string): string {
@@ -337,64 +246,16 @@ export default function TicketsPage() {
     const diffMs = now.getTime() - created.getTime()
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
     const diffDays = Math.floor(diffHours / 24)
-    
     if (diffDays > 0) return `${diffDays}d`
     if (diffHours > 0) return `${diffHours}h`
     return 'now'
-  }
-
-  function toggleTicketSelection(ticketId: string) {
-    const newSelected = new Set(selectedTicketIds)
-    if (newSelected.has(ticketId)) {
-      newSelected.delete(ticketId)
-    } else {
-      newSelected.add(ticketId)
-    }
-    setSelectedTicketIds(newSelected)
-  }
-
-  function selectAllFiltered() {
-    const allIds = new Set(filteredTickets.map((t) => t.id))
-    setSelectedTicketIds(allIds)
-  }
-
-  function clearSelection() {
-    setSelectedTicketIds(new Set())
-  }
-
-  async function changeStatusBatch(newStatus: string) {
-    if (selectedTicketIds.size === 0) return
-    const ticketIds = Array.from(selectedTicketIds)
-    
-    await asyncHandler(
-      async () => {
-        const payload: Record<string, string | null> = { status: newStatus }
-        if (newStatus === 'CLOSED') {
-          payload.closed_at = new Date().toISOString()
-        } else {
-          payload.closed_at = null
-        }
-
-        const { error } = await supabase
-          .from('tickets')
-          .update(payload)
-          .in('id', ticketIds)
-
-        if (error) throw error
-
-        toast.success(`Updated ${ticketIds.length} tickets to ${newStatus}`)
-        clearSelection()
-        await fetchData()
-        return true
-      },
-      { context: `Failed to update status for batch`, showErrorToast: true }
-    )
   }
 
   function openTicket(ticket: TicketRow) {
     setSelectedTicket(ticket)
     setDraftPriority(ticket.priority || 'LOW')
     setDraftStatus(ticket.status)
+    setDraftWorkerId(ticket.assigned_worker_id || '')
     setSelectedTicketAttachments([])
     loadTicketAttachments(ticket.id)
   }
@@ -402,72 +263,85 @@ export default function TicketsPage() {
   async function loadTicketAttachments(ticketId: string) {
     setLoadingAttachments(true)
     try {
-      if (!ticketId || typeof ticketId !== 'string') {
-        setSelectedTicketAttachments([])
-        setLoadingAttachments(false)
-        return
-      }
-
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('ticket_attachments')
         .select('id, ticket_id, file_name, file_url, file_size, mime_type, created_at')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: false })
 
-      if (error) {
-        setSelectedTicketAttachments([])
-      } else if (!data || data.length === 0) {
-        setSelectedTicketAttachments([])
-      } else {
+      if (data && data.length > 0) {
         const attachmentsWithUrls = await Promise.all(
           (data || []).map(async (attachment: AttachmentRow) => {
             try {
-              if (!attachment.file_url) {
-                return { ...attachment, signed_url: null }
-              }
-
               const { data: signedUrlData } = await supabase.storage
                 .from('ticket-attachments')
                 .createSignedUrl(attachment.file_url, 3600)
-
               return { ...attachment, signed_url: signedUrlData?.signedUrl || null }
             } catch {
-              return {
-                ...attachment,
-                signed_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_url}`,
-              }
+              return { ...attachment, signed_url: null }
             }
           })
         )
-
         setSelectedTicketAttachments(attachmentsWithUrls)
+      } else {
+        setSelectedTicketAttachments([])
       }
     } catch {
       setSelectedTicketAttachments([])
-    } finally {
-      setLoadingAttachments(false)
     }
-  }
-
-  function getImageUrl(attachment: AttachmentWithUrl): string {
-    if (attachment.signed_url) {
-      return attachment.signed_url
-    }
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jsliqlmjksintyigkulq.supabase.co'
-    return `${supabaseUrl}/storage/v1/object/public/ticket-attachments/${attachment.file_url}`
+    setLoadingAttachments(false)
   }
 
   function closeDrawer() {
     setSelectedTicket(null)
     setDraftPriority('')
     setDraftStatus('')
+    setDraftWorkerId('')
     setSelectedTicketAttachments([])
-    setSelectedImageUrl(null)
+  }
+
+  async function saveTicketChanges() {
+    if (!selectedTicket) return
+    setSavingTicket(true)
+    try {
+      // Handle worker assignment if changed
+      if (draftWorkerId && draftWorkerId !== selectedTicket.assigned_worker_id) {
+        await fetch('/api/assign-ticket', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticket_id: selectedTicket.id, worker_id: draftWorkerId }),
+        })
+      }
+
+      const payload: Record<string, string | null> = {
+        priority: draftPriority,
+        status: draftStatus,
+        assigned_worker_id: draftWorkerId || null,
+      }
+      if (draftStatus === 'CLOSED') {
+        payload.closed_at = new Date().toISOString()
+      } else {
+        payload.closed_at = null
+      }
+
+      const { error } = await supabase
+        .from('tickets')
+        .update(payload)
+        .eq('id', selectedTicket.id)
+
+      if (error) throw error
+
+      toast.success('Changes saved')
+      await fetchData()
+      setSelectedTicket((prev) => prev ? { ...prev, priority: draftPriority, status: draftStatus, assigned_worker_id: draftWorkerId || null } : prev)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save changes')
+    }
+    setSavingTicket(false)
   }
 
   async function handleCreateTicket(e: React.FormEvent) {
     e.preventDefault()
-
     if (!addTicketForm.project_code) {
       setAddTicketError('Please select a project')
       return
@@ -484,172 +358,27 @@ export default function TicketsPage() {
       const formData = new FormData()
       formData.append('project_code', addTicketForm.project_code)
       formData.append('description', addTicketForm.description)
-      if (addTicketForm.reporter_name) {
-        formData.append('reporter_name', addTicketForm.reporter_name)
-      }
-      if (addTicketForm.reporter_phone) {
-        formData.append('reporter_phone', addTicketForm.reporter_phone)
-      }
+      if (addTicketForm.reporter_name) formData.append('reporter_name', addTicketForm.reporter_name)
+      if (addTicketForm.reporter_phone) formData.append('reporter_phone', addTicketForm.reporter_phone)
       formData.append('source', 'manual')
 
-      const response = await fetch('/api/create-ticket', {
-        method: 'POST',
-        body: formData,
-      })
-
+      const response = await fetch('/api/create-ticket', { method: 'POST', body: formData })
       if (!response.ok) {
         const result = await response.json()
         throw new Error(result.error || 'Failed to create ticket')
       }
 
       const result = await response.json()
-
-      if (result.imageUploadWarning) {
-        toast.success(`Ticket #${result.ticketNumber} created successfully`)
-        toast.error(result.imageUploadWarning)
-      } else {
-        toast.success(`Ticket #${result.ticketNumber} created successfully`)
-      }
-
-      setAddTicketForm({
-        project_code: '',
-        description: '',
-        reporter_name: '',
-        reporter_phone: '',
-      })
+      toast.success(`Ticket #${result.ticketNumber} created successfully`)
+      setAddTicketForm({ project_code: '', description: '', reporter_name: '', reporter_phone: '' })
       setShowAddTicketModal(false)
-
       await fetchData()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create ticket'
       setAddTicketError(message)
       toast.error(message)
-    } finally {
-      setAddingTicket(false)
     }
-  }
-
-  function sanitizePhoneKeystroke(raw: string) {
-    const trimmed = raw.replace(/\s|-/g, '')
-    const hasPlus = trimmed.startsWith('+')
-    const digits = trimmed.replace(/[^\d]/g, '')
-    return hasPlus ? `+${digits}` : digits
-  }
-
-  function normalizePhone(raw: string) {
-    const s = sanitizePhoneKeystroke(raw)
-    if (!s) return ''
-    if (s.startsWith('+972')) return s
-    if (s.startsWith('972')) return `+${s}`
-    if (s.startsWith('05')) return s
-    return s
-  }
-
-  async function saveTicketChanges() {
-    if (!selectedTicket) return
-
-    setSavingTicket(true)
-    try {
-      const response = await fetch('/api/update-ticket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticket_id: selectedTicket.id,
-          priority: draftPriority,
-          status: draftStatus,
-        }),
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to save changes')
-      }
-
-      await fetchData()
-      toast.success('Changes saved')
-
-      // Keep drawer open and update selected ticket in-place
-      setSelectedTicket((prev) => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          priority: draftPriority,
-          status: draftStatus,
-        }
-      })
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to save changes'
-      toast.error(errorMessage)
-    } finally {
-      setSavingTicket(false)
-    }
-  }
-
-  const projectOptions = useMemo(() => {
-    const unique = Array.from(
-      new Set(tickets.map((t) => t.project_code).filter(Boolean))
-    ) as string[]
-    return ['ALL', ...unique]
-  }, [tickets])
-
-  const filteredTickets = useMemo(() => {
-    return tickets.filter((ticket) => {
-      const q = searchTerm.trim().toLowerCase()
-
-      const matchesSearch =
-        !q ||
-        String(ticket.ticket_number).toLowerCase().includes(q) ||
-        (ticket.project_code || '').toLowerCase().includes(q) ||
-        (ticket.project_name || '').toLowerCase().includes(q) ||
-        (ticket.description || '').toLowerCase().includes(q) ||
-        (ticket.reporter_phone || '').toLowerCase().includes(q) ||
-        (ticket.reporter_name || '').toLowerCase().includes(q)
-
-      const matchesStatus =
-        statusFilter === 'ALL' || ticket.status === statusFilter
-
-      const matchesPriority =
-        priorityFilter === 'ALL' || (ticket.priority || '').toUpperCase() === priorityFilter
-
-      const matchesProject =
-        projectFilter === 'ALL' || ticket.project_code === projectFilter
-
-      const matchesWorker =
-        workerFilter === 'ALL' || ticket.assigned_worker_id === workerFilter
-
-      return matchesSearch && matchesStatus && matchesPriority && matchesProject && matchesWorker
-    })
-  }, [tickets, searchTerm, statusFilter, priorityFilter, projectFilter, workerFilter])
-
-  const stats = useMemo(() => {
-    const total = tickets.length
-    const open = tickets.filter((t) => t.status === 'NEW').length
-    const assigned = tickets.filter((t) => t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS').length
-    const resolved = tickets.filter((t) => t.status === 'CLOSED').length
-
-    return { total, open, assigned, resolved }
-  }, [tickets])
-
-  function getWorkerName(workerId?: string | null) {
-    if (!workerId) return 'Unassigned'
-    const worker = workers.find((w) => w.id === workerId)
-    return worker?.full_name || 'Unassigned'
-  }
-
-  function getWorkerLoad(workerId?: string | null): { active: number; total: number } {
-    if (!workerId) return { active: 0, total: 0 }
-    const activeTickets = tickets.filter(
-      (t) => t.assigned_worker_id === workerId && t.status !== 'CLOSED'
-    ).length
-    const totalTickets = tickets.filter((t) => t.assigned_worker_id === workerId).length
-    return { active: activeTickets, total: totalTickets }
-  }
-
-  function getWorkerCapacityColor(active: number): string {
-    if (active <= 3) return theme.colors.success
-    if (active <= 6) return theme.colors.warning
-    return theme.colors.error
+    setAddingTicket(false)
   }
 
   return (
@@ -668,13 +397,11 @@ export default function TicketsPage() {
         {!isMobile && (
           <PageHeader
             title="Tickets"
-            subtitle="Manage and track all maintenance tickets"
+            subtitle="Manage and track all maintenance requests"
             actions={
-              <>
-                <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
-                  + New Ticket
-                </Button>
-              </>
+              <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
+                New Ticket
+              </Button>
             }
           />
         )}
@@ -684,102 +411,61 @@ export default function TicketsPage() {
           ...styles.kpiGrid,
           gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
         }}>
-          <KpiCard label="Total" value={stats.total} />
-          <KpiCard label="Open" value={stats.open} />
-          <KpiCard label="In Progress" value={stats.assigned} />
-          <KpiCard label="Resolved" value={stats.resolved} />
+          <KpiCard label="Total Tickets" value={stats.total} accent="primary" />
+          <KpiCard label="Open" value={stats.open} accent="warning" />
+          <KpiCard label="In Progress" value={stats.assigned} accent="primary" />
+          <KpiCard label="Resolved" value={stats.resolved} accent="success" />
         </div>
 
-        {/* Tickets Card */}
-        <Card
-          title="All Tickets"
-          subtitle="Click on a ticket to view details"
-          noPadding
-        >
-          {/* Filters */}
-          <div
-            style={{
-              ...styles.filtersRow,
-              flexDirection: isMobile ? 'column' : 'row',
-              gap: isMobile ? '8px' : '12px',
-              padding: isMobile ? '12px 16px' : '16px 20px',
-            }}
-          >
+        {/* Filters */}
+        <Card noPadding>
+          <div style={{
+            ...styles.filtersRow,
+            flexDirection: isMobile ? 'column' : 'row',
+          }}>
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder={isMobile ? 'Search...' : 'Search tickets...'}
-              style={{ maxWidth: isMobile ? '100%' : '280px', flex: isMobile ? '1' : 'auto' }}
+              placeholder="Search tickets..."
+              style={{ flex: 1, maxWidth: isMobile ? '100%' : '320px' }}
             />
-
-            <div
-              style={{
-                ...styles.filterGroup,
-                flexDirection: isMobile ? 'column' : 'row',
-                gap: isMobile ? '8px' : 'inherit',
-                width: isMobile ? '100%' : 'auto',
-              }}
-            >
-              <select
+            <div style={{
+              ...styles.filterGroup,
+              flexWrap: isMobile ? 'wrap' : 'nowrap',
+            }}>
+              <Select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={{
-                  ...styles.filterSelect,
-                  flex: isMobile ? '1' : 'auto',
-                }}
-              >
-                {statusOptions.map((s) => (
-                  <option key={s} value={s}>{s === 'ALL' ? 'All Status' : s.replace('_', ' ')}</option>
-                ))}
-              </select>
-
-              <select
+                onChange={setStatusFilter}
+                options={statusOptions}
+                style={{ minWidth: '140px' }}
+              />
+              <Select
                 value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-                style={{
-                  ...styles.filterSelect,
-                  flex: isMobile ? '1' : 'auto',
-                }}
-              >
-                {priorityOptions.map((p) => (
-                  <option key={p} value={p}>{p === 'ALL' ? 'All Priority' : p}</option>
-                ))}
-              </select>
-
-              {!isMobile && (
-                <select
-                  value={projectFilter}
-                  onChange={(e) => setProjectFilter(e.target.value)}
-                  style={styles.filterSelect}
-                >
-                  {projectOptions.map((p) => (
-                    <option key={p} value={p}>{p === 'ALL' ? 'All Projects' : p}</option>
-                  ))}
-                </select>
-              )}
+                onChange={setPriorityFilter}
+                options={priorityOptions}
+                style={{ minWidth: '130px' }}
+              />
+              <Select
+                value={projectFilter}
+                onChange={setProjectFilter}
+                options={projectOptions}
+                style={{ minWidth: '140px' }}
+              />
+              <Select
+                value={workerFilter}
+                onChange={setWorkerFilter}
+                options={workerOptions}
+                style={{ minWidth: '140px' }}
+              />
             </div>
           </div>
 
-          {/* Loading State */}
-          {loading && (
-            <div style={styles.loadingState}>
-              <div style={styles.loadingSpinner} />
-              <span>Loading tickets...</span>
+          {/* Table */}
+          {loading ? (
+            <div style={styles.loadingContainer}>
+              <LoadingSpinner />
             </div>
-          )}
-
-          {/* Error State */}
-          {error && (
-            <div style={styles.errorState}>
-              <span>{error}</span>
-              <Button variant="secondary" size="sm" onClick={fetchData}>
-                Retry
-              </Button>
-            </div>
-          )}
-
-          {/* Empty State */}
-          {!loading && !error && filteredTickets.length === 0 && (
+          ) : filteredTickets.length === 0 ? (
             <EmptyState
               title="No tickets found"
               description="Try adjusting your filters or create a new ticket."
@@ -789,356 +475,55 @@ export default function TicketsPage() {
                 </Button>
               }
             />
-          )}
-
-          {/* Ticket List */}
-          {!loading && !error && filteredTickets.length > 0 && (
-            <>
-              {/* Batch Action Toolbar */}
-              {selectedTicketIds.size > 0 && (
-                <div
-                  style={{
-                    ...styles.batchToolbar,
-                    flexDirection: isMobile ? 'column' : 'row',
-                  }}
-                >
-                  <div style={styles.batchToolbarLeft}>
-                    <span style={styles.batchToolbarText}>
-                      {selectedTicketIds.size} selected
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      ...styles.batchToolbarRight,
-                      flexWrap: isMobile ? 'wrap' : 'nowrap',
-                    }}
-                  >
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          changeStatusBatch(e.target.value)
-                          e.target.value = ''
-                        }
-                      }}
-                      style={{
-                        ...styles.batchStatusSelect,
-                        flex: isMobile ? '1 0 100%' : 'auto',
-                      }}
+          ) : (
+            <div style={styles.tableContainer}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>#</th>
+                    <th style={styles.th}>Priority</th>
+                    <th style={styles.th}>Project</th>
+                    <th style={styles.th}>Description</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Assigned To</th>
+                    <th style={styles.th}>Age</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTickets.map((ticket) => (
+                    <tr
+                      key={ticket.id}
+                      style={styles.tr}
+                      onClick={() => openTicket(ticket)}
                     >
-                      <option value="">Change Status</option>
-                      {statusOptions
-                        .filter((s) => s !== 'ALL')
-                        .map((status) => (
-                          <option key={status} value={status}>
-                            {status.replace('_', ' ')}
-                          </option>
-                        ))}
-                    </select>
-                    <button
-                      onClick={() => selectAllFiltered()}
-                      style={{
-                        ...styles.batchButton,
-                        flex: isMobile ? '1' : 'auto',
-                        minWidth: isMobile ? '48px' : 'auto',
-                      }}
-                    >
-                      {isMobile ? 'All' : 'Select All'}
-                    </button>
-                    <button
-                      onClick={() => clearSelection()}
-                      style={{
-                        ...styles.batchButtonSecondary,
-                        flex: isMobile ? '1' : 'auto',
-                        minWidth: isMobile ? '48px' : 'auto',
-                      }}
-                    >
-                      {isMobile ? 'X' : 'Clear'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div style={styles.ticketList}>
-              {filteredTickets.map((ticket) => (
-                <div
-                  key={ticket.id}
-                  style={{
-                    ...styles.ticketRow,
-                    ...(selectedTicket?.id === ticket.id ? styles.ticketRowActive : {}),
-                  }}
-                >
-                  {/* Row Header: Number | Status | Worker | Age | Actions */}
-                  <div style={styles.ticketRowTop}>
-                    <div
-                      style={{
-                        ...styles.ticketRowMain,
-                        flexWrap: isMobile ? 'wrap' : 'nowrap',
-                        gap: isMobile ? '8px' : '10px',
-                      }}
-                    >
-                      {/* Checkbox for Batch Selection */}
-                      <input
-                        type="checkbox"
-                        checked={selectedTicketIds.has(ticket.id)}
-                        onChange={() => toggleTicketSelection(ticket.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          width: isMobile ? '22px' : '18px',
-                          height: isMobile ? '22px' : '18px',
-                          cursor: 'pointer',
-                          accentColor: theme.colors.primary,
-                          flexShrink: 0,
-                        }}
-                      />
-
-                      <span
-                        style={{
-                          ...styles.ticketNumber,
-                          fontSize: isMobile ? '16px' : '14px',
-                          fontWeight: 700,
-                        }}
-                      >
-                        #{ticket.ticket_number}
-                      </span>
-                      
-                      {!isMobile && (
-                        <span style={styles.ticketProject}>{ticket.project_code || '—'}</span>
-                      )}
-                      
-                      {/* Inline Status Dropdown */}
-                      <div
-                        style={{
-                          position: 'relative',
-                          flex: isMobile ? '1 0 48%' : 'auto',
-                        }}
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setOpenStatusDropdown(openStatusDropdown === ticket.id ? null : ticket.id)
-                          }}
-                          style={{
-                            ...styles.inlineStatusButton,
-                            opacity: updatingStatusTicketId === ticket.id ? 0.6 : 1,
-                            fontSize: isMobile ? '12px' : '13px',
-                            padding: isMobile ? '8px 10px' : '6px 10px',
-                            minWidth: isMobile ? '70px' : '90px',
-                          }}
-                          disabled={updatingStatusTicketId === ticket.id}
-                          title="Click to change status"
-                        >
-                          {ticket.status}
-                        </button>
-                        
-                        {openStatusDropdown === ticket.id && (
-                          <div
-                            style={{
-                              ...styles.statusDropdown,
-                              right: isMobile ? 0 : 'auto',
-                            }}
-                          >
-                            {statusOptions.filter(s => s !== 'ALL').map((status) => (
-                              <button
-                                key={status}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  changeStatusInline(ticket.id, status)
-                                }}
-                                style={{
-                                  ...styles.dropdownOption,
-                                  background: ticket.status === status ? theme.colors.primaryMuted : '#fff',
-                                  fontWeight: ticket.status === status ? '700' : '600',
-                                }}
-                              >
-                                {status.replace('_', ' ')}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Assigned Worker with Load Indicator */}
-                      <div
-                        style={{
-                          position: 'relative',
-                          flex: isMobile ? '1 0 48%' : 'auto',
-                          order: isMobile ? 3 : undefined,
-                        }}
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setOpenWorkerReassignDropdown(
-                              openWorkerReassignDropdown === ticket.id ? null : ticket.id
-                            )
-                          }}
-                          style={{
-                            ...styles.workerDisplay,
-                            cursor: 'pointer',
-                            border: `1px solid ${theme.colors.border}`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            justifyContent: 'space-between',
-                            paddingRight: isMobile ? '8px' : '6px',
-                            fontSize: isMobile ? '12px' : '13px',
-                            padding: isMobile ? '8px 8px' : '4px 8px',
-                            minWidth: isMobile ? '70px' : 'auto',
-                          }}
-                          title={ticket.assigned_worker_id ? 'Click to reassign' : 'Unassigned'}
-                        >
-                          <span>{getWorkerName(ticket.assigned_worker_id)}</span>
-                          {ticket.assigned_worker_id && (
-                            (() => {
-                              const { active } = getWorkerLoad(ticket.assigned_worker_id)
-                              return (
-                                <span
-                                  style={{
-                                    fontSize: '11px',
-                                    fontWeight: 700,
-                                    color: getWorkerCapacityColor(active),
-                                  }}
-                                >
-                                  {active}
-                                </span>
-                              )
-                            })()
-                          )}
-                        </button>
-
-                        {openWorkerReassignDropdown === ticket.id && (
-                          <div
-                            style={{
-                              ...styles.workerReassignDropdown,
-                              right: isMobile ? 0 : 'auto',
-                              maxHeight: isMobile ? '60vh' : 'auto',
-                              overflowY: isMobile ? 'auto' : 'visible',
-                            }}
-                          >
-                            <div
-                              style={{
-                                padding: '8px 10px',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                color: theme.colors.textMuted,
-                                borderBottom: `1px solid ${theme.colors.border}`,
-                              }}
-                            >
-                              Active Tickets
-                            </div>
-                            {workers
-                              .filter((w) => w.is_active)
-                              .map((w) => {
-                                const { active } = getWorkerLoad(w.id)
-                                const isAssigned = ticket.assigned_worker_id === w.id
-                                return (
-                                  <button
-                                    key={w.id}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (!isAssigned) {
-                                        assignWorker(ticket.id, w.id)
-                                        setOpenWorkerReassignDropdown(null)
-                                      }
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      textAlign: 'left',
-                                      padding: '8px 10px',
-                                      border: 'none',
-                                      background: isAssigned ? theme.colors.primaryMuted : '#fff',
-                                      fontSize: '12px',
-                                      color: theme.colors.textPrimary,
-                                      cursor: isAssigned ? 'default' : 'pointer',
-                                      transition: 'background 0.15s ease',
-                                      display: 'flex',
-                                      justifyContent: 'space-between',
-                                      alignItems: 'center',
-                                      opacity: isAssigned ? 0.6 : 1,
-                                    }}
-                                  >
-                                    <span style={{ fontWeight: isAssigned ? 700 : 600 }}>
-                                      {w.full_name}
-                                    </span>
-                                    <span
-                                      style={{
-                                        fontSize: '11px',
-                                        fontWeight: 700,
-                                        color: getWorkerCapacityColor(active),
-                                      }}
-                                    >
-                                      {active}
-                                    </span>
-                                  </button>
-                                )
-                              })}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Ticket Age - Hide on Mobile */}
-                      {!isMobile && (
-                        <span style={styles.ticketAge}>
-                          {getTicketAge(ticket.created_at)}
+                      <td style={styles.td}>
+                        <span style={styles.ticketNumber}>{ticket.ticket_number}</span>
+                      </td>
+                      <td style={styles.td}>
+                        <PriorityDot priority={ticket.priority || 'LOW'} />
+                      </td>
+                      <td style={styles.td}>
+                        <span style={styles.projectBadge}>{ticket.project_code}</span>
+                      </td>
+                      <td style={{ ...styles.td, maxWidth: '350px' }}>
+                        <span style={styles.descriptionText}>
+                          {ticket.description?.slice(0, 80)}{(ticket.description?.length || 0) > 80 ? '...' : ''}
                         </span>
-                      )}
-                    </div>
-                    
-                    {!isMobile && (
-                      <div style={styles.ticketRowActions}>
-                        <select
-                          value={ticket.assigned_worker_id || ''}
-                          onChange={(e) => {
-                            e.stopPropagation()
-                            assignWorker(ticket.id, e.target.value)
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          style={styles.workerSelect}
-                        >
-                          <option value="">Reassign</option>
-                          {workers.filter(w => w.is_active).map((w) => (
-                            <option key={w.id} value={w.id}>{w.full_name}</option>
-                          ))}
-                        </select>
-                        {ticket.status !== 'CLOSED' && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                              changeStatusInline(ticket.id, 'CLOSED')
-                            }}
-                            loading={updatingStatusTicketId === ticket.id}
-                          >
-                            Close
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      ...styles.ticketDescription,
-                      fontSize: isMobile ? '13px' : '14px',
-                      lineHeight: isMobile ? 1.4 : 1.5,
-                      marginTop: isMobile ? '8px' : '4px',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {ticket.description || '—'}
-                  </div>
-                  <div
-                    style={{
-                      ...styles.ticketMeta,
-                      fontSize: isMobile ? '12px' : '12px',
-                      marginTop: isMobile ? '6px' : '4px',
-                    }}
-                  >
-                    <span>{ticket.reporter_name || ticket.reporter_phone || 'Unknown'}</span>
-                  </div>
-                </div>
-              ))}
-              </div>
-            </>
+                      </td>
+                      <td style={styles.td}>
+                        <StatusBadge status={ticket.status} size="sm" />
+                      </td>
+                      <td style={styles.td}>
+                        <span style={styles.workerName}>{getWorkerName(ticket.assigned_worker_id)}</span>
+                      </td>
+                      <td style={styles.td}>
+                        <span style={styles.ageText}>{getTicketAge(ticket.created_at)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
       </div>
@@ -1147,305 +532,193 @@ export default function TicketsPage() {
       <Drawer
         open={!!selectedTicket}
         onClose={closeDrawer}
-        title={`Ticket #${selectedTicket?.ticket_number}`}
+        title={selectedTicket ? `Ticket #${selectedTicket.ticket_number}` : ''}
         subtitle={selectedTicket?.project_name || selectedTicket?.project_code}
         isMobile={isMobile}
       >
         {selectedTicket && (
           <div style={styles.drawerContent}>
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Status</div>
-              <select
-                value={draftStatus}
-                onChange={(e) => setDraftStatus(e.target.value)}
-                style={styles.drawerSelect}
-              >
-                {statusOptions.filter(s => s !== 'ALL').map((status) => (
-                  <option key={status} value={status}>{status.replace('_', ' ')}</option>
-                ))}
-              </select>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Description</label>
+              <div style={styles.descriptionBox}>{selectedTicket.description || '-'}</div>
             </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Priority</div>
-              <select
+            <div style={styles.formRow}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Reporter</label>
+                <div style={styles.formValue}>
+                  {selectedTicket.reporter_name || selectedTicket.reporter_phone || '-'}
+                </div>
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Created</label>
+                <div style={styles.formValue}>
+                  {selectedTicket.created_at ? new Date(selectedTicket.created_at).toLocaleDateString() : '-'}
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Priority</label>
+              <Select
                 value={draftPriority}
-                onChange={(e) => setDraftPriority(e.target.value)}
-                style={styles.drawerSelect}
-              >
-                {priorityOptions.filter(p => p !== 'ALL').map((priority) => (
-                  <option key={priority} value={priority}>{priority}</option>
-                ))}
-              </select>
+                onChange={setDraftPriority}
+                options={[
+                  { label: 'Low', value: 'LOW' },
+                  { label: 'Medium', value: 'MEDIUM' },
+                  { label: 'High', value: 'HIGH' },
+                ]}
+                style={{ width: '100%' }}
+              />
             </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Assigned Worker</div>
-              <div style={styles.drawerValue}>
-                {getWorkerName(selectedTicket.assigned_worker_id)}
-              </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Status</label>
+              <Select
+                value={draftStatus}
+                onChange={setDraftStatus}
+                options={statusOptions.filter(s => s.value !== 'ALL')}
+                style={{ width: '100%' }}
+              />
             </div>
 
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Description</div>
-              <div style={styles.drawerDescription}>
-                {selectedTicket.description || 'No description'}
-              </div>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Reporter</div>
-              <div style={styles.drawerValue}>
-                {selectedTicket.reporter_name && (
-                  <div>{selectedTicket.reporter_name}</div>
-                )}
-                {selectedTicket.reporter_phone && (
-                  <div style={styles.drawerPhone}>{selectedTicket.reporter_phone}</div>
-                )}
-              </div>
-            </div>
-
-            <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Created</div>
-              <div style={styles.drawerValue}>
-                {selectedTicket.created_at ? new Date(selectedTicket.created_at).toLocaleString() : '-'}
-              </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Assigned To</label>
+              <Select
+                value={draftWorkerId}
+                onChange={setDraftWorkerId}
+                options={[
+                  { label: 'Unassigned', value: '' },
+                  ...workers.map((w) => ({ label: w.full_name, value: w.id })),
+                ]}
+                style={{ width: '100%' }}
+              />
             </div>
 
             {/* Attachments */}
             {selectedTicketAttachments.length > 0 && (
-              <div style={styles.drawerSection}>
-                <div style={styles.drawerLabel}>Attachments ({selectedTicketAttachments.length})</div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Attachments</label>
                 <div style={styles.attachmentGrid}>
                   {selectedTicketAttachments.map((attachment) => (
-                    <button
+                    <a
                       key={attachment.id}
-                      onClick={() => setSelectedImageUrl(getImageUrl(attachment))}
-                      style={styles.attachmentThumb}
+                      href={attachment.signed_url || '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={styles.attachmentItem}
                     >
-                      {attachment.mime_type.startsWith('image/') ? (
+                      {attachment.mime_type?.startsWith('image/') ? (
                         <img
-                          src={getImageUrl(attachment)}
+                          src={attachment.signed_url || ''}
                           alt={attachment.file_name}
-                          style={styles.attachmentImg}
-                          crossOrigin="anonymous"
+                          style={styles.attachmentImage}
                         />
                       ) : (
-                        <div style={styles.attachmentFile}>{attachment.file_name}</div>
+                        <div style={styles.attachmentFile}>
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                          </svg>
+                          <span style={styles.attachmentName}>{attachment.file_name}</span>
+                        </div>
                       )}
-                    </button>
+                    </a>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Actions */}
             <div style={styles.drawerActions}>
-              <Button
-                variant="primary"
-                onClick={saveTicketChanges}
-                loading={savingTicket}
-                style={{ width: '100%' }}
-              >
+              <Button variant="secondary" onClick={closeDrawer}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={saveTicketChanges} loading={savingTicket}>
                 Save Changes
               </Button>
-              {selectedTicket.status !== 'CLOSED' && (
-                <Button
-                  variant="danger"
-                  onClick={() => {
-                    closeTicket(selectedTicket.id)
-                  }}
-                  style={{ width: '100%' }}
-                >
-                  Close Ticket
-                </Button>
-              )}
             </div>
           </div>
         )}
       </Drawer>
 
       {/* Add Ticket Modal */}
-      {showAddTicketModal && (
-        <>
-          <div style={styles.modalOverlay} onClick={() => setShowAddTicketModal(false)} />
-          <div style={styles.modal}>
-            <div style={styles.modalHeader}>
-              <h2 style={styles.modalTitle}>Create New Ticket</h2>
-              <button onClick={() => setShowAddTicketModal(false)} style={styles.modalClose}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 6 6 18" />
-                  <path d="m6 6 12 12" />
-                </svg>
-              </button>
-            </div>
-            <form onSubmit={handleCreateTicket} style={styles.modalForm}>
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Project</label>
-                <select
-                  value={addTicketForm.project_code}
-                  onChange={(e) => setAddTicketForm({ ...addTicketForm, project_code: e.target.value })}
-                  style={styles.formSelect}
-                >
-                  <option value="">Select a project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.project_code}>
-                      {p.name} ({p.project_code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Description</label>
-                <textarea
-                  value={addTicketForm.description}
-                  onChange={(e) => setAddTicketForm({ ...addTicketForm, description: e.target.value })}
-                  placeholder="Describe the issue..."
-                  style={styles.formTextarea}
-                  rows={4}
-                />
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Reporter Name (optional)</label>
-                <input
-                  type="text"
-                  value={addTicketForm.reporter_name}
-                  onChange={(e) => setAddTicketForm({ ...addTicketForm, reporter_name: e.target.value })}
-                  placeholder="Enter name"
-                  style={styles.formInput}
-                />
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Reporter Phone (optional)</label>
-                <input
-                  type="tel"
-                  value={addTicketForm.reporter_phone}
-                  inputMode="tel"
-                  onChange={(e) =>
-                    setAddTicketForm({
-                      ...addTicketForm,
-                      reporter_phone: sanitizePhoneKeystroke(e.target.value),
-                    })
-                  }
-                  onBlur={() =>
-                    setAddTicketForm((prev) => ({
-                      ...prev,
-                      reporter_phone: normalizePhone(prev.reporter_phone),
-                    }))
-                  }
-                  placeholder="Enter phone number"
-                  style={styles.formInput}
-                />
-              </div>
-
-              {addTicketError && (
-                <div style={styles.formError}>{addTicketError}</div>
-              )}
-
-              <div style={styles.modalActions}>
-                <Button variant="secondary" onClick={() => setShowAddTicketModal(false)}>
-                  Cancel
-                </Button>
-                <Button variant="primary" loading={addingTicket} type="submit">
-                  Create Ticket
-                </Button>
-              </div>
-            </form>
+      <Drawer
+        open={showAddTicketModal}
+        onClose={() => setShowAddTicketModal(false)}
+        title="Create New Ticket"
+        subtitle="Submit a new maintenance request"
+        isMobile={isMobile}
+      >
+        <form onSubmit={handleCreateTicket} style={styles.drawerContent}>
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Project *</label>
+            <Select
+              value={addTicketForm.project_code}
+              onChange={(value) => setAddTicketForm((prev) => ({ ...prev, project_code: value }))}
+              options={[
+                { label: 'Select a project', value: '' },
+                ...projects.map((p) => ({ label: `${p.project_code} - ${p.name}`, value: p.project_code })),
+              ]}
+              style={{ width: '100%' }}
+            />
           </div>
-        </>
-      )}
 
-      {/* Image Lightbox */}
-      {selectedImageUrl && (
-        <>
-          <div style={styles.lightboxOverlay} onClick={() => setSelectedImageUrl(null)} />
-          <div style={styles.lightbox}>
-            <button onClick={() => setSelectedImageUrl(null)} style={styles.lightboxClose}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
-            </button>
-            <img src={selectedImageUrl} alt="Attachment" style={styles.lightboxImg} crossOrigin="anonymous" />
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Description *</label>
+            <textarea
+              value={addTicketForm.description}
+              onChange={(e) => setAddTicketForm((prev) => ({ ...prev, description: e.target.value }))}
+              placeholder="Describe the issue..."
+              style={styles.textarea}
+              rows={4}
+            />
           </div>
-        </>
-      )}
 
-      {/* Mobile Bottom Actions */}
-      {isMobile && (
-        <div style={styles.mobileBottomActions}>
-          <Button variant="primary" onClick={() => setShowAddTicketModal(true)} style={{ flex: 1 }}>
-            + New Ticket
-          </Button>
-        </div>
-      )}
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Reporter Name</label>
+            <input
+              type="text"
+              value={addTicketForm.reporter_name}
+              onChange={(e) => setAddTicketForm((prev) => ({ ...prev, reporter_name: e.target.value }))}
+              placeholder="Optional"
+              style={styles.input}
+            />
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Reporter Phone</label>
+            <input
+              type="tel"
+              value={addTicketForm.reporter_phone}
+              onChange={(e) => setAddTicketForm((prev) => ({ ...prev, reporter_phone: e.target.value }))}
+              placeholder="Optional"
+              style={styles.input}
+            />
+          </div>
+
+          {addTicketError && (
+            <p style={styles.errorText}>{addTicketError}</p>
+          )}
+
+          <div style={styles.drawerActions}>
+            <Button variant="secondary" type="button" onClick={() => setShowAddTicketModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" loading={addingTicket}>
+              Create Ticket
+            </Button>
+          </div>
+        </form>
+      </Drawer>
     </AppShell>
   )
 }
 
 const styles: Record<string, CSSProperties> = {
   content: {
-    padding: '24px',
-    paddingBottom: '100px',
-  },
-  batchToolbar: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '12px 20px',
-    background: theme.colors.primaryMuted,
-    borderBottom: `2px solid ${theme.colors.primary}`,
-    gap: '12px',
-  },
-  batchToolbarLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  batchToolbarText: {
-    fontSize: '13px',
-    fontWeight: 700,
-    color: theme.colors.textPrimary,
-  },
-  batchToolbarRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  batchStatusSelect: {
-    background: theme.colors.surface,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.sm,
-    padding: '6px 10px',
-    fontSize: '12px',
-    color: theme.colors.textPrimary,
-    cursor: 'pointer',
-    outline: 'none',
-  },
-  batchButton: {
-    background: theme.colors.primary,
-    border: 'none',
-    borderRadius: theme.radius.sm,
-    padding: '6px 12px',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: theme.colors.textInverse,
-    cursor: 'pointer',
-    transition: 'background 0.15s ease',
-  },
-  batchButtonSecondary: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.sm,
-    padding: '6px 12px',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-    cursor: 'pointer',
-    transition: 'background 0.15s ease',
+    padding: '32px 40px',
+    maxWidth: '1400px',
+    margin: '0 auto',
   },
   kpiGrid: {
     display: 'grid',
@@ -1454,421 +727,174 @@ const styles: Record<string, CSSProperties> = {
   },
   filtersRow: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: '12px',
-    padding: '16px 20px',
-    borderBottom: `1px solid ${theme.colors.border}`,
     alignItems: 'center',
+    gap: '16px',
+    padding: '20px 24px',
+    borderBottom: `1px solid ${theme.colors.border}`,
   },
   filterGroup: {
     display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  filterSelect: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '8px 12px',
-    fontSize: '13px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    cursor: 'pointer',
-    minWidth: '130px',
-  },
-  loadingState: {
-    display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: '12px',
-    padding: '48px 20px',
-    color: theme.colors.textMuted,
-    fontSize: '14px',
   },
-  loadingSpinner: {
-    width: '20px',
-    height: '20px',
-    border: `2px solid ${theme.colors.border}`,
-    borderTopColor: theme.colors.primary,
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  errorState: {
+  loadingContainer: {
     display: 'flex',
-    alignItems: 'center',
     justifyContent: 'center',
-    gap: '16px',
-    padding: '48px 20px',
-    color: theme.colors.error,
-    fontSize: '14px',
+    alignItems: 'center',
+    padding: '64px 0',
   },
-  ticketList: {
-    display: 'flex',
-    flexDirection: 'column',
+  tableContainer: {
+    overflowX: 'auto',
   },
-  ticketRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    padding: '16px 20px',
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+  },
+  th: {
+    textAlign: 'left',
+    padding: '14px 20px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
     borderBottom: `1px solid ${theme.colors.border}`,
+    background: theme.colors.muted,
+  },
+  tr: {
     cursor: 'pointer',
     transition: 'background 0.15s ease',
   },
-  ticketRowActive: {
-    background: theme.colors.primaryMuted,
-    borderLeft: `3px solid ${theme.colors.primary}`,
-  },
-  ticketRowTop: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  ticketRowMain: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    flexWrap: 'wrap',
-  },
-  ticketRowActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
+  td: {
+    padding: '16px 20px',
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
+    borderBottom: `1px solid ${theme.colors.border}`,
+    verticalAlign: 'middle',
   },
   ticketNumber: {
-    fontSize: '14px',
     fontWeight: 600,
-    color: theme.colors.textPrimary,
+    fontVariantNumeric: 'tabular-nums',
   },
-  ticketProject: {
-    fontSize: '13px',
-    color: theme.colors.primary,
+  projectBadge: {
+    fontSize: '12px',
     fontWeight: 500,
-  },
-  ticketDescription: {
-    fontSize: '14px',
-    color: theme.colors.textSecondary,
-    lineHeight: 1.5,
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-  },
-  ticketMeta: {
-    display: 'flex',
-    gap: '16px',
-    fontSize: '12px',
     color: theme.colors.textMuted,
-  },
-  inlineStatusButton: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.sm,
-    padding: '6px 10px',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-    cursor: 'pointer',
-    transition: 'all 0.15s ease',
-    textAlign: 'center',
-    minWidth: '90px',
-    position: 'relative',
-  },
-  statusDropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    marginTop: '4px',
-    background: '#fff',
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.sm,
-    boxShadow: `0 4px 12px rgba(15, 20, 25, 0.1)`,
-    zIndex: 10,
-    overflow: 'hidden',
-    minWidth: '130px',
-  },
-  dropdownOption: {
-    width: '100%',
-    textAlign: 'left',
-    padding: '8px 10px',
-    border: 'none',
-    background: '#fff',
-    fontSize: '12px',
-    color: theme.colors.textPrimary,
-    cursor: 'pointer',
-    transition: 'background 0.15s ease',
-  },
-  workerDisplay: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: theme.colors.primary,
-    background: theme.colors.primaryMuted,
+    background: theme.colors.muted,
     padding: '4px 8px',
     borderRadius: theme.radius.sm,
+  },
+  descriptionText: {
+    color: theme.colors.textSecondary,
+    display: 'block',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  workerReassignDropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    marginTop: '4px',
-    background: '#fff',
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.sm,
-    boxShadow: `0 4px 12px rgba(15, 20, 25, 0.1)`,
-    zIndex: 10,
-    overflow: 'hidden',
-    minWidth: '140px',
+  workerName: {
+    color: theme.colors.textSecondary,
   },
-  ticketAge: {
-    fontSize: '12px',
+  ageText: {
     color: theme.colors.textMuted,
-    fontWeight: 600,
-    minWidth: '50px',
-  },
-  workerSelect: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.sm,
-    padding: '6px 10px',
-    fontSize: '12px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    cursor: 'pointer',
-    minWidth: '120px',
+    fontSize: '13px',
   },
   drawerContent: {
     display: 'flex',
     flexDirection: 'column',
     gap: '20px',
   },
-  drawerSection: {
+  formGroup: {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
   },
-  drawerLabel: {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+  formRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '16px',
   },
-  drawerValue: {
-    fontSize: '14px',
+  formLabel: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: theme.colors.textSecondary,
+  },
+  formValue: {
+    fontSize: '15px',
     color: theme.colors.textPrimary,
   },
-  drawerDescription: {
+  descriptionBox: {
+    padding: '14px',
+    background: theme.colors.muted,
+    borderRadius: theme.radius.md,
     fontSize: '14px',
     color: theme.colors.textPrimary,
     lineHeight: 1.6,
-    background: theme.colors.surfaceElevated,
-    padding: '12px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
-  },
-  drawerPhone: {
-    fontSize: '13px',
-    color: theme.colors.textMuted,
-  },
-  drawerSelect: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  drawerActions: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    paddingTop: '12px',
-    borderTop: `1px solid ${theme.colors.border}`,
   },
   attachmentGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-    gap: '10px',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '12px',
   },
-  attachmentThumb: {
-    width: '100%',
-    aspectRatio: '1',
+  attachmentItem: {
+    display: 'block',
     borderRadius: theme.radius.md,
     overflow: 'hidden',
-    background: theme.colors.surfaceElevated,
     border: `1px solid ${theme.colors.border}`,
-    cursor: 'pointer',
-    padding: 0,
+    textDecoration: 'none',
   },
-  attachmentImg: {
+  attachmentImage: {
     width: '100%',
-    height: '100%',
+    height: '80px',
     objectFit: 'cover',
   },
   attachmentFile: {
     display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100%',
+    gap: '4px',
+    padding: '16px 8px',
+    background: theme.colors.muted,
+  },
+  attachmentName: {
     fontSize: '11px',
     color: theme.colors.textMuted,
-    padding: '8px',
     textAlign: 'center',
-    wordBreak: 'break-word',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: '100%',
   },
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0, 0, 0, 0.7)',
-    zIndex: 100,
-  },
-  modal: {
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '90%',
-    maxWidth: '480px',
-    background: theme.colors.surface,
-    borderRadius: theme.radius.xl,
-    border: `1px solid ${theme.colors.border}`,
-    zIndex: 101,
-    maxHeight: '90vh',
-    overflow: 'auto',
-  },
-  modalHeader: {
+  drawerActions: {
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  modalTitle: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-    margin: 0,
-  },
-  modalClose: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    borderRadius: theme.radius.sm,
-    background: 'transparent',
-    border: 'none',
-    color: theme.colors.textMuted,
-    cursor: 'pointer',
-  },
-  modalForm: {
-    padding: '20px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  formLabel: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: theme.colors.textSecondary,
-  },
-  formSelect: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  formInput: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '12px 14px',
-    fontSize: '16px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  formTextarea: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '12px 14px',
-    fontSize: '16px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    width: '100%',
-    boxSizing: 'border-box',
-    resize: 'vertical',
-    minHeight: '100px',
-    lineHeight: 1.5,
-  },
-  formError: {
-    padding: '10px 12px',
-    background: theme.colors.errorMuted,
-    color: theme.colors.error,
-    borderRadius: theme.radius.md,
-    fontSize: '13px',
-  },
-  modalActions: {
-    display: 'flex',
-    gap: '10px',
+    gap: '12px',
     justifyContent: 'flex-end',
+    paddingTop: '16px',
+    borderTop: `1px solid ${theme.colors.border}`,
     marginTop: '8px',
   },
-  lightboxOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0, 0, 0, 0.9)',
-    zIndex: 200,
-  },
-  lightbox: {
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    zIndex: 201,
-    maxWidth: '90vw',
-    maxHeight: '90vh',
-  },
-  lightboxClose: {
-    position: 'absolute',
-    top: '-40px',
-    right: 0,
-    background: 'transparent',
-    border: 'none',
-    color: '#fff',
-    cursor: 'pointer',
-  },
-  lightboxImg: {
-    maxWidth: '90vw',
-    maxHeight: '85vh',
-    objectFit: 'contain',
-    borderRadius: theme.radius.lg,
-  },
-  mobileBottomActions: {
-    position: 'fixed',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: '16px 20px',
-    paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
+  textarea: {
+    padding: '12px 14px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
     background: theme.colors.surface,
-    borderTop: `1px solid ${theme.colors.border}`,
-    display: 'flex',
-    gap: '10px',
+    fontSize: '15px',
+    color: theme.colors.textPrimary,
+    resize: 'vertical',
+    minHeight: '100px',
+    fontFamily: 'inherit',
+  },
+  input: {
+    padding: '12px 14px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surface,
+    fontSize: '15px',
+    color: theme.colors.textPrimary,
+  },
+  errorText: {
+    color: theme.colors.error,
+    fontSize: '14px',
+    margin: 0,
   },
 }

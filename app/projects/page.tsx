@@ -14,8 +14,10 @@ import {
   Button,
   StatusBadge,
   SearchInput,
+  Select,
   Drawer,
   EmptyState,
+  LoadingSpinner,
   theme
 } from '../components/ui'
 
@@ -30,9 +32,7 @@ type ProjectRow = {
   client_id: string
 }
 
-type ClientRow = {
-  id: string
-}
+type ClientRow = { id: string }
 
 type ProjectForm = {
   name: string
@@ -57,14 +57,11 @@ const emptyForm: ProjectForm = {
   is_active: true,
 }
 
-const WHATSAPP_NUMBER = '972559740732'
-
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [clientId, setClientId] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
   const [isMobile, setIsMobile] = useState(false)
@@ -78,6 +75,17 @@ export default function ProjectsPage() {
   const [projectTickets, setProjectTickets] = useState<TicketRow[]>([])
   const [loadingTickets, setLoadingTickets] = useState(false)
 
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 900)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  useEffect(() => {
+    initializePage()
+  }, [])
+
   async function loadClientId() {
     const { data, error } = await supabase
       .from('clients')
@@ -86,12 +94,8 @@ export default function ProjectsPage() {
       .limit(1)
 
     if (error) throw error
-
     const firstClient = (data as ClientRow[] | null)?.[0]
-    if (!firstClient?.id) {
-      throw new Error('No client found in clients table')
-    }
-
+    if (!firstClient?.id) throw new Error('No client found')
     setClientId(firstClient.id)
     return firstClient.id
   }
@@ -103,38 +107,21 @@ export default function ProjectsPage() {
       .order('created_at', { ascending: false })
 
     if (error) throw error
-
     setProjects((data as ProjectRow[]) || [])
   }
 
   async function initializePage() {
     setLoading(true)
-    setError('')
     await asyncHandler(
       async () => {
         await loadClientId()
         await loadProjects()
         return true
       },
-      {
-        context: 'Failed to load projects',
-        showErrorToast: true,
-        onError: (err) => setError(err),
-      }
+      { context: 'Failed to load projects', showErrorToast: true }
     )
     setLoading(false)
   }
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
-
-  useEffect(() => {
-    initializePage()
-  }, [])
 
   function openCreateDrawer() {
     setEditingProject(null)
@@ -184,36 +171,23 @@ export default function ProjectsPage() {
           .order('created_at', { ascending: false })
 
         if (error) throw error
-
         setProjectTickets((data as TicketRow[]) || [])
         return true
       },
-      {
-        context: 'Failed to load project tickets',
-        showErrorToast: false,
-      }
+      { context: 'Failed to load project tickets', showErrorToast: false }
     )
     setLoadingTickets(false)
   }
 
-  function navigateToProjectTickets(projectCode: string) {
-    window.location.href = `/tickets?project=${encodeURIComponent(projectCode)}`
-  }
-
   function updateForm<K extends keyof ProjectForm>(key: K, value: ProjectForm[K]) {
-    setForm((prev) => ({
-      ...prev,
-      [key]: value,
-    }))
+    setForm((prev) => ({ ...prev, [key]: value }))
   }
 
   function validateForm() {
     const nameError = validateRequired(form.name, 'Project name')
     if (nameError) return nameError.message
-
     const codeError = validateRequired(form.project_code, 'Project code')
     if (codeError) return codeError.message
-
     if (!clientId) return 'Client ID not found'
     return ''
   }
@@ -226,8 +200,6 @@ export default function ProjectsPage() {
     }
 
     setSaving(true)
-    setError('')
-
     await asyncHandler(
       async () => {
         const payload = {
@@ -244,14 +216,10 @@ export default function ProjectsPage() {
             .from('projects')
             .update(payload)
             .eq('id', editingProject.id)
-
           if (error) throw error
           toast.success('Project updated')
         } else {
-          const { error } = await supabase
-            .from('projects')
-            .insert(payload)
-
+          const { error } = await supabase.from('projects').insert(payload)
           if (error) throw error
           toast.success('Project created')
         }
@@ -260,12 +228,8 @@ export default function ProjectsPage() {
         closeDrawer()
         return true
       },
-      {
-        context: 'Failed to save project',
-        showErrorToast: true,
-      }
+      { context: 'Failed to save project', showErrorToast: true }
     )
-
     setSaving(false)
   }
 
@@ -278,87 +242,47 @@ export default function ProjectsPage() {
           .eq('id', project.id)
 
         if (error) throw error
-
         toast.success(project.is_active ? 'Project deactivated' : 'Project activated')
         await loadProjects()
         return true
       },
-      {
-        context: 'Failed to update project status',
-        showErrorToast: true,
-      }
+      { context: 'Failed to update project status', showErrorToast: true }
     )
   }
 
   async function deleteProject(project: ProjectRow) {
-    const confirmed = window.confirm(
-      `Delete ${project.name}?\n\nThis is a hard delete. If this project is linked to tickets, deletion may fail or break relations.`
-    )
-
+    const confirmed = window.confirm(`Delete ${project.name}? This action cannot be undone.`)
     if (!confirmed) return
 
     await asyncHandler(
       async () => {
-        const { error } = await supabase
-          .from('projects')
-          .delete()
-          .eq('id', project.id)
-
+        const { error } = await supabase.from('projects').delete().eq('id', project.id)
         if (error) throw error
-
         toast.success('Project deleted')
         await loadProjects()
-
-        if (editingProject?.id === project.id) {
-          closeDrawer()
-        }
+        if (editingProject?.id === project.id) closeDrawer()
         return true
       },
-      {
-        context: 'Failed to delete project',
-        showErrorToast: true,
-      }
+      { context: 'Failed to delete project', showErrorToast: true }
     )
-  }
-
-  async function copyText(value: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(value)
-      toast.success(label)
-    } catch {
-      toast.error('Copy failed')
-    }
-  }
-
-  function getStartCode(project: ProjectRow) {
-    return project.qr_identifier?.trim() || `START_${project.project_code}`
-  }
-
-  function getWhatsappLink(project: ProjectRow) {
-    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(getStartCode(project))}`
   }
 
   const stats = useMemo(() => {
     const total = projects.length
     const active = projects.filter((p) => p.is_active).length
     const inactive = projects.filter((p) => !p.is_active).length
-
     return { total, active, inactive }
   }, [projects])
 
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
       const q = searchTerm.trim().toLowerCase()
-
-      const matchesSearch =
-        !q ||
+      const matchesSearch = !q ||
         project.name.toLowerCase().includes(q) ||
         project.project_code.toLowerCase().includes(q) ||
-        (project.address || '').toLowerCase().includes(q) ||
-        (project.qr_identifier || '').toLowerCase().includes(q)
+        (project.address || '').toLowerCase().includes(q)
 
-      const matchesStatus =
-        statusFilter === 'ALL' ||
+      const matchesStatus = statusFilter === 'ALL' ||
         (statusFilter === 'ACTIVE' && project.is_active) ||
         (statusFilter === 'INACTIVE' && !project.is_active)
 
@@ -382,13 +306,11 @@ export default function ProjectsPage() {
         {!isMobile && (
           <PageHeader
             title="Projects"
-            subtitle="Manage projects, codes and QR source identifiers"
+            subtitle="Manage your properties and locations"
             actions={
-              <>
-                <Button variant="primary" onClick={openCreateDrawer}>
-                  + New Project
-                </Button>
-              </>
+              <Button variant="primary" onClick={openCreateDrawer}>
+                New Project
+              </Button>
             }
           />
         )}
@@ -398,53 +320,40 @@ export default function ProjectsPage() {
           ...styles.kpiGrid,
           gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)',
         }}>
-          <KpiCard label="Total Projects" value={stats.total} />
-          <KpiCard label="Active" value={stats.active} />
+          <KpiCard label="Total Projects" value={stats.total} accent="primary" />
+          <KpiCard label="Active" value={stats.active} accent="success" />
           <KpiCard label="Inactive" value={stats.inactive} />
         </div>
 
-        {/* Projects Card */}
-        <Card
-          title="Project List"
-          subtitle="Edit project details, status and QR identifiers"
-          noPadding
-        >
-          {/* Filters */}
-          <div style={styles.filtersRow}>
+        {/* Filters + Grid */}
+        <Card noPadding>
+          <div style={{
+            ...styles.filtersRow,
+            flexDirection: isMobile ? 'column' : 'row',
+          }}>
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder="Search by name, code, address..."
-              style={{ maxWidth: isMobile ? '100%' : '320px' }}
+              placeholder="Search projects..."
+              style={{ flex: 1, maxWidth: isMobile ? '100%' : '320px' }}
             />
-            <select
+            <Select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
-              style={styles.filterSelect}
-            >
-              <option value="ALL">All Status</option>
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-            </select>
+              onChange={(value) => setStatusFilter(value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
+              options={[
+                { label: 'All Status', value: 'ALL' },
+                { label: 'Active', value: 'ACTIVE' },
+                { label: 'Inactive', value: 'INACTIVE' },
+              ]}
+              style={{ minWidth: '140px' }}
+            />
           </div>
 
-          {loading && (
-            <div style={styles.loadingState}>
-              <div style={styles.loadingSpinner} />
-              <span>Loading projects...</span>
+          {loading ? (
+            <div style={styles.loadingContainer}>
+              <LoadingSpinner />
             </div>
-          )}
-
-          {error && (
-            <div style={styles.errorState}>
-              <span>{error}</span>
-              <Button variant="secondary" size="sm" onClick={initializePage}>
-                Retry
-              </Button>
-            </div>
-          )}
-
-          {!loading && !error && filteredProjects.length === 0 && (
+          ) : filteredProjects.length === 0 ? (
             <EmptyState
               title="No projects found"
               description="Try adjusting your filters or create a new project."
@@ -454,122 +363,45 @@ export default function ProjectsPage() {
                 </Button>
               }
             />
-          )}
-
-          {!loading && !error && filteredProjects.length > 0 && (
-            <div
-              style={{
-                ...styles.projectGrid,
-                gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
-                padding: isMobile ? '12px' : '20px',
-                gap: isMobile ? '12px' : '16px',
-              }}
-            >
+          ) : (
+            <div style={{
+              ...styles.projectGrid,
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))',
+            }}>
               {filteredProjects.map((project) => (
                 <div
                   key={project.id}
                   onClick={() => openDetailDrawer(project)}
-                  style={{
-                    ...styles.projectCard,
-                    padding: isMobile ? '16px' : '20px',
-                  }}
+                  style={styles.projectCard}
+                  data-ui="card"
                 >
-                  <div
-                    style={{
-                      ...styles.projectCardHeader,
-                      flexDirection: isMobile ? 'column' : 'row',
-                      gap: isMobile ? '8px' : '0',
-                    }}
-                  >
+                  <div style={styles.projectHeader}>
                     <div>
-                      <div
-                        style={{
-                          ...styles.projectName,
-                          fontSize: isMobile ? '15px' : '16px',
-                        }}
-                      >
-                        {project.name}
-                      </div>
+                      <div style={styles.projectName}>{project.name}</div>
                       <div style={styles.projectCode}>{project.project_code}</div>
                     </div>
                     <StatusBadge status={project.is_active ? 'ACTIVE' : 'INACTIVE'} size="sm" />
                   </div>
 
-                  <div
-                    style={{
-                      ...styles.projectMeta,
-                      gap: isMobile ? '10px' : '12px',
-                    }}
-                  >
-                    <div style={styles.projectMetaItem}>
-                      <span
-                        style={{
-                          ...styles.projectMetaLabel,
-                          fontSize: isMobile ? '10px' : '11px',
-                        }}
-                      >
-                        Address
-                      </span>
-                      <span
-                        style={{
-                          ...styles.projectMetaValue,
-                          fontSize: isMobile ? '12px' : '13px',
-                        }}
-                      >
-                        {project.address || '-'}
-                      </span>
+                  <div style={styles.projectMeta}>
+                    <div style={styles.metaItem}>
+                      <span style={styles.metaLabel}>Address</span>
+                      <span style={styles.metaValue}>{project.address || '-'}</span>
                     </div>
-                    <div style={styles.projectMetaItem}>
-                      <span
-                        style={{
-                          ...styles.projectMetaLabel,
-                          fontSize: isMobile ? '10px' : '11px',
-                        }}
-                      >
-                        Start Code
-                      </span>
-                      <span
-                        style={{
-                          ...styles.projectMetaCode,
-                          fontSize: isMobile ? '12px' : '13px',
-                        }}
-                      >
-                        {getStartCode(project)}
+                    <div style={styles.metaItem}>
+                      <span style={styles.metaLabel}>Start Code</span>
+                      <span style={styles.metaCode}>
+                        {project.qr_identifier || `START_${project.project_code}`}
                       </span>
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      ...styles.projectActions,
-                      gap: isMobile ? '6px' : '8px',
-                      flexDirection: isMobile ? 'column' : 'row',
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Button
-                      variant="secondary"
-                      size={isMobile ? 'md' : 'sm'}
-                      onClick={() => openEditDrawer(project)}
-                      style={{ flex: isMobile ? 1 : 'auto' }}
-                    >
+                  <div style={styles.projectActions} onClick={(e) => e.stopPropagation()}>
+                    <Button variant="secondary" size="sm" onClick={() => openEditDrawer(project)}>
                       Edit
                     </Button>
-                    <Button
-                      variant="secondary"
-                      size={isMobile ? 'md' : 'sm'}
-                      onClick={() => toggleProjectStatus(project)}
-                      style={{ flex: isMobile ? 1 : 'auto' }}
-                    >
+                    <Button variant="secondary" size="sm" onClick={() => toggleProjectStatus(project)}>
                       {project.is_active ? 'Deactivate' : 'Activate'}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size={isMobile ? 'md' : 'sm'}
-                      onClick={() => copyText(getStartCode(project), 'Code copied')}
-                      style={{ flex: isMobile ? 1 : 'auto' }}
-                    >
-                      Copy Code
                     </Button>
                   </div>
                 </div>
@@ -583,8 +415,8 @@ export default function ProjectsPage() {
       <Drawer
         open={drawerOpen}
         onClose={closeDrawer}
-        title={editingProject ? 'Edit Project' : 'Add Project'}
-        subtitle={editingProject ? 'Update project details' : 'Create a new project'}
+        title={editingProject ? 'Edit Project' : 'New Project'}
+        subtitle={editingProject ? 'Update project details' : 'Create a new property'}
         isMobile={isMobile}
       >
         <div style={styles.drawerContent}>
@@ -594,7 +426,7 @@ export default function ProjectsPage() {
               value={form.name}
               onChange={(e) => updateForm('name', e.target.value)}
               placeholder="Enter project name"
-              style={styles.formInput}
+              style={styles.input}
             />
           </div>
 
@@ -604,7 +436,7 @@ export default function ProjectsPage() {
               value={form.project_code}
               onChange={(e) => updateForm('project_code', e.target.value.toUpperCase())}
               placeholder="e.g. PRJ001"
-              style={styles.formInput}
+              style={styles.input}
             />
           </div>
 
@@ -614,7 +446,7 @@ export default function ProjectsPage() {
               value={form.address}
               onChange={(e) => updateForm('address', e.target.value)}
               placeholder="Project location"
-              style={styles.formInput}
+              style={styles.input}
             />
           </div>
 
@@ -624,7 +456,7 @@ export default function ProjectsPage() {
               value={form.qr_identifier}
               onChange={(e) => updateForm('qr_identifier', e.target.value)}
               placeholder={`Default: START_${form.project_code || 'CODE'}`}
-              style={styles.formInput}
+              style={styles.input}
             />
             <span style={styles.formHint}>Leave empty to use default START code</span>
           </div>
@@ -675,56 +507,40 @@ export default function ProjectsPage() {
         {selectedProject && (
           <div style={styles.drawerContent}>
             <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>Status</div>
-              <StatusBadge status={selectedProject.is_active ? 'ACTIVE' : 'INACTIVE'} />
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Status</span>
+                <StatusBadge status={selectedProject.is_active ? 'ACTIVE' : 'INACTIVE'} />
+              </div>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Address</span>
+                <span style={styles.detailValue}>{selectedProject.address || '-'}</span>
+              </div>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Start Code</span>
+                <span style={styles.detailCode}>
+                  {selectedProject.qr_identifier || `START_${selectedProject.project_code}`}
+                </span>
+              </div>
             </div>
 
-            <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>Address</div>
-              <div style={styles.detailValue}>{selectedProject.address || 'Not set'}</div>
-            </div>
-
-            <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>Start Code</div>
-              <div style={styles.detailCodeBox}>
-                <code style={styles.detailCode}>{getStartCode(selectedProject)}</code>
+            <div style={styles.ticketsSection}>
+              <div style={styles.ticketsSectionHeader}>
+                <h4 style={styles.ticketsSectionTitle}>Recent Tickets</h4>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => copyText(getStartCode(selectedProject), 'Code copied')}
+                  onClick={() => window.location.href = `/tickets?project=${encodeURIComponent(selectedProject.project_code)}`}
                 >
-                  Copy
+                  View All
                 </Button>
               </div>
-            </div>
 
-            <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>WhatsApp Link</div>
-              <div style={styles.detailCodeBox}>
-                <div style={styles.detailLinkText}>{getWhatsappLink(selectedProject)}</div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => copyText(getWhatsappLink(selectedProject), 'Link copied')}
-                >
-                  Copy
-                </Button>
-              </div>
-            </div>
-
-            <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>Created</div>
-              <div style={styles.detailValue}>
-                {new Date(selectedProject.created_at).toLocaleString()}
-              </div>
-            </div>
-
-            <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>Recent Tickets</div>
               {loadingTickets ? (
-                <div style={styles.ticketLoading}>Loading...</div>
+                <div style={styles.loadingSmall}>
+                  <LoadingSpinner size="sm" />
+                </div>
               ) : projectTickets.length === 0 ? (
-                <div style={styles.noTickets}>No tickets for this project</div>
+                <p style={styles.emptyText}>No tickets for this project</p>
               ) : (
                 <div style={styles.ticketList}>
                   {projectTickets.slice(0, 5).map((ticket) => (
@@ -733,58 +549,33 @@ export default function ProjectsPage() {
                       <StatusBadge status={ticket.status} size="sm" />
                     </div>
                   ))}
-                  {projectTickets.length > 5 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => navigateToProjectTickets(selectedProject.project_code)}
-                    >
-                      View all {projectTickets.length} tickets
-                    </Button>
-                  )}
                 </div>
               )}
             </div>
 
             <div style={styles.drawerActions}>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  closeDetailDrawer()
-                  openEditDrawer(selectedProject)
-                }}
-                style={{ flex: 1 }}
-              >
+              <Button variant="secondary" onClick={() => openEditDrawer(selectedProject)}>
                 Edit Project
               </Button>
               <Button
                 variant="primary"
-                onClick={() => navigateToProjectTickets(selectedProject.project_code)}
-                style={{ flex: 1 }}
+                onClick={() => window.location.href = `/qr?project=${encodeURIComponent(selectedProject.project_code)}`}
               >
-                View Tickets
+                View QR Code
               </Button>
             </div>
           </div>
         )}
       </Drawer>
-
-      {/* Mobile Bottom Actions */}
-      {isMobile && (
-        <div style={styles.mobileBottomActions}>
-          <Button variant="primary" onClick={openCreateDrawer} style={{ flex: 1 }}>
-            Add Project
-          </Button>
-        </div>
-      )}
     </AppShell>
   )
 }
 
 const styles: Record<string, CSSProperties> = {
   content: {
-    padding: '24px',
-    paddingBottom: '100px',
+    padding: '32px 40px',
+    maxWidth: '1400px',
+    margin: '0 auto',
   },
   kpiGrid: {
     display: 'grid',
@@ -793,112 +584,76 @@ const styles: Record<string, CSSProperties> = {
   },
   filtersRow: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: '12px',
-    padding: '16px 20px',
-    borderBottom: `1px solid ${theme.colors.border}`,
     alignItems: 'center',
-  },
-  filterSelect: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    cursor: 'pointer',
-    minWidth: '140px',
-  },
-  loadingState: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '12px',
-    padding: '48px 20px',
-    color: theme.colors.textMuted,
-    fontSize: '14px',
-  },
-  loadingSpinner: {
-    width: '20px',
-    height: '20px',
-    border: `2px solid ${theme.colors.border}`,
-    borderTopColor: theme.colors.primary,
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  errorState: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: '16px',
-    padding: '48px 20px',
-    color: theme.colors.error,
-    fontSize: '14px',
+    padding: '20px 24px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  loadingContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '64px 0',
   },
   projectGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-    gap: '16px',
-    padding: '20px',
+    gap: '20px',
+    padding: '24px',
   },
   projectCard: {
-    background: theme.colors.surfaceElevated,
+    background: theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.lg,
-    padding: '20px',
+    padding: '24px',
     cursor: 'pointer',
-    transition: 'all 0.15s ease',
+    transition: 'all 0.2s ease',
   },
-  projectCardHeader: {
+  projectHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: '16px',
   },
   projectName: {
-    fontSize: '16px',
+    fontSize: '17px',
     fontWeight: 600,
     color: theme.colors.textPrimary,
-    marginBottom: '4px',
   },
   projectCode: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: theme.colors.primary,
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+    marginTop: '2px',
   },
   projectMeta: {
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
-    marginBottom: '16px',
+    marginBottom: '20px',
   },
-  projectMetaItem: {
+  metaItem: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  projectMetaLabel: {
-    fontSize: '11px',
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  projectMetaValue: {
+  metaLabel: {
     fontSize: '13px',
+    color: theme.colors.textMuted,
+  },
+  metaValue: {
+    fontSize: '14px',
     color: theme.colors.textSecondary,
   },
-  projectMetaCode: {
+  metaCode: {
     fontSize: '13px',
-    color: theme.colors.textPrimary,
     fontFamily: 'monospace',
+    color: theme.colors.textSecondary,
+    background: theme.colors.muted,
+    padding: '4px 8px',
+    borderRadius: theme.radius.sm,
   },
   projectActions: {
     display: 'flex',
     gap: '8px',
-    flexWrap: 'wrap',
-    paddingTop: '16px',
-    borderTop: `1px solid ${theme.colors.border}`,
   },
   drawerContent: {
     display: 'flex',
@@ -908,23 +663,20 @@ const styles: Record<string, CSSProperties> = {
   formGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    gap: '8px',
   },
   formLabel: {
     fontSize: '13px',
-    fontWeight: 500,
+    fontWeight: 600,
     color: theme.colors.textSecondary,
   },
-  formInput: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
+  input: {
     padding: '12px 14px',
-    fontSize: '16px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surface,
+    fontSize: '15px',
     color: theme.colors.textPrimary,
-    outline: 'none',
-    width: '100%',
-    boxSizing: 'border-box',
   },
   formHint: {
     fontSize: '12px',
@@ -933,8 +685,8 @@ const styles: Record<string, CSSProperties> = {
   checkboxLabel: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    fontSize: '14px',
+    gap: '10px',
+    fontSize: '15px',
     color: theme.colors.textPrimary,
     cursor: 'pointer',
   },
@@ -945,61 +697,68 @@ const styles: Record<string, CSSProperties> = {
   },
   drawerActions: {
     display: 'flex',
-    gap: '10px',
-    paddingTop: '12px',
+    gap: '12px',
+    justifyContent: 'flex-end',
+    paddingTop: '16px',
     borderTop: `1px solid ${theme.colors.border}`,
+    marginTop: '8px',
   },
   dangerZone: {
     paddingTop: '20px',
     borderTop: `1px solid ${theme.colors.border}`,
-    marginTop: '8px',
+    marginTop: '12px',
   },
   detailSection: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '14px',
+    padding: '16px',
+    background: theme.colors.muted,
+    borderRadius: theme.radius.md,
+  },
+  detailRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   detailLabel: {
-    fontSize: '12px',
-    fontWeight: 600,
+    fontSize: '13px',
     color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
   },
   detailValue: {
     fontSize: '14px',
     color: theme.colors.textPrimary,
   },
-  detailCodeBox: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    background: theme.colors.surfaceActive,
-    padding: '10px 14px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
-  },
   detailCode: {
     fontSize: '13px',
-    color: theme.colors.textPrimary,
     fontFamily: 'monospace',
+    color: theme.colors.primary,
   },
-  detailLinkText: {
-    fontSize: '12px',
-    color: theme.colors.textMuted,
-    wordBreak: 'break-all',
-    flex: 1,
+  ticketsSection: {
+    marginTop: '8px',
   },
-  ticketLoading: {
-    fontSize: '13px',
-    color: theme.colors.textMuted,
-    padding: '12px 0',
+  ticketsSectionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '12px',
   },
-  noTickets: {
-    fontSize: '13px',
+  ticketsSectionTitle: {
+    fontSize: '15px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+    margin: 0,
+  },
+  loadingSmall: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '24px 0',
+  },
+  emptyText: {
+    textAlign: 'center',
     color: theme.colors.textMuted,
-    padding: '12px 0',
+    fontSize: '14px',
+    padding: '24px 0',
   },
   ticketList: {
     display: 'flex',
@@ -1008,28 +767,15 @@ const styles: Record<string, CSSProperties> = {
   },
   ticketItem: {
     display: 'flex',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '10px 12px',
-    background: theme.colors.surfaceActive,
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
+    alignItems: 'center',
+    padding: '12px',
+    background: theme.colors.muted,
+    borderRadius: theme.radius.sm,
   },
   ticketNumber: {
-    fontSize: '13px',
+    fontSize: '14px',
     fontWeight: 500,
     color: theme.colors.textPrimary,
-  },
-  mobileBottomActions: {
-    position: 'fixed',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: '16px 20px',
-    paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
-    background: theme.colors.surface,
-    borderTop: `1px solid ${theme.colors.border}`,
-    display: 'flex',
-    gap: '10px',
   },
 }

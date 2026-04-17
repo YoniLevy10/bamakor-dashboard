@@ -1,10 +1,21 @@
-﻿'use client'
+'use client'
 
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Button } from '../components/ui'
+import {
+  AppShell,
+  MobileHeader,
+  MobileMenu,
+  PageHeader,
+  KpiCard,
+  Card,
+  Button,
+  StatusBadge,
+  Select,
+  LoadingSpinner,
+  theme
+} from '../components/ui'
 
 type TicketRow = {
   id: string
@@ -15,6 +26,7 @@ type TicketRow = {
   reporter_phone: string
   description: string
   status: string
+  priority?: string
   assigned_worker_id: string | null
   created_at: string
   closed_at: string | null
@@ -28,6 +40,7 @@ type RawTicketRow = {
   reporter_phone: string
   description: string
   status: string
+  priority?: string
   assigned_worker_id: string | null
   created_at: string
   closed_at: string | null
@@ -52,8 +65,9 @@ export default function SummaryPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [workers, setWorkers] = useState<WorkerRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [isMobile, setIsMobile] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [period, setPeriod] = useState<'week' | 'month' | 'all'>('week')
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -68,68 +82,56 @@ export default function SummaryPage() {
 
   async function loadData() {
     setLoading(true)
-    setError('')
-
     try {
-      const [{ data: ticketsData, error: ticketsError }, { data: projectsData, error: projectsError }, { data: workersData, error: workersError }] =
-        await Promise.all([
-          supabase
-            .from('tickets')
-            .select(`
-              id,
-              ticket_number,
-              project_id,
-              reporter_phone,
-              description,
-              status,
-              assigned_worker_id,
-              created_at,
-              closed_at,
-              priority,
-              projects (
-                project_code,
-                name
-              )
-            `)
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('projects')
-            .select('id, name, project_code')
-            .order('project_code', { ascending: true }),
-          supabase
-            .from('workers')
-            .select('id, full_name, phone, is_active')
-            .eq('is_active', true),
-        ])
+      const [
+        { data: ticketsData, error: ticketsError },
+        { data: projectsData, error: projectsError },
+        { data: workersData, error: workersError },
+      ] = await Promise.all([
+        supabase
+          .from('tickets')
+          .select(`
+            id, ticket_number, project_id, reporter_phone, description,
+            status, priority, assigned_worker_id, created_at, closed_at,
+            projects (project_code, name)
+          `)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('projects')
+          .select('id, name, project_code')
+          .order('project_code', { ascending: true }),
+        supabase
+          .from('workers')
+          .select('id, full_name, phone, is_active')
+          .eq('is_active', true),
+      ])
 
       if (ticketsError) throw ticketsError
       if (projectsError) throw projectsError
       if (workersError) throw workersError
 
-      const formattedTickets: TicketRow[] =
-        (ticketsData || []).map((row: RawTicketRow) => ({
-          id: row.id,
-          ticket_number: row.ticket_number,
-          project_id: row.project_id,
-          project_code: Array.isArray(row.projects) ? row.projects?.[0]?.project_code || '' : row.projects?.project_code || '',
-          project_name: Array.isArray(row.projects) ? row.projects?.[0]?.name || '' : row.projects?.name || '',
-          reporter_phone: row.reporter_phone,
-          description: row.description,
-          status: row.status,
-          assigned_worker_id: row.assigned_worker_id,
-          created_at: row.created_at,
-          closed_at: row.closed_at,
-        })) || []
+      const formattedTickets: TicketRow[] = (ticketsData || []).map((row: RawTicketRow) => ({
+        id: row.id,
+        ticket_number: row.ticket_number,
+        project_id: row.project_id,
+        project_code: Array.isArray(row.projects) ? row.projects?.[0]?.project_code || '' : row.projects?.project_code || '',
+        project_name: Array.isArray(row.projects) ? row.projects?.[0]?.name || '' : row.projects?.name || '',
+        reporter_phone: row.reporter_phone,
+        description: row.description,
+        status: row.status,
+        priority: row.priority,
+        assigned_worker_id: row.assigned_worker_id,
+        created_at: row.created_at,
+        closed_at: row.closed_at,
+      }))
 
       setTickets(formattedTickets)
       setProjects((projectsData as ProjectRow[]) || [])
       setWorkers((workersData as WorkerRow[]) || [])
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load summary'
-      setError(errorMessage)
-    } finally {
-      setLoading(false)
+    } catch (err) {
+      console.error('Failed to load summary:', err)
     }
+    setLoading(false)
   }
 
   const summary = useMemo(() => {
@@ -167,7 +169,6 @@ export default function SummaryPage() {
     return projects
       .map((project) => {
         const projectTickets = tickets.filter((t) => t.project_code === project.project_code)
-
         return {
           id: project.id,
           name: project.name,
@@ -180,17 +181,6 @@ export default function SummaryPage() {
       })
       .sort((a, b) => b.total - a.total)
   }, [projects, tickets])
-
-  const recentTickets = useMemo(() => {
-    return tickets.slice(0, 4)
-  }, [tickets])
-
-  const projectsRequiringAttention = useMemo(() => {
-    return projectStats
-      .filter((p) => p.open > 0 || p.assigned > 0)
-      .sort((a, b) => (b.open + b.assigned) - (a.open + a.assigned))
-      .slice(0, 6)
-  }, [projectStats])
 
   const workerLoad = useMemo(() => {
     return workers
@@ -208,6 +198,13 @@ export default function SummaryPage() {
       .sort((a, b) => b.assigned_tickets - a.assigned_tickets)
   }, [workers, tickets])
 
+  const projectsRequiringAttention = useMemo(() => {
+    return projectStats
+      .filter((p) => p.open > 0 || p.assigned > 0)
+      .sort((a, b) => (b.open + b.assigned) - (a.open + a.assigned))
+      .slice(0, 6)
+  }, [projectStats])
+
   function navigateToTickets(filter?: { status?: string; project?: string; worker?: string }) {
     let url = '/tickets'
     if (filter) {
@@ -220,256 +217,207 @@ export default function SummaryPage() {
     router.push(url)
   }
 
-  function getStatusStyle(status: string): CSSProperties {
-    switch (status) {
-      case 'NEW':
-        return { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }
-      case 'ASSIGNED':
-        return { background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }
-      case 'IN_PROGRESS':
-        return { background: '#EEF2FF', color: '#4F46E5', border: '1px solid #C7D2FE' }
-      case 'WAITING_PARTS':
-        return { background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }
-      case 'CLOSED':
-        return { background: '#ECFDF5', color: '#16A34A', border: '1px solid #BBF7D0' }
-      default:
-        return { background: '#F3F4F6', color: '#4B5563', border: '1px solid #E5E7EB' }
-    }
+  function formatDate() {
+    return new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
   }
 
   return (
-    <main style={styles.page}>
-      <div
-        style={{
-          ...styles.appShell,
-          gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
-        }}
-      >
+    <AppShell isMobile={isMobile}>
+      {isMobile && (
+        <MobileHeader
+          title="Summary"
+          subtitle={formatDate()}
+          onMenuClick={() => setMenuOpen(true)}
+        />
+      )}
+
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+      <div style={styles.content}>
         {!isMobile && (
-          <aside style={styles.sidebar}>
-            <div style={styles.sidebarBrand}>
-              <div style={styles.logoBox}>B</div>
-              <div>
-                <div style={styles.sidebarTitle}>Bamakor</div>
-                <div style={styles.sidebarSubtitle}>Maintenance SaaS</div>
-              </div>
-            </div>
-
-            <nav style={styles.sidebarNav}>
-              <Link href="/" style={styles.sidebarNavLink}>Dashboard</Link>
-              <Link href="/tickets" style={styles.sidebarNavLink}>Tickets</Link>
-              <Link href="/projects" style={styles.sidebarNavLink}>Projects</Link>
-              <Link href="/workers" style={styles.sidebarNavLink}>Workers</Link>
-              <Link href="/qr" style={styles.sidebarNavLink}>QR Codes</Link>
-              <Link href="/summary" style={{ ...styles.sidebarNavLink, ...styles.sidebarNavItemActive }}>Summary</Link>
-            </nav>
-
-            <div style={styles.sidebarFooter}>All rights reserved to Yoni Levy</div>
-          </aside>
+          <PageHeader
+            title="Summary"
+            subtitle="Operational overview and performance metrics"
+            actions={
+              <Select
+                value={period}
+                onChange={(value) => setPeriod(value as 'week' | 'month' | 'all')}
+                options={[
+                  { label: 'This Week', value: 'week' },
+                  { label: 'This Month', value: 'month' },
+                  { label: 'All Time', value: 'all' },
+                ]}
+              />
+            }
+          />
         )}
 
-        <div style={{ ...styles.mainArea, ...(isMobile ? styles.mainAreaMobile : {}) }}>
-          <div style={styles.topBar}>
-            <div style={styles.brandWrap}>
-              <div style={styles.mobileTopRow}>
-                <div>
-                  <h1 style={{ ...styles.title, ...(isMobile ? styles.titleMobile : {}) }}>
-                    Summary
-                  </h1>
-                  <p style={{ ...styles.subtitle, ...(isMobile ? styles.subtitleMobile : {}) }}>
-                    Daily, weekly and monthly operational overview
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div style={styles.topActions}>
-            </div>
+        {loading ? (
+          <div style={styles.loadingContainer}>
+            <LoadingSpinner size="lg" />
           </div>
+        ) : (
+          <>
+            {/* KPI Cards */}
+            <div style={{
+              ...styles.kpiGrid,
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+            }}>
+              <KpiCard
+                label="Open Now"
+                value={summary.openNow}
+                accent="warning"
+                onClick={() => navigateToTickets({ status: 'NEW' })}
+              />
+              <KpiCard
+                label="In Progress"
+                value={summary.assignedNow}
+                accent="primary"
+                onClick={() => navigateToTickets({ status: 'ASSIGNED' })}
+              />
+              <KpiCard
+                label="Opened This Week"
+                value={summary.weekOpened}
+                accent="primary"
+                onClick={() => navigateToTickets()}
+              />
+              <KpiCard
+                label="Closed This Week"
+                value={summary.weekClosed}
+                accent="success"
+              />
+            </div>
 
-          {loading && <p style={styles.infoText}>Loading summary...</p>}
-          {error && <p style={styles.errorText}>{error}</p>}
-
-          {!loading && !error && (
-            <>
-              <div
-                style={{
-                  ...styles.statsGrid,
-                  gridTemplateColumns: isMobile
-                    ? 'repeat(2, minmax(0, 1fr))'
-                    : 'repeat(4, minmax(0, 1fr))',
-                }}
-              >
-                <button onClick={() => navigateToTickets()} style={{ ...styles.kpiCard, ...styles.kpiCardButton }}>
-                  <div style={styles.kpiLabel}>Open Right Now</div>
-                  <div style={styles.kpiValue}>{summary.openNow}</div>
-                </button>
-
-                <button onClick={() => navigateToTickets({ status: 'ASSIGNED' })} style={{ ...styles.kpiCard, ...styles.kpiCardButton }}>
-                  <div style={styles.kpiLabel}>Assigned Right Now</div>
-                  <div style={styles.kpiValue}>{summary.assignedNow}</div>
-                </button>
-
-                <button onClick={() => navigateToTickets()} style={{ ...styles.kpiCard, ...styles.kpiCardButton }}>
-                  <div style={styles.kpiLabel}>Today Opened</div>
-                  <div style={styles.kpiValue}>{summary.todayOpened}</div>
-                </button>
-
-                <button onClick={() => navigateToTickets()} style={{ ...styles.kpiCard, ...styles.kpiCardButton }}>
-                  <div style={styles.kpiLabel}>Opened This Week</div>
-                  <div style={styles.kpiValue}>{summary.weekOpened}</div>
-                </button>
-              </div>
-
-              <div style={styles.card}>
-                <div style={styles.cardHeader}>
-                  <div>
-                    <div style={styles.cardTitle}>System Health</div>
-                    <div style={styles.cardSubtitle}>Key performance indicators</div>
+            {/* System Health */}
+            <Card title="System Health" subtitle="Key performance indicators">
+              <div style={styles.metricsGrid}>
+                <div style={styles.metricCard}>
+                  <div style={styles.metricValue}>
+                    {summary.weekOpened > 0
+                      ? `${Math.round((summary.weekClosed / summary.weekOpened) * 100)}%`
+                      : 'N/A'}
+                  </div>
+                  <div style={styles.metricLabel}>Resolution Rate (7d)</div>
+                  <div style={styles.metricDescription}>
+                    {summary.weekClosed} of {summary.weekOpened} closed
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                  <div style={styles.insightCard}>
-                    <div style={styles.insightLabel}>Resolution Rate (Last 7 days)</div>
-                    <div style={styles.insightValue}>
-                      {summary.weekOpened > 0 ? 
-                        `${Math.round((summary.weekClosed / summary.weekOpened) * 100)}%` : 
-                        'N/A'}
-                    </div>
-                    <div style={styles.insightDescription}>
-                      {summary.weekClosed} of {summary.weekOpened} closed
-                    </div>
+                <div style={styles.metricCard}>
+                  <div style={styles.metricValue}>{summary.openNow}</div>
+                  <div style={styles.metricLabel}>Pending Assignment</div>
+                  <div style={styles.metricDescription}>
+                    Tickets awaiting workers
                   </div>
+                </div>
 
-                  <div style={styles.insightCard}>
-                    <div style={styles.insightLabel}>Pending Assignments</div>
-                    <div style={styles.insightValue}>{summary.openNow}</div>
-                    <div style={styles.insightDescription}>
-                      Tickets awaiting worker assignment
-                    </div>
+                <div style={styles.metricCard}>
+                  <div style={styles.metricValue}>{workerLoad.length}</div>
+                  <div style={styles.metricLabel}>Active Workers</div>
+                  <div style={styles.metricDescription}>
+                    With assigned tasks
                   </div>
+                </div>
 
-                  <div style={styles.insightCard}>
-                    <div style={styles.insightLabel}>Active Workers</div>
-                    <div style={styles.insightValue}>{workerLoad.length}</div>
-                    <div style={styles.insightDescription}>
-                      Workers with assigned tasks
-                    </div>
+                <div style={styles.metricCard}>
+                  <div style={styles.metricValue}>
+                    {Math.max(0, projectStats.length - projectsRequiringAttention.length)}
                   </div>
-
-                  <div style={styles.insightCard}>
-                    <div style={styles.insightLabel}>Projects on Track</div>
-                    <div style={styles.insightValue}>
-                      {projectStats.length > 0 ? 
-                        Math.max(0, projectStats.length - projectsRequiringAttention.length) : 
-                        0}
-                    </div>
-                    <div style={styles.insightDescription}>
-                      Projects with no open issues
-                    </div>
+                  <div style={styles.metricLabel}>Projects On Track</div>
+                  <div style={styles.metricDescription}>
+                    No open issues
                   </div>
                 </div>
               </div>
+            </Card>
 
-              <div style={styles.card}>
-                <div style={styles.cardHeader}>
-                  <div>
-                    <div style={styles.cardTitle}>Top Priority Projects</div>
-                    <div style={styles.cardSubtitle}>Projects with highest workload</div>
-                  </div>
-                </div>
-
+            {/* Two Column Layout */}
+            <div style={{
+              ...styles.twoColumnGrid,
+              gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+            }}>
+              {/* Top Priority Projects */}
+              <Card title="Top Priority Projects" subtitle="Highest workload">
                 {projectsRequiringAttention.length === 0 ? (
-                  <div style={styles.emptyInsight}>
-                    <div style={styles.emptyInsightTitle}>All clear!</div>
-                    <div style={styles.emptyInsightText}>No projects have pending tickets</div>
+                  <div style={styles.emptyState}>
+                    <div style={styles.emptyIcon}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.success} strokeWidth="2">
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </div>
+                    <div style={styles.emptyTitle}>All Clear</div>
+                    <div style={styles.emptyText}>No projects have pending tickets</div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {projectsRequiringAttention.slice(0, 4).map((project, idx) => {
-                      const workloadPercent = summary.openNow > 0 ? Math.round((project.open / summary.openNow) * 100) : 0
-                      return (
-                        <div key={project.id} style={styles.priorityProjectRow}>
-                          <div style={styles.priorityProjectRank}>{idx + 1}</div>
-                          <div style={styles.priorityProjectInfo}>
-                            <div style={styles.priorityProjectName}>{project.name}</div>
-                            <div style={styles.priorityProjectCode}>{project.project_code}</div>
-                          </div>
-                          <div style={styles.priorityProjectBar}>
-                            <div 
-                              style={{
-                                height: '4px',
-                                background: '#E5E7EB',
-                                borderRadius: '2px',
-                                overflow: 'hidden'
-                              }}
-                            >
-                              <div 
-                                style={{
-                                  height: '100%',
-                                  background: '#D11F45',
-                                  width: `${workloadPercent}%`,
-                                  transition: 'width 0.2s ease'
-                                }}
-                              />
-                            </div>
-                          </div>
-                          <div style={styles.priorityProjectStats}>
-                            <span style={styles.priorityStatOpen}>{project.open}</span>
-                            <span style={styles.priorityStatAssigned}>{project.assigned}</span>
-                          </div>
+                  <div style={styles.priorityList}>
+                    {projectsRequiringAttention.map((project, idx) => (
+                      <div
+                        key={project.id}
+                        style={styles.priorityItem}
+                        onClick={() => navigateToTickets({ project: project.project_code })}
+                      >
+                        <div style={styles.priorityRank}>{idx + 1}</div>
+                        <div style={styles.priorityInfo}>
+                          <div style={styles.priorityName}>{project.name}</div>
+                          <div style={styles.priorityCode}>{project.project_code}</div>
                         </div>
-                      )
-                    })}
+                        <div style={styles.priorityStats}>
+                          <span style={styles.priorityOpen}>{project.open} open</span>
+                          <span style={styles.priorityAssigned}>{project.assigned} in progress</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
-              </div>
+              </Card>
 
-              <div style={styles.card}>
-                <div style={styles.cardHeader}>
-                  <div>
-                    <div style={styles.cardTitle}>Team Capacity</div>
-                    <div style={styles.cardSubtitle}>Worker load distribution</div>
-                  </div>
-                </div>
-
+              {/* Team Capacity */}
+              <Card title="Team Capacity" subtitle="Worker load distribution">
                 {workerLoad.length === 0 ? (
-                  <div style={styles.emptyInsight}>
-                    <div style={styles.emptyInsightTitle}>No active assignments</div>
-                    <div style={styles.emptyInsightText}>All workers are currently available</div>
+                  <div style={styles.emptyState}>
+                    <div style={styles.emptyIcon}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                      </svg>
+                    </div>
+                    <div style={styles.emptyTitle}>No Active Assignments</div>
+                    <div style={styles.emptyText}>All workers are currently available</div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    {workerLoad.slice(0, 5).map((worker) => {
+                  <div style={styles.workerList}>
+                    {workerLoad.slice(0, 6).map((worker) => {
                       const maxLoad = Math.max(...workerLoad.map((w) => w.assigned_tickets))
                       const loadPercent = (worker.assigned_tickets / (maxLoad || 1)) * 100
                       const isHighLoad = loadPercent > 70
-                      
+
                       return (
-                        <div key={worker.id} style={styles.workerLoadRow}>
-                          <div style={styles.workerLoadName}>{worker.full_name}</div>
-                          <div style={styles.workerLoadBar}>
-                            <div 
-                              style={{
-                                height: '6px',
-                                background: '#E5E7EB',
-                                borderRadius: '3px',
-                                overflow: 'hidden',
-                                position: 'relative'
-                              }}
-                            >
-                              <div 
+                        <div
+                          key={worker.id}
+                          style={styles.workerItem}
+                          onClick={() => navigateToTickets({ worker: worker.id })}
+                        >
+                          <div style={styles.workerName}>{worker.full_name}</div>
+                          <div style={styles.workerBarContainer}>
+                            <div style={styles.workerBarBg}>
+                              <div
                                 style={{
-                                  height: '100%',
-                                  background: isHighLoad ? '#DC2626' : '#10B981',
+                                  ...styles.workerBarFill,
                                   width: `${loadPercent}%`,
-                                  transition: 'width 0.2s ease'
+                                  background: isHighLoad ? theme.colors.error : theme.colors.success,
                                 }}
                               />
                             </div>
                           </div>
-                          <div style={styles.workerLoadCount}>
+                          <div style={{
+                            ...styles.workerCount,
+                            color: isHighLoad ? theme.colors.error : theme.colors.textMuted,
+                          }}>
                             {worker.assigned_tickets} {isHighLoad ? '(High)' : 'active'}
                           </div>
                         </div>
@@ -477,545 +425,288 @@ export default function SummaryPage() {
                     })}
                   </div>
                 )}
-              </div>
+              </Card>
+            </div>
 
-              <div style={styles.card}>
-                <div style={styles.cardHeader}>
-                  <div>
-                    <div style={styles.cardTitle}>Projects Performance</div>
-                    <div style={styles.cardSubtitle}>
-                      Ticket volume and current status by project
-                    </div>
-                  </div>
+            {/* Projects Performance Table */}
+            <Card title="Projects Performance" subtitle="Ticket volume by project" noPadding>
+              {projectStats.length === 0 ? (
+                <div style={styles.emptyTableState}>
+                  <p style={styles.emptyText}>No project data found</p>
                 </div>
-
-                {projectStats.length === 0 ? (
-                  <p style={styles.infoText}>No project data found.</p>
-                ) : (
-                  <div style={styles.tableWrapper}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>Project</th>
-                          <th style={styles.th}>Code</th>
-                          <th style={styles.th}>Total</th>
-                          <th style={styles.th}>Open</th>
-                          <th style={styles.th}>Assigned</th>
-                          <th style={styles.th}>Closed</th>
+              ) : (
+                <div style={styles.tableContainer}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Project</th>
+                        <th style={styles.th}>Code</th>
+                        <th style={styles.th}>Total</th>
+                        <th style={styles.th}>Open</th>
+                        <th style={styles.th}>In Progress</th>
+                        <th style={styles.th}>Closed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {projectStats.slice(0, 10).map((project) => (
+                        <tr
+                          key={project.id}
+                          style={styles.tr}
+                          onClick={() => navigateToTickets({ project: project.project_code })}
+                        >
+                          <td style={styles.td}>
+                            <span style={styles.projectName}>{project.name}</span>
+                          </td>
+                          <td style={styles.td}>
+                            <span style={styles.projectCode}>{project.project_code}</span>
+                          </td>
+                          <td style={styles.td}>{project.total}</td>
+                          <td style={styles.td}>
+                            <span style={{
+                              ...styles.statBadge,
+                              color: project.open > 0 ? theme.colors.warning : theme.colors.textMuted,
+                            }}>
+                              {project.open}
+                            </span>
+                          </td>
+                          <td style={styles.td}>
+                            <span style={{
+                              ...styles.statBadge,
+                              color: project.assigned > 0 ? theme.colors.info : theme.colors.textMuted,
+                            }}>
+                              {project.assigned}
+                            </span>
+                          </td>
+                          <td style={styles.td}>
+                            <span style={{
+                              ...styles.statBadge,
+                              color: theme.colors.success,
+                            }}>
+                              {project.closed}
+                            </span>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {projectStats.map((project) => (
-                          <tr key={project.id}>
-                            <td style={styles.tdStrong}>{project.name}</td>
-                            <td style={styles.tdCode}>{project.project_code}</td>
-                            <td style={styles.td}>{project.total}</td>
-                            <td style={styles.td}>{project.open}</td>
-                            <td style={styles.td}>{project.assigned}</td>
-                            <td style={styles.td}>{project.closed}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          </>
+        )}
       </div>
-    </main>
+    </AppShell>
   )
 }
 
 const styles: Record<string, CSSProperties> = {
-  page: {
-    height: '100dvh',
-    width: '100%',
-    maxWidth: '100%',
-    overflow: 'hidden',
-    background: '#F4F4F5',
-    color: '#2F2F33',
-    fontFamily: 'Inter, Arial, Helvetica, sans-serif',
-    paddingTop: 'env(safe-area-inset-top)',
+  content: {
+    padding: '32px 40px',
+    maxWidth: '1400px',
+    margin: '0 auto',
   },
-  appShell: {
+  loadingContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '80px 0',
+  },
+  kpiGrid: {
     display: 'grid',
-    width: '100%',
-    height: '100dvh',
-    overflow: 'hidden',
+    gap: '16px',
+    marginBottom: '24px',
   },
-  sidebar: {
-    background: '#FFFFFF',
-    borderRight: '1px solid #E5E7EB',
-    padding: '24px 16px',
+  metricsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '16px',
+  },
+  metricCard: {
+    padding: '20px',
+    background: theme.colors.muted,
+    borderRadius: theme.radius.md,
+  },
+  metricValue: {
+    fontSize: '32px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+    letterSpacing: '-0.02em',
+  },
+  metricLabel: {
+    fontSize: '14px',
+    fontWeight: 500,
+    color: theme.colors.textSecondary,
+    marginTop: '4px',
+  },
+  metricDescription: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+    marginTop: '4px',
+  },
+  twoColumnGrid: {
+    display: 'grid',
+    gap: '24px',
+    marginBottom: '24px',
+    marginTop: '24px',
+  },
+  emptyState: {
     display: 'flex',
     flexDirection: 'column',
-    position: 'sticky',
-    top: 0,
-    height: '100%',
-    justifyContent: 'space-between',
-    overflow: 'auto',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px 20px',
+    textAlign: 'center',
   },
-  sidebarBrand: {
+  emptyIcon: {
+    marginBottom: '12px',
+    opacity: 0.8,
+  },
+  emptyTitle: {
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+  },
+  emptyText: {
+    fontSize: '14px',
+    color: theme.colors.textMuted,
+    marginTop: '4px',
+  },
+  emptyTableState: {
+    padding: '48px 24px',
+    textAlign: 'center',
+  },
+  priorityList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  priorityItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    marginBottom: '28px',
+    gap: '14px',
+    padding: '14px',
+    background: theme.colors.muted,
+    borderRadius: theme.radius.md,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
   },
-  logoBox: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: 'linear-gradient(135deg, #C1121F 0%, #8F0B16 100%)',
+  priorityRank: {
+    width: '28px',
+    height: '28px',
+    borderRadius: theme.radius.full,
+    background: theme.colors.primaryMuted,
+    color: theme.colors.primary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontWeight: 800,
-    fontSize: '18px',
-    color: '#FFFFFF',
-    boxShadow: '0 8px 20px rgba(193, 18, 31, 0.25)',
+    fontSize: '13px',
+    fontWeight: 600,
     flexShrink: 0,
   },
-  sidebarTitle: {
-    fontSize: '18px',
-    fontWeight: 800,
-    color: '#111827',
+  priorityInfo: {
+    flex: 1,
+    minWidth: 0,
   },
-  sidebarSubtitle: {
+  priorityName: {
+    fontSize: '14px',
+    fontWeight: 500,
+    color: theme.colors.textPrimary,
+  },
+  priorityCode: {
     fontSize: '12px',
-    color: '#6B7280',
+    color: theme.colors.textMuted,
   },
-  sidebarNav: {
+  priorityStats: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    alignItems: 'flex-end',
+    gap: '2px',
   },
-  sidebarNavItemActive: {
-    background: '#111827',
-    color: '#FFFFFF',
+  priorityOpen: {
+    fontSize: '12px',
+    fontWeight: 500,
+    color: theme.colors.warning,
   },
-  sidebarNavLink: {
-    textDecoration: 'none',
-    color: '#374151',
-    fontWeight: 700,
-    padding: '12px 14px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
+  priorityAssigned: {
+    fontSize: '11px',
+    color: theme.colors.textMuted,
   },
-  sidebarFooter: {
-    marginTop: 'auto',
-    fontSize: '13px',
-    color: '#6B7280',
-    padding: '12px 14px',
-  },
-  mobileTopRow: {
+  workerList: {
     display: 'flex',
-    gap: '10px',
-    alignItems: 'flex-start',
-  },
-  // backButton removed (mobile headers no longer show arrow icons)
-  mainArea: {
-    padding: '24px',
-    width: '100%',
-    maxWidth: '100%',
-    minWidth: 0,
-    boxSizing: 'border-box',
-    overflow: 'auto',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    height: '100%',
-  },
-  mainAreaMobile: {
-    padding: '18px 14px',
-    overflow: 'auto',
-    overscrollBehavior: 'contain',
-    WebkitOverflowScrolling: 'touch',
-    height: '100%',
-  },
-  brandWrap: {
-    minWidth: 0,
-  },
-  topBar: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '12px',
-    marginBottom: '20px',
-    flexWrap: 'wrap',
-  },
-  topActions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  brandRow: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '10px',
-  },
-  title: {
-    margin: 0,
-    fontSize: '36px',
-    fontWeight: 800,
-    color: '#111827',
-  },
-  titleMobile: {
-    fontSize: '28px',
-    lineHeight: 1.1,
-  },
-  subtitle: {
-    margin: '6px 0 0 0',
-    color: '#6B7280',
-    fontSize: '14px',
-  },
-  subtitleMobile: {
-    fontSize: '13px',
-  },
-  // secondaryButton removed (using shared Button component)
-  secondaryLinkButton: {
-    padding: '10px 14px',
-    fontSize: '13px',
-    borderRadius: '12px',
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    color: '#2F2F33',
-    cursor: 'pointer',
-    fontWeight: 700,
-    textDecoration: 'none',
-    display: 'inline-flex',
-    alignItems: 'center',
-    transition: 'all 0.2s ease',
-  },
-  statsGrid: {
-    display: 'grid',
+    flexDirection: 'column',
     gap: '14px',
-    marginBottom: '18px',
-    width: '100%',
-    minWidth: 0,
   },
-  kpiCard: {
-    background: '#FFFFFF',
-    border: '1px solid #E5E7EB',
-    borderRadius: '18px',
-    padding: '20px',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
-    textAlign: 'left',
-    minWidth: 0,
-    minHeight: '110px',
+  workerItem: {
     display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-  },
-  kpiLabel: {
-    color: '#6B7280',
-    fontSize: '14px',
-    marginBottom: '12px',
-    fontWeight: 600,
-  },
-  kpiValue: {
-    fontSize: '42px',
-    fontWeight: 800,
-    lineHeight: 1,
-    color: '#111827',
-  },
-  card: {
-    background: '#FFFFFF',
-    border: '1px solid #D7D7DB',
-    borderRadius: '20px',
-    padding: '18px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
-    width: '100%',
-    minWidth: 0,
-    boxSizing: 'border-box',
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '18px',
-    gap: '12px',
-    flexWrap: 'wrap',
+    gap: '14px',
+    cursor: 'pointer',
   },
-  cardTitle: {
-    fontSize: '20px',
-    fontWeight: 800,
-    marginBottom: '4px',
-    color: '#2F2F33',
+  workerName: {
+    fontSize: '14px',
+    fontWeight: 500,
+    color: theme.colors.textPrimary,
+    minWidth: '100px',
   },
-  cardSubtitle: {
-    fontSize: '13px',
-    color: '#6B6B72',
+  workerBarContainer: {
+    flex: 1,
   },
-  tableWrapper: {
+  workerBarBg: {
+    height: '6px',
+    background: theme.colors.border,
+    borderRadius: '3px',
+    overflow: 'hidden',
+  },
+  workerBarFill: {
+    height: '100%',
+    borderRadius: '3px',
+    transition: 'width 0.3s ease',
+  },
+  workerCount: {
+    fontSize: '12px',
+    minWidth: '60px',
+    textAlign: 'right',
+  },
+  tableContainer: {
     overflowX: 'auto',
-    borderRadius: '16px',
   },
   table: {
-    minWidth: '760px',
     width: '100%',
     borderCollapse: 'collapse',
   },
   th: {
     textAlign: 'left',
-    padding: '14px 12px',
-    borderBottom: '1px solid #E5E7EB',
-    color: '#6B6B72',
+    padding: '14px 20px',
     fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    whiteSpace: 'nowrap',
-    background: '#FAFAFA',
+    letterSpacing: '0.05em',
+    borderBottom: `1px solid ${theme.colors.border}`,
+    background: theme.colors.muted,
+  },
+  tr: {
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
   },
   td: {
-    padding: '14px 12px',
-    borderBottom: '1px solid #EFEFF1',
-    color: '#2F2F33',
+    padding: '16px 20px',
     fontSize: '14px',
-    verticalAlign: 'top',
-  },
-  tdStrong: {
-    padding: '14px 12px',
-    borderBottom: '1px solid #EFEFF1',
-    color: '#111827',
-    fontSize: '14px',
-    fontWeight: 800,
-    verticalAlign: 'top',
-  },
-  tdCode: {
-    padding: '14px 12px',
-    borderBottom: '1px solid #EFEFF1',
-    color: '#C1121F',
-    fontSize: '13px',
-    fontWeight: 800,
-    verticalAlign: 'top',
-  },
-  infoText: {
-    color: '#6B7280',
-    margin: 0,
-  },
-  kpiCardButton: {
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    border: 'none',
-    fontFamily: 'inherit',
-  },
-  ticketItem: {
-    background: '#F9FAFB',
-    border: '1px solid #E5E7EB',
-    borderRadius: '12px',
-    padding: '14px',
-  },
-  ticketItemHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    marginBottom: '8px',
-  },
-  ticketNumber: {
-    fontWeight: 700,
-    color: '#111827',
-    fontSize: '14px',
-  },
-  ticketProject: {
-    fontSize: '12px',
-    color: '#6B7280',
-    fontWeight: 600,
-  },
-  ticketDetail: {
-    fontSize: '13px',
-    color: '#4B5563',
-    marginBottom: '6px',
-    lineHeight: 1.4,
-  },
-  ticketMeta: {
-    fontSize: '11px',
-    color: '#9CA3AF',
-  },
-  badge: {
-    padding: '4px 8px',
-    borderRadius: '6px',
-    fontSize: '11px',
-    fontWeight: 600,
-    marginLeft: 'auto',
-    whiteSpace: 'nowrap',
-  },
-  projectItem: {
-    background: '#F9FAFB',
-    border: '1px solid #E5E7EB',
-    borderRadius: '12px',
-    padding: '14px',
-  },
-  projectItemHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '10px',
-    gap: '10px',
+    color: theme.colors.textPrimary,
+    borderBottom: `1px solid ${theme.colors.border}`,
+    verticalAlign: 'middle',
   },
   projectName: {
-    fontWeight: 700,
-    color: '#111827',
-    fontSize: '14px',
-    marginBottom: '4px',
+    fontWeight: 500,
   },
   projectCode: {
     fontSize: '12px',
-    color: '#6B7280',
+    color: theme.colors.textMuted,
+    background: theme.colors.muted,
+    padding: '4px 8px',
+    borderRadius: theme.radius.sm,
+  },
+  statBadge: {
     fontWeight: 600,
-  },
-  projectStats: {
-    fontSize: '13px',
-    color: '#4B5563',
-    whiteSpace: 'nowrap',
-  },
-  workerItem: {
-    background: '#F9FAFB',
-    border: '1px solid #E5E7EB',
-    borderRadius: '12px',
-    padding: '14px',
-  },
-  workerItemHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '10px',
-  },
-  workerName: {
-    fontWeight: 700,
-    color: '#111827',
-    fontSize: '14px',
-  },
-  workerTicketCount: {
-    fontSize: '13px',
-    color: '#4B5563',
-    fontWeight: 600,
-  },
-  smallButton: {
-    width: '100%',
-    padding: '8px 12px',
-    fontSize: '12px',
-    borderRadius: '8px',
-    background: '#111827',
-    border: 'none',
-    color: '#FFFFFF',
-    cursor: 'pointer',
-    fontWeight: 700,
-    transition: 'all 0.2s ease',
-  },
-  errorText: {
-    color: '#B91C3C',
-    margin: 0,
-    fontWeight: 600,
-  },
-  // New insight-focused styles
-  insightCard: {
-    background: '#F9FAFB',
-    border: '1px solid #E5E7EB',
-    borderRadius: '12px',
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  insightLabel: {
-    fontSize: '12px',
-    color: '#6B7280',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-  },
-  insightValue: {
-    fontSize: '32px',
-    fontWeight: 800,
-    color: '#111827',
-    lineHeight: 1,
-  },
-  insightDescription: {
-    fontSize: '12px',
-    color: '#4B5563',
-    lineHeight: 1.4,
-  },
-  emptyInsight: {
-    textAlign: 'center',
-    padding: '24px 12px',
-  },
-  emptyInsightTitle: {
-    fontSize: '16px',
-    fontWeight: 700,
-    color: '#111827',
-    marginBottom: '4px',
-  },
-  emptyInsightText: {
-    fontSize: '14px',
-    color: '#6B7280',
-  },
-  priorityProjectRow: {
-    display: 'grid',
-    gridTemplateColumns: '24px 1fr 120px 80px',
-    gap: '12px',
-    alignItems: 'center',
-    padding: '12px',
-    background: '#F9FAFB',
-    border: '1px solid #E5E7EB',
-    borderRadius: '12px',
-  },
-  priorityProjectRank: {
-    fontSize: '14px',
-    fontWeight: 800,
-    color: '#D11F45',
-    textAlign: 'center',
-  },
-  priorityProjectInfo: {
-    minWidth: 0,
-  },
-  priorityProjectName: {
-    fontSize: '14px',
-    fontWeight: 700,
-    color: '#111827',
-    marginBottom: '2px',
-  },
-  priorityProjectCode: {
-    fontSize: '12px',
-    color: '#6B7280',
-  },
-  priorityProjectBar: {
-    display: 'flex',
-    alignItems: 'center',
-  },
-  priorityProjectStats: {
-    display: 'flex',
-    gap: '6px',
-    fontSize: '12px',
-    fontWeight: 600,
-  },
-  priorityStatOpen: {
-    color: '#DC2626',
-  },
-  priorityStatAssigned: {
-    color: '#2563EB',
-  },
-  workerLoadRow: {
-    display: 'grid',
-    gridTemplateColumns: '140px 1fr 100px',
-    gap: '12px',
-    alignItems: 'center',
-  },
-  workerLoadName: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#111827',
-  },
-  workerLoadBar: {
-    display: 'flex',
-    alignItems: 'center',
-  },
-  workerLoadCount: {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#4B5563',
-    textAlign: 'right',
   },
 }
-
-

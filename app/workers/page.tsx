@@ -14,8 +14,10 @@ import {
   Button,
   StatusBadge,
   SearchInput,
+  Select,
   Drawer,
   EmptyState,
+  LoadingSpinner,
   theme
 } from '../components/ui'
 
@@ -44,18 +46,10 @@ type RawTicketWithProjects = {
   ticket_number: number
   status: string
   priority?: string | null
-  projects?: {
-    project_code?: string
-    name?: string
-  } | {
-    project_code?: string
-    name?: string
-  }[]
+  projects?: { project_code?: string; name?: string } | { project_code?: string; name?: string }[]
 }
 
-type ClientRow = {
-  id: string
-}
+type ClientRow = { id: string }
 
 type WorkerForm = {
   full_name: string
@@ -78,7 +72,6 @@ export default function WorkersPage() {
   const [clientId, setClientId] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
   const [isMobile, setIsMobile] = useState(false)
@@ -99,6 +92,10 @@ export default function WorkersPage() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
+  useEffect(() => {
+    initializePage()
+  }, [])
+
   async function loadClientId() {
     const { data, error } = await supabase
       .from('clients')
@@ -107,19 +104,14 @@ export default function WorkersPage() {
       .limit(1)
 
     if (error) throw error
-
     const firstClient = (data as ClientRow[] | null)?.[0]
-    if (!firstClient?.id) {
-      throw new Error('No client found in clients table')
-    }
-
+    if (!firstClient?.id) throw new Error('No client found')
     setClientId(firstClient.id)
     return firstClient.id
   }
 
   async function loadWorkers(nextClientId?: string) {
     const activeClientId = nextClientId || clientId
-
     if (!activeClientId) return
 
     const { data, error } = await supabase
@@ -129,31 +121,21 @@ export default function WorkersPage() {
       .order('created_at', { ascending: false })
 
     if (error) throw error
-
     setWorkers((data as WorkerRow[]) || [])
   }
 
   async function initializePage() {
     setLoading(true)
-    setError('')
     await asyncHandler(
       async () => {
         const fetchedClientId = await loadClientId()
         await loadWorkers(fetchedClientId)
         return true
       },
-      {
-        context: 'Failed to load workers',
-        showErrorToast: true,
-        onError: (err) => setError(err),
-      }
+      { context: 'Failed to load workers', showErrorToast: true }
     )
     setLoading(false)
   }
-
-  useEffect(() => {
-    initializePage()
-  }, [])
 
   function openCreateDrawer() {
     setEditingWorker(null)
@@ -180,132 +162,6 @@ export default function WorkersPage() {
     setForm(emptyForm)
   }
 
-  function updateForm<K extends keyof WorkerForm>(key: K, value: WorkerForm[K]) {
-    setForm((prev) => ({
-      ...prev,
-      [key]: value,
-    }))
-  }
-
-  function validateForm() {
-    const nameError = validateRequired(form.full_name, 'Full name')
-    if (nameError) return nameError.message
-
-    const phoneError = validatePhoneNumber(form.phone, 'Phone')
-    if (phoneError) return phoneError.message
-
-    if (form.email) {
-      const emailError = validateEmail(form.email, 'Email')
-      if (emailError) return emailError.message
-    }
-
-    if (!clientId) return 'Client ID not found'
-    return ''
-  }
-
-  async function saveWorker() {
-    const validationError = validateForm()
-    if (validationError) {
-      toast.error(validationError)
-      return
-    }
-
-    setSaving(true)
-    setError('')
-
-    await asyncHandler(
-      async () => {
-        const payload = {
-          full_name: form.full_name.trim(),
-          phone: form.phone.trim(),
-          email: form.email.trim() || null,
-          role: form.role.trim() || null,
-          is_active: form.is_active,
-          client_id: clientId,
-        }
-
-        if (editingWorker) {
-          const { error } = await supabase
-            .from('workers')
-            .update(payload)
-            .eq('id', editingWorker.id)
-
-          if (error) throw error
-          toast.success('Worker updated')
-        } else {
-          const { error } = await supabase
-            .from('workers')
-            .insert(payload)
-
-          if (error) throw error
-          toast.success('Worker created')
-        }
-
-        await loadWorkers()
-        closeDrawer()
-        return true
-      },
-      {
-        context: 'Failed to save worker',
-        showErrorToast: true,
-      }
-    )
-
-    setSaving(false)
-  }
-
-  async function toggleWorkerStatus(worker: WorkerRow) {
-    await asyncHandler(
-      async () => {
-        const { error } = await supabase
-          .from('workers')
-          .update({ is_active: !worker.is_active })
-          .eq('id', worker.id)
-
-        if (error) throw error
-
-        toast.success(worker.is_active ? 'Worker deactivated' : 'Worker activated')
-        await loadWorkers()
-        return true
-      },
-      {
-        context: 'Failed to update worker status',
-        showErrorToast: true,
-      }
-    )
-  }
-
-  async function deleteWorker(worker: WorkerRow) {
-    const confirmed = window.confirm(
-      `Delete ${worker.full_name}?\n\nThis is a hard delete. If this worker is linked to tickets, deletion may fail or break relations.`
-    )
-
-    if (!confirmed) return
-
-    await asyncHandler(
-      async () => {
-        const { error } = await supabase
-          .from('workers')
-          .delete()
-          .eq('id', worker.id)
-
-        if (error) throw error
-
-        toast.success('Worker deleted')
-        await loadWorkers()
-
-        if (editingWorker?.id === worker.id) {
-          closeDrawer()
-        }
-        return true
-      },
-      {
-        context: 'Failed to delete worker',
-        showErrorToast: true,
-      }
-    )
-  }
-
   async function openDetailDrawer(worker: WorkerRow) {
     setSelectedWorker(worker)
     setDetailDrawerOpen(true)
@@ -325,15 +181,9 @@ export default function WorkersPage() {
         const { data, error } = await supabase
           .from('tickets')
           .select(`
-          id,
-          ticket_number,
-          status,
-          priority,
-          projects (
-            project_code,
-            name
-          )
-        `)
+            id, ticket_number, status, priority,
+            projects (project_code, name)
+          `)
           .eq('assigned_worker_id', workerId)
           .order('created_at', { ascending: false })
           .limit(10)
@@ -367,45 +217,130 @@ export default function WorkersPage() {
         setWorkerTickets(mapped)
         return true
       },
-      {
-        context: 'Failed to load worker tickets',
-        showErrorToast: false,
-      }
+      { context: 'Failed to load worker tickets', showErrorToast: false }
     )
     setLoadingWorkerTickets(false)
   }
 
-  function viewWorkerTickets(workerId: string) {
-    window.location.href = `/tickets?worker=${encodeURIComponent(workerId)}`
+  function updateForm<K extends keyof WorkerForm>(key: K, value: WorkerForm[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function validateForm() {
+    const nameError = validateRequired(form.full_name, 'Full name')
+    if (nameError) return nameError.message
+    const phoneError = validatePhoneNumber(form.phone, 'Phone')
+    if (phoneError) return phoneError.message
+    if (form.email) {
+      const emailError = validateEmail(form.email, 'Email')
+      if (emailError) return emailError.message
+    }
+    if (!clientId) return 'Client ID not found'
+    return ''
+  }
+
+  async function saveWorker() {
+    const validationError = validateForm()
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+
+    setSaving(true)
+    await asyncHandler(
+      async () => {
+        const payload = {
+          full_name: form.full_name.trim(),
+          phone: form.phone.trim(),
+          email: form.email.trim() || null,
+          role: form.role.trim() || null,
+          is_active: form.is_active,
+          client_id: clientId,
+        }
+
+        if (editingWorker) {
+          const { error } = await supabase
+            .from('workers')
+            .update(payload)
+            .eq('id', editingWorker.id)
+          if (error) throw error
+          toast.success('Worker updated')
+        } else {
+          const { error } = await supabase.from('workers').insert(payload)
+          if (error) throw error
+          toast.success('Worker created')
+        }
+
+        await loadWorkers()
+        closeDrawer()
+        return true
+      },
+      { context: 'Failed to save worker', showErrorToast: true }
+    )
+    setSaving(false)
+  }
+
+  async function toggleWorkerStatus(worker: WorkerRow) {
+    await asyncHandler(
+      async () => {
+        const { error } = await supabase
+          .from('workers')
+          .update({ is_active: !worker.is_active })
+          .eq('id', worker.id)
+
+        if (error) throw error
+        toast.success(worker.is_active ? 'Worker deactivated' : 'Worker activated')
+        await loadWorkers()
+        return true
+      },
+      { context: 'Failed to update worker status', showErrorToast: true }
+    )
+  }
+
+  async function deleteWorker(worker: WorkerRow) {
+    const confirmed = window.confirm(`Delete ${worker.full_name}? This action cannot be undone.`)
+    if (!confirmed) return
+
+    await asyncHandler(
+      async () => {
+        const { error } = await supabase.from('workers').delete().eq('id', worker.id)
+        if (error) throw error
+        toast.success('Worker deleted')
+        await loadWorkers()
+        if (editingWorker?.id === worker.id) closeDrawer()
+        return true
+      },
+      { context: 'Failed to delete worker', showErrorToast: true }
+    )
   }
 
   const stats = useMemo(() => {
     const total = workers.length
     const active = workers.filter((w) => w.is_active).length
     const inactive = workers.filter((w) => !w.is_active).length
-
     return { total, active, inactive }
   }, [workers])
 
   const filteredWorkers = useMemo(() => {
     return workers.filter((worker) => {
       const q = searchTerm.trim().toLowerCase()
-
-      const matchesSearch =
-        !q ||
+      const matchesSearch = !q ||
         worker.full_name.toLowerCase().includes(q) ||
         worker.phone.toLowerCase().includes(q) ||
         (worker.email || '').toLowerCase().includes(q) ||
         (worker.role || '').toLowerCase().includes(q)
 
-      const matchesStatus =
-        statusFilter === 'ALL' ||
+      const matchesStatus = statusFilter === 'ALL' ||
         (statusFilter === 'ACTIVE' && worker.is_active) ||
         (statusFilter === 'INACTIVE' && !worker.is_active)
 
       return matchesSearch && matchesStatus
     })
   }, [workers, searchTerm, statusFilter])
+
+  function getInitials(name: string) {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+  }
 
   return (
     <AppShell isMobile={isMobile}>
@@ -423,13 +358,11 @@ export default function WorkersPage() {
         {!isMobile && (
           <PageHeader
             title="Workers"
-            subtitle="Manage your team directly from the dashboard"
+            subtitle="Manage your maintenance team"
             actions={
-              <>
-                <Button variant="primary" onClick={openCreateDrawer}>
-                  + New Worker
-                </Button>
-              </>
+              <Button variant="primary" onClick={openCreateDrawer}>
+                New Worker
+              </Button>
             }
           />
         )}
@@ -439,164 +372,95 @@ export default function WorkersPage() {
           ...styles.kpiGrid,
           gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)',
         }}>
-          <KpiCard label="Total Workers" value={stats.total} />
-          <KpiCard label="Active" value={stats.active} />
+          <KpiCard label="Total Workers" value={stats.total} accent="primary" />
+          <KpiCard label="Active" value={stats.active} accent="success" />
           <KpiCard label="Inactive" value={stats.inactive} />
         </div>
 
-        {/* Workers Card */}
-        <Card
-          title="Team Members"
-          subtitle="Search, edit, activate or remove workers"
-          noPadding
-        >
-          {/* Filters */}
-          <div style={styles.filtersRow}>
+        {/* Filters + Grid */}
+        <Card noPadding>
+          <div style={{
+            ...styles.filtersRow,
+            flexDirection: isMobile ? 'column' : 'row',
+          }}>
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder="Search by name, phone, email, role..."
-              style={{ maxWidth: isMobile ? '100%' : '320px' }}
+              placeholder="Search workers..."
+              style={{ flex: 1, maxWidth: isMobile ? '100%' : '320px' }}
             />
-            <select
+            <Select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
-              style={styles.filterSelect}
-            >
-              <option value="ALL">All Status</option>
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-            </select>
+              onChange={(value) => setStatusFilter(value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
+              options={[
+                { label: 'All Status', value: 'ALL' },
+                { label: 'Active', value: 'ACTIVE' },
+                { label: 'Inactive', value: 'INACTIVE' },
+              ]}
+              style={{ minWidth: '140px' }}
+            />
           </div>
 
-          {loading && (
-            <div style={styles.loadingState}>
-              <div style={styles.loadingSpinner} />
-              <span>Loading workers...</span>
+          {loading ? (
+            <div style={styles.loadingContainer}>
+              <LoadingSpinner />
             </div>
-          )}
-
-          {error && (
-            <div style={styles.errorState}>
-              <span>{error}</span>
-              <Button variant="secondary" size="sm" onClick={initializePage}>
-                Retry
-              </Button>
-            </div>
-          )}
-
-          {!loading && !error && filteredWorkers.length === 0 && (
+          ) : filteredWorkers.length === 0 ? (
             <EmptyState
               title="No workers found"
-              description="Try adjusting your filters or add a new worker."
+              description="Try adjusting your filters or add a new team member."
               action={
                 <Button variant="primary" onClick={openCreateDrawer}>
                   Add Worker
                 </Button>
               }
             />
-          )}
-
-          {!loading && !error && filteredWorkers.length > 0 && (
-            <div
-              style={{
-                ...styles.workerGrid,
-                gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
-                padding: isMobile ? '12px' : '20px',
-                gap: isMobile ? '12px' : '16px',
-              }}
-            >
+          ) : (
+            <div style={{
+              ...styles.workerGrid,
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
+            }}>
               {filteredWorkers.map((worker) => (
                 <div
                   key={worker.id}
                   onClick={() => openDetailDrawer(worker)}
-                  style={{
-                    ...styles.workerCard,
-                    padding: isMobile ? '16px' : '20px',
-                  }}
+                  style={styles.workerCard}
+                  data-ui="card"
                 >
-                  <div
-                    style={{
-                      ...styles.workerCardHeader,
-                      gap: isMobile ? '10px' : '12px',
-                    }}
-                  >
-                    <div
-                      style={{
-                        ...styles.workerAvatar,
-                        width: isMobile ? '44px' : '48px',
-                        height: isMobile ? '44px' : '48px',
-                        fontSize: isMobile ? '14px' : '16px',
-                      }}
-                    >
-                      {worker.full_name.charAt(0).toUpperCase()}
+                  <div style={styles.workerHeader}>
+                    <div style={styles.avatar}>
+                      {getInitials(worker.full_name)}
                     </div>
                     <div style={styles.workerInfo}>
-                      <div
-                        style={{
-                          ...styles.workerName,
-                          fontSize: isMobile ? '14px' : '15px',
-                        }}
-                      >
-                        {worker.full_name}
-                      </div>
-                      <div
-                        style={{
-                          ...styles.workerRole,
-                          fontSize: isMobile ? '12px' : '13px',
-                        }}
-                      >
-                        {worker.role || 'No role set'}
-                      </div>
+                      <div style={styles.workerName}>{worker.full_name}</div>
+                      <div style={styles.workerRole}>{worker.role || 'No role set'}</div>
                     </div>
                     <StatusBadge status={worker.is_active ? 'ACTIVE' : 'INACTIVE'} size="sm" />
                   </div>
 
-                  <div
-                    style={{
-                      ...styles.workerMeta,
-                      gap: isMobile ? '8px' : '10px',
-                    }}
-                  >
-                    <div style={styles.workerMetaItem}>
+                  <div style={styles.workerMeta}>
+                    <div style={styles.metaItem}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                       </svg>
-                      <span style={{ fontSize: isMobile ? '12px' : '13px' }}>{worker.phone}</span>
+                      <span style={styles.metaText}>{worker.phone}</span>
                     </div>
                     {worker.email && (
-                      <div style={styles.workerMetaItem}>
+                      <div style={styles.metaItem}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <rect width="20" height="16" x="2" y="4" rx="2" />
                           <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
                         </svg>
-                        <span style={{ fontSize: isMobile ? '12px' : '13px' }}>{worker.email}</span>
+                        <span style={styles.metaText}>{worker.email}</span>
                       </div>
                     )}
                   </div>
 
-                  <div
-                    style={{
-                      ...styles.workerActions,
-                      gap: isMobile ? '6px' : '8px',
-                      flexDirection: isMobile ? 'column' : 'row',
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Button
-                      variant="secondary"
-                      size={isMobile ? 'md' : 'sm'}
-                      onClick={() => openEditDrawer(worker)}
-                      style={{ flex: isMobile ? 1 : 'auto' }}
-                    >
+                  <div style={styles.workerActions} onClick={(e) => e.stopPropagation()}>
+                    <Button variant="secondary" size="sm" onClick={() => openEditDrawer(worker)}>
                       Edit
                     </Button>
-                    <Button
-                      variant="secondary"
-                      size={isMobile ? 'md' : 'sm'}
-                      onClick={() => toggleWorkerStatus(worker)}
-                      style={{ flex: isMobile ? 1 : 'auto' }}
-                    >
+                    <Button variant="secondary" size="sm" onClick={() => toggleWorkerStatus(worker)}>
                       {worker.is_active ? 'Deactivate' : 'Activate'}
                     </Button>
                   </div>
@@ -611,7 +475,7 @@ export default function WorkersPage() {
       <Drawer
         open={drawerOpen}
         onClose={closeDrawer}
-        title={editingWorker ? 'Edit Worker' : 'Add Worker'}
+        title={editingWorker ? 'Edit Worker' : 'New Worker'}
         subtitle={editingWorker ? 'Update worker details' : 'Add a new team member'}
         isMobile={isMobile}
       >
@@ -622,7 +486,7 @@ export default function WorkersPage() {
               value={form.full_name}
               onChange={(e) => updateForm('full_name', e.target.value)}
               placeholder="Enter full name"
-              style={styles.formInput}
+              style={styles.input}
             />
           </div>
 
@@ -633,7 +497,7 @@ export default function WorkersPage() {
               value={form.phone}
               onChange={(e) => updateForm('phone', e.target.value)}
               placeholder="Enter phone number"
-              style={styles.formInput}
+              style={styles.input}
             />
           </div>
 
@@ -644,7 +508,7 @@ export default function WorkersPage() {
               value={form.email}
               onChange={(e) => updateForm('email', e.target.value)}
               placeholder="Enter email address"
-              style={styles.formInput}
+              style={styles.input}
             />
           </div>
 
@@ -654,7 +518,7 @@ export default function WorkersPage() {
               value={form.role}
               onChange={(e) => updateForm('role', e.target.value)}
               placeholder="e.g. Technician, Plumber, Electrician"
-              style={styles.formInput}
+              style={styles.input}
             />
           </div>
 
@@ -698,100 +562,76 @@ export default function WorkersPage() {
         open={detailDrawerOpen}
         onClose={closeDetailDrawer}
         title={selectedWorker?.full_name || ''}
-        subtitle={selectedWorker?.role || 'No role set'}
+        subtitle={selectedWorker?.role || 'Team Member'}
         isMobile={isMobile}
       >
         {selectedWorker && (
           <div style={styles.drawerContent}>
             <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>Status</div>
-              <StatusBadge status={selectedWorker.is_active ? 'ACTIVE' : 'INACTIVE'} />
-            </div>
-
-            <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>Phone</div>
-              <div style={styles.detailValue}>{selectedWorker.phone}</div>
-            </div>
-
-            <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>Email</div>
-              <div style={styles.detailValue}>{selectedWorker.email || 'Not set'}</div>
-            </div>
-
-            <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>Created</div>
-              <div style={styles.detailValue}>
-                {new Date(selectedWorker.created_at).toLocaleString()}
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Status</span>
+                <StatusBadge status={selectedWorker.is_active ? 'ACTIVE' : 'INACTIVE'} />
+              </div>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Phone</span>
+                <span style={styles.detailValue}>{selectedWorker.phone}</span>
+              </div>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Email</span>
+                <span style={styles.detailValue}>{selectedWorker.email || '-'}</span>
               </div>
             </div>
 
-            <div style={styles.detailSection}>
-              <div style={styles.detailLabel}>Assigned Tickets</div>
+            <div style={styles.ticketsSection}>
+              <div style={styles.ticketsSectionHeader}>
+                <h4 style={styles.ticketsSectionTitle}>Assigned Tickets</h4>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => window.location.href = `/tickets?worker=${encodeURIComponent(selectedWorker.id)}`}
+                >
+                  View All
+                </Button>
+              </div>
+
               {loadingWorkerTickets ? (
-                <div style={styles.ticketLoading}>Loading...</div>
+                <div style={styles.loadingSmall}>
+                  <LoadingSpinner size="sm" />
+                </div>
               ) : workerTickets.length === 0 ? (
-                <div style={styles.noTickets}>No tickets assigned</div>
+                <p style={styles.emptyText}>No assigned tickets</p>
               ) : (
                 <div style={styles.ticketList}>
-                  {workerTickets.map((ticket) => (
+                  {workerTickets.slice(0, 5).map((ticket) => (
                     <div key={ticket.id} style={styles.ticketItem}>
-                      <div style={styles.ticketItemMain}>
+                      <div>
                         <span style={styles.ticketNumber}>#{ticket.ticket_number}</span>
                         <span style={styles.ticketProject}>{ticket.project_code}</span>
                       </div>
                       <StatusBadge status={ticket.status} size="sm" />
                     </div>
                   ))}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => viewWorkerTickets(selectedWorker.id)}
-                  >
-                    View all assigned tickets
-                  </Button>
                 </div>
               )}
             </div>
 
             <div style={styles.drawerActions}>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  closeDetailDrawer()
-                  openEditDrawer(selectedWorker)
-                }}
-                style={{ flex: 1 }}
-              >
+              <Button variant="secondary" onClick={() => openEditDrawer(selectedWorker)}>
                 Edit Worker
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => viewWorkerTickets(selectedWorker.id)}
-                style={{ flex: 1 }}
-              >
-                View Tickets
               </Button>
             </div>
           </div>
         )}
       </Drawer>
-
-      {/* Mobile Bottom Actions */}
-      {isMobile && (
-        <div style={styles.mobileBottomActions}>
-          <Button variant="primary" onClick={openCreateDrawer} style={{ flex: 1 }}>
-            Add Worker
-          </Button>
-        </div>
-      )}
     </AppShell>
   )
 }
 
 const styles: Record<string, CSSProperties> = {
   content: {
-    padding: '24px',
-    paddingBottom: '100px',
+    padding: '32px 40px',
+    maxWidth: '1400px',
+    margin: '0 auto',
   },
   kpiGrid: {
     display: 'grid',
@@ -800,80 +640,47 @@ const styles: Record<string, CSSProperties> = {
   },
   filtersRow: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: '12px',
-    padding: '16px 20px',
-    borderBottom: `1px solid ${theme.colors.border}`,
     alignItems: 'center',
-  },
-  filterSelect: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    cursor: 'pointer',
-    minWidth: '140px',
-  },
-  loadingState: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '12px',
-    padding: '48px 20px',
-    color: theme.colors.textMuted,
-    fontSize: '14px',
-  },
-  loadingSpinner: {
-    width: '20px',
-    height: '20px',
-    border: `2px solid ${theme.colors.border}`,
-    borderTopColor: theme.colors.primary,
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  errorState: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: '16px',
-    padding: '48px 20px',
-    color: theme.colors.error,
-    fontSize: '14px',
+    padding: '20px 24px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  loadingContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '64px 0',
   },
   workerGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-    gap: '16px',
-    padding: '20px',
+    gap: '20px',
+    padding: '24px',
   },
   workerCard: {
-    background: theme.colors.surfaceElevated,
+    background: theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.lg,
-    padding: '20px',
+    padding: '24px',
     cursor: 'pointer',
-    transition: 'all 0.15s ease',
+    transition: 'all 0.2s ease',
   },
-  workerCardHeader: {
+  workerHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: '14px',
     marginBottom: '16px',
   },
-  workerAvatar: {
-    width: '44px',
-    height: '44px',
-    borderRadius: '50%',
-    background: `linear-gradient(135deg, ${theme.colors.primary} 0%, #d97706 100%)`,
+  avatar: {
+    width: '48px',
+    height: '48px',
+    borderRadius: theme.radius.full,
+    background: theme.colors.primaryMuted,
+    color: theme.colors.primary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: theme.colors.textInverse,
+    fontSize: '16px',
     fontWeight: 600,
-    fontSize: '18px',
     flexShrink: 0,
   },
   workerInfo: {
@@ -884,33 +691,30 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '16px',
     fontWeight: 600,
     color: theme.colors.textPrimary,
-    marginBottom: '2px',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
   },
   workerRole: {
     fontSize: '13px',
     color: theme.colors.textMuted,
+    marginTop: '2px',
   },
   workerMeta: {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
-    marginBottom: '16px',
+    marginBottom: '20px',
   },
-  workerMetaItem: {
+  metaItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    fontSize: '13px',
+  },
+  metaText: {
+    fontSize: '14px',
     color: theme.colors.textSecondary,
   },
   workerActions: {
     display: 'flex',
     gap: '8px',
-    paddingTop: '16px',
-    borderTop: `1px solid ${theme.colors.border}`,
   },
   drawerContent: {
     display: 'flex',
@@ -920,29 +724,26 @@ const styles: Record<string, CSSProperties> = {
   formGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    gap: '8px',
   },
   formLabel: {
     fontSize: '13px',
-    fontWeight: 500,
+    fontWeight: 600,
     color: theme.colors.textSecondary,
   },
-  formInput: {
-    background: theme.colors.surfaceElevated,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
+  input: {
     padding: '12px 14px',
-    fontSize: '16px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surface,
+    fontSize: '15px',
     color: theme.colors.textPrimary,
-    outline: 'none',
-    width: '100%',
-    boxSizing: 'border-box',
   },
   checkboxLabel: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    fontSize: '14px',
+    gap: '10px',
+    fontSize: '15px',
     color: theme.colors.textPrimary,
     cursor: 'pointer',
   },
@@ -953,40 +754,63 @@ const styles: Record<string, CSSProperties> = {
   },
   drawerActions: {
     display: 'flex',
-    gap: '10px',
-    paddingTop: '12px',
+    gap: '12px',
+    justifyContent: 'flex-end',
+    paddingTop: '16px',
     borderTop: `1px solid ${theme.colors.border}`,
+    marginTop: '8px',
   },
   dangerZone: {
     paddingTop: '20px',
     borderTop: `1px solid ${theme.colors.border}`,
-    marginTop: '8px',
+    marginTop: '12px',
   },
   detailSection: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '14px',
+    padding: '16px',
+    background: theme.colors.muted,
+    borderRadius: theme.radius.md,
+  },
+  detailRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   detailLabel: {
-    fontSize: '12px',
-    fontWeight: 600,
+    fontSize: '13px',
     color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
   },
   detailValue: {
     fontSize: '14px',
     color: theme.colors.textPrimary,
   },
-  ticketLoading: {
-    fontSize: '13px',
-    color: theme.colors.textMuted,
-    padding: '12px 0',
+  ticketsSection: {
+    marginTop: '8px',
   },
-  noTickets: {
-    fontSize: '13px',
+  ticketsSectionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '12px',
+  },
+  ticketsSectionTitle: {
+    fontSize: '15px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+    margin: 0,
+  },
+  loadingSmall: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '24px 0',
+  },
+  emptyText: {
+    textAlign: 'center',
     color: theme.colors.textMuted,
-    padding: '12px 0',
+    fontSize: '14px',
+    padding: '24px 0',
   },
   ticketList: {
     display: 'flex',
@@ -995,37 +819,20 @@ const styles: Record<string, CSSProperties> = {
   },
   ticketItem: {
     display: 'flex',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '10px 12px',
-    background: theme.colors.surfaceActive,
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
-  },
-  ticketItemMain: {
-    display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    padding: '12px',
+    background: theme.colors.muted,
+    borderRadius: theme.radius.sm,
   },
   ticketNumber: {
-    fontSize: '13px',
+    fontSize: '14px',
     fontWeight: 500,
     color: theme.colors.textPrimary,
   },
   ticketProject: {
     fontSize: '12px',
-    color: theme.colors.primary,
-  },
-  mobileBottomActions: {
-    position: 'fixed',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: '16px 20px',
-    paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
-    background: theme.colors.surface,
-    borderTop: `1px solid ${theme.colors.border}`,
-    display: 'flex',
-    gap: '10px',
+    color: theme.colors.textMuted,
+    marginLeft: '8px',
   },
 }

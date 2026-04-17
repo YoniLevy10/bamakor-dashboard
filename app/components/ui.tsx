@@ -5,58 +5,58 @@ import { usePathname } from 'next/navigation'
 import { useState, type ReactNode, type CSSProperties } from 'react'
 
 // ============================================================================
-// DESIGN TOKENS - Modern Premium 2026 Design System
+// DESIGN TOKENS - Apple-Inspired Premium Design System
 // ============================================================================
 
 export const theme = {
   colors: {
-    // Base - Figma-aligned neutral surfaces
-    background: '#F5F7FB',
+    // Base - Near-white background
+    background: '#F9F9FB',
     surface: '#FFFFFF',
-    surfaceElevated: '#F8FAFC',
-    surfaceHover: '#F1F5F9',
-    surfaceActive: '#E2E8F0',
-    muted: '#EEF2F7',
+    surfaceElevated: '#FFFFFF',
+    surfaceHover: '#F5F5F7',
+    surfaceActive: '#EEEEEF',
+    muted: '#F5F5F7',
     
-    // Borders - Soft and clean
-    border: '#DCE3EC',
-    borderSubtle: '#E7EDF4',
-    borderStrong: '#B9C5D5',
+    // Borders - Subtle
+    border: '#E8E8ED',
+    borderSubtle: '#F0F0F2',
+    borderStrong: '#D1D1D6',
     
-    // Text
-    textPrimary: '#111827',
-    textSecondary: '#334155',
-    textMuted: '#64748B',
+    // Text - Strong hierarchy
+    textPrimary: '#1A1A2E',
+    textSecondary: '#3C3C43',
+    textMuted: '#86868B',
     textInverse: '#FFFFFF',
     
-    // Primary - Figma reference brand red
-    primary: '#D11F45',
-    primaryHover: '#B91C3C',
-    primaryActive: '#981B33',
-    primaryMuted: 'rgba(209, 31, 69, 0.09)',
-    primarySubtle: 'rgba(209, 31, 69, 0.2)',
-    primaryText: '#D11F45',
+    // Primary - Deep blue accent
+    primary: '#0066FF',
+    primaryHover: '#0055DD',
+    primaryActive: '#0044BB',
+    primaryMuted: 'rgba(0, 102, 255, 0.08)',
+    primarySubtle: 'rgba(0, 102, 255, 0.12)',
+    primaryText: '#0066FF',
     
-    // Status Colors - Modern, accessible palette
-    success: '#10B981',
-    successMuted: '#ECFDF5',
-    warning: '#F59E0B',
-    warningMuted: '#FFFBEB',
-    error: '#EF4444',
-    errorMuted: '#FEE2E2',
-    info: '#3B82F6',
-    infoMuted: '#EFF6FF',
+    // Status Colors
+    success: '#34C759',
+    successMuted: '#E8F9ED',
+    warning: '#FF9500',
+    warningMuted: '#FFF4E5',
+    error: '#FF3B30',
+    errorMuted: '#FFEBE9',
+    info: '#0066FF',
+    infoMuted: '#E5F0FF',
     
-    // Additional colors for modern design
-    overlay: 'rgba(15, 23, 42, 0.38)',
-    overlayLight: 'rgba(15, 23, 42, 0.2)',
+    // Overlay
+    overlay: 'rgba(0, 0, 0, 0.4)',
+    overlayLight: 'rgba(0, 0, 0, 0.2)',
   },
   radius: {
     xs: '6px',
-    sm: '10px',
+    sm: '8px',
     md: '12px',
-    lg: '14px',
-    xl: '16px',
+    lg: '16px',
+    xl: '20px',
     full: '9999px',
   },
   spacing: {
@@ -72,28 +72,15 @@ export const theme = {
     fontSize: {
       xs: '12px',
       sm: '13px',
-      base: '14px',
-      lg: '16px',
-      xl: '18px',
-      '2xl': '20px',
-      '3xl': '24px',
-      '4xl': '28px',
-      '5xl': '32px',
-      '6xl': '36px',
-    },
-    lineHeight: {
-      tight: 1.2,
-      normal: 1.5,
-      relaxed: 1.75,
-      loose: 2,
-    },
-    letterSpacing: {
-      tight: '-0.01em',
-      normal: '0em',
-      wide: '0.03em',
+      base: '15px',
+      lg: '17px',
+      xl: '20px',
+      '2xl': '24px',
+      '3xl': '28px',
+      '4xl': '34px',
+      '5xl': '40px',
     },
     fontWeight: {
-      light: 300,
       normal: 400,
       medium: 500,
       semibold: 600,
@@ -102,19 +89,17 @@ export const theme = {
   },
   shadows: {
     none: 'none',
-    xs: '0 1px 2px rgba(15, 23, 42, 0.03)',
-    sm: '0 1px 2px rgba(15, 23, 42, 0.04)',
-    md: '0 3px 10px rgba(15, 23, 42, 0.08)',
-    lg: '0 12px 28px rgba(15, 23, 42, 0.14)',
-    xl: '0 20px 44px rgba(15, 23, 42, 0.18)',
-    card: '0 1px 2px rgba(15, 23, 42, 0.03)',
-    hover: '0 6px 18px rgba(15, 23, 42, 0.1)',
-    focus: '0 0 0 3px rgba(209, 31, 69, 0.12)',
+    xs: '0 1px 2px rgba(0, 0, 0, 0.04)',
+    sm: '0 2px 8px rgba(0, 0, 0, 0.04)',
+    md: '0 4px 12px rgba(0, 0, 0, 0.06)',
+    lg: '0 8px 30px rgba(0, 0, 0, 0.08)',
+    xl: '0 20px 50px rgba(0, 0, 0, 0.12)',
+    focus: '0 0 0 4px rgba(0, 102, 255, 0.15)',
   },
 }
 
 // ============================================================================
-// SIDEBAR NAVIGATION
+// NAV ICONS
 // ============================================================================
 
 const navItems = [
@@ -131,15 +116,15 @@ function NavIcon({ type, active }: { type: string; active?: boolean }) {
   
   const icons: Record<string, ReactNode> = {
     grid: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="3" width="7" height="7" rx="1" />
-        <rect x="3" y="14" width="7" height="7" rx="1" />
-        <rect x="14" y="14" width="7" height="7" rx="1" />
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="2" />
+        <rect x="14" y="3" width="7" height="7" rx="2" />
+        <rect x="3" y="14" width="7" height="7" rx="2" />
+        <rect x="14" y="14" width="7" height="7" rx="2" />
       </svg>
     ),
     ticket: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
         <path d="M13 5v2" />
         <path d="M13 17v2" />
@@ -147,12 +132,12 @@ function NavIcon({ type, active }: { type: string; active?: boolean }) {
       </svg>
     ),
     folder: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
       </svg>
     ),
     users: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
         <circle cx="9" cy="7" r="4" />
         <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
@@ -160,7 +145,7 @@ function NavIcon({ type, active }: { type: string; active?: boolean }) {
       </svg>
     ),
     qr: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <rect width="5" height="5" x="3" y="3" rx="1" />
         <rect width="5" height="5" x="16" y="3" rx="1" />
         <rect width="5" height="5" x="3" y="16" rx="1" />
@@ -176,7 +161,7 @@ function NavIcon({ type, active }: { type: string; active?: boolean }) {
       </svg>
     ),
     chart: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 3v18h18" />
         <path d="m19 9-5 5-4-4-3 3" />
       </svg>
@@ -186,6 +171,10 @@ function NavIcon({ type, active }: { type: string; active?: boolean }) {
   return <>{icons[type] || null}</>
 }
 
+// ============================================================================
+// SIDEBAR - Slim, elegant, collapsible
+// ============================================================================
+
 export function Sidebar() {
   const pathname = usePathname()
   
@@ -193,9 +182,9 @@ export function Sidebar() {
     <aside style={sidebarStyles.container}>
       <div style={sidebarStyles.brand}>
         <div style={sidebarStyles.logoBox}>B</div>
-        <div>
+        <div style={sidebarStyles.brandText}>
           <div style={sidebarStyles.title}>Bamakor</div>
-          <div style={sidebarStyles.subtitle}>Maintenance</div>
+          <div style={sidebarStyles.subtitle}>Property Management</div>
         </div>
       </div>
       
@@ -212,14 +201,18 @@ export function Sidebar() {
               }}
             >
               <NavIcon type={item.icon} active={isActive} />
-              <span>{item.label}</span>
+              <span style={isActive ? { color: theme.colors.primary } : {}}>{item.label}</span>
             </Link>
           )
         })}
       </nav>
       
       <div style={sidebarStyles.footer}>
-        <div style={sidebarStyles.footerText}>Bamakor v2.0</div>
+        <div style={sidebarStyles.footerAvatar}>YL</div>
+        <div style={sidebarStyles.footerInfo}>
+          <div style={sidebarStyles.footerName}>Yoni Levy</div>
+          <div style={sidebarStyles.footerRole}>Administrator</div>
+        </div>
       </div>
     </aside>
   )
@@ -227,15 +220,17 @@ export function Sidebar() {
 
 const sidebarStyles: Record<string, CSSProperties> = {
   container: {
-    background: theme.colors.surfaceElevated,
+    width: '240px',
+    background: theme.colors.surface,
     borderRight: `1px solid ${theme.colors.border}`,
-    padding: '24px 16px',
-    position: 'sticky',
+    padding: '24px 12px',
+    position: 'fixed',
     top: 0,
+    left: 0,
     height: '100vh',
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden',
+    zIndex: 100,
   },
   brand: {
     display: 'flex',
@@ -245,66 +240,162 @@ const sidebarStyles: Record<string, CSSProperties> = {
     marginBottom: '32px',
   },
   logoBox: {
-    width: '48px',
-    height: '48px',
-    borderRadius: theme.radius.lg,
+    width: '40px',
+    height: '40px',
+    borderRadius: theme.radius.md,
     background: theme.colors.primary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: theme.colors.textInverse,
     fontWeight: 700,
-    fontSize: '20px',
+    fontSize: '18px',
     flexShrink: 0,
-    boxShadow: theme.shadows.sm,
+  },
+  brandText: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
-    fontSize: '16px',
+    fontSize: '17px',
     fontWeight: 700,
     color: theme.colors.textPrimary,
-    letterSpacing: theme.typography.letterSpacing.tight,
+    letterSpacing: '-0.02em',
   },
   subtitle: {
     fontSize: '12px',
     color: theme.colors.textMuted,
-    marginTop: '2px',
-    fontWeight: 500,
+    marginTop: '1px',
   },
   nav: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    gap: '4px',
     flex: 1,
   },
   navLink: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    padding: '12px 14px',
+    padding: '10px 12px',
     borderRadius: theme.radius.md,
     color: theme.colors.textSecondary,
     textDecoration: 'none',
-    fontSize: '14px',
-    fontWeight: 600,
-    transition: 'all 0.16s ease-out',
-    border: `1px solid transparent`,
-    cursor: 'pointer',
+    fontSize: '15px',
+    fontWeight: 500,
+    transition: 'all 0.15s ease',
   },
   navLinkActive: {
     background: theme.colors.primaryMuted,
     color: theme.colors.primary,
-    borderColor: theme.colors.primarySubtle,
   },
   footer: {
-    padding: '16px 8px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '16px 12px',
     borderTop: `1px solid ${theme.colors.border}`,
     marginTop: 'auto',
   },
-  footerText: {
+  footerAvatar: {
+    width: '36px',
+    height: '36px',
+    borderRadius: theme.radius.full,
+    background: theme.colors.muted,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: theme.colors.textSecondary,
+  },
+  footerInfo: {
+    flex: 1,
+  },
+  footerName: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+  },
+  footerRole: {
     fontSize: '12px',
     color: theme.colors.textMuted,
-    fontWeight: 500,
   },
+}
+
+// ============================================================================
+// TOP BAR - Minimal, just page title + avatar + CTA
+// ============================================================================
+
+export function TopBar({ 
+  title,
+  actions 
+}: { 
+  title: string
+  actions?: ReactNode 
+}) {
+  return (
+    <header style={topBarStyles.container}>
+      <h1 style={topBarStyles.title}>{title}</h1>
+      <div style={topBarStyles.actions}>
+        {actions}
+      </div>
+    </header>
+  )
+}
+
+const topBarStyles: Record<string, CSSProperties> = {
+  container: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '24px 40px',
+    background: theme.colors.background,
+    position: 'sticky',
+    top: 0,
+    zIndex: 50,
+  },
+  title: {
+    fontSize: '28px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+    margin: 0,
+    letterSpacing: '-0.02em',
+  },
+  actions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+}
+
+// ============================================================================
+// APP SHELL - Layout wrapper
+// ============================================================================
+
+export function AppShell({ 
+  children, 
+  isMobile 
+}: { 
+  children: ReactNode
+  isMobile?: boolean 
+}) {
+  return (
+    <div style={{
+      display: 'flex',
+      minHeight: '100vh',
+      background: theme.colors.background,
+    }}>
+      {!isMobile && <Sidebar />}
+      <main style={{
+        flex: 1,
+        marginLeft: isMobile ? 0 : '240px',
+        minWidth: 0,
+      }}>
+        {children}
+      </main>
+    </div>
+  )
 }
 
 // ============================================================================
@@ -329,8 +420,8 @@ export function MobileHeader({
         </div>
       </div>
       {onMenuClick && (
-        <button onClick={onMenuClick} style={mobileHeaderStyles.menuButton}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <button onClick={onMenuClick} style={mobileHeaderStyles.menuButton} aria-label="Open menu">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="3" x2="21" y1="6" y2="6" />
             <line x1="3" x2="21" y1="12" y2="12" />
             <line x1="3" x2="21" y1="18" y2="18" />
@@ -346,9 +437,9 @@ const mobileHeaderStyles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '18px 20px',
-    paddingTop: 'calc(18px + env(safe-area-inset-top))',
-    background: theme.colors.background,
+    padding: '20px 20px',
+    paddingTop: 'calc(20px + env(safe-area-inset-top))',
+    background: theme.colors.surface,
     borderBottom: `1px solid ${theme.colors.border}`,
   },
   left: {
@@ -357,19 +448,139 @@ const mobileHeaderStyles: Record<string, CSSProperties> = {
     gap: '12px',
   },
   title: {
-    fontSize: theme.typography.fontSize.lg,
+    fontSize: '20px',
     fontWeight: 700,
     color: theme.colors.textPrimary,
     margin: 0,
-    letterSpacing: theme.typography.letterSpacing.tight,
+    letterSpacing: '-0.02em',
   },
   subtitle: {
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: '14px',
     color: theme.colors.textMuted,
-    margin: '3px 0 0 0',
-    fontWeight: 600,
+    margin: '2px 0 0 0',
   },
   menuButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '44px',
+    height: '44px',
+    borderRadius: theme.radius.md,
+    background: 'transparent',
+    color: theme.colors.textSecondary,
+    border: 'none',
+    cursor: 'pointer',
+  },
+}
+
+// ============================================================================
+// MOBILE MENU
+// ============================================================================
+
+export function MobileMenu({ 
+  open, 
+  onClose 
+}: { 
+  open: boolean
+  onClose: () => void 
+}) {
+  const pathname = usePathname()
+  
+  if (!open) return null
+  
+  return (
+    <>
+      <div style={mobileMenuStyles.overlay} onClick={onClose} />
+      <div style={mobileMenuStyles.panel}>
+        <div style={mobileMenuStyles.header}>
+          <div style={mobileMenuStyles.brand}>
+            <div style={mobileMenuStyles.logoBox}>B</div>
+            <span style={mobileMenuStyles.brandName}>Bamakor</span>
+          </div>
+          <button onClick={onClose} style={mobileMenuStyles.closeButton} aria-label="Close menu">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <nav style={mobileMenuStyles.nav}>
+          {navItems.map((item) => {
+            const isActive = pathname === item.href
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                style={{
+                  ...mobileMenuStyles.navLink,
+                  ...(isActive ? mobileMenuStyles.navLinkActive : {}),
+                }}
+              >
+                <NavIcon type={item.icon} active={isActive} />
+                <span>{item.label}</span>
+              </Link>
+            )
+          })}
+        </nav>
+      </div>
+    </>
+  )
+}
+
+const mobileMenuStyles: Record<string, CSSProperties> = {
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: theme.colors.overlay,
+    zIndex: 200,
+    animation: 'fadeIn 0.2s ease',
+  },
+  panel: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: '280px',
+    background: theme.colors.surface,
+    zIndex: 201,
+    padding: '24px 16px',
+    display: 'flex',
+    flexDirection: 'column',
+    animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+  },
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '24px',
+    paddingBottom: '16px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  brand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  logoBox: {
+    width: '36px',
+    height: '36px',
+    borderRadius: theme.radius.sm,
+    background: theme.colors.primary,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: theme.colors.textInverse,
+    fontWeight: 700,
+    fontSize: '16px',
+  },
+  brandName: {
+    fontSize: '17px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+  },
+  closeButton: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -377,10 +588,29 @@ const mobileHeaderStyles: Record<string, CSSProperties> = {
     height: '40px',
     borderRadius: theme.radius.md,
     background: 'transparent',
-    color: theme.colors.textSecondary,
+    color: theme.colors.textMuted,
     border: 'none',
     cursor: 'pointer',
-    transition: 'all 0.2s ease-out',
+  },
+  nav: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  navLink: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    padding: '14px 16px',
+    borderRadius: theme.radius.md,
+    color: theme.colors.textSecondary,
+    textDecoration: 'none',
+    fontSize: '16px',
+    fontWeight: 500,
+  },
+  navLinkActive: {
+    background: theme.colors.primaryMuted,
+    color: theme.colors.primary,
   },
 }
 
@@ -413,23 +643,23 @@ const pageHeaderStyles: Record<string, CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: '28px',
-    marginBottom: '36px',
+    gap: '24px',
+    marginBottom: '32px',
     flexWrap: 'wrap',
   },
   title: {
-    fontSize: theme.typography.fontSize['4xl'],
+    fontSize: '34px',
     fontWeight: 700,
     color: theme.colors.textPrimary,
     margin: 0,
-    letterSpacing: theme.typography.letterSpacing.tight,
+    letterSpacing: '-0.02em',
+    lineHeight: 1.2,
   },
   subtitle: {
-    fontSize: theme.typography.fontSize.base,
+    fontSize: '15px',
     color: theme.colors.textMuted,
-    margin: '10px 0 0 0',
-    lineHeight: theme.typography.lineHeight.normal,
-    fontWeight: 500,
+    margin: '8px 0 0 0',
+    lineHeight: 1.5,
   },
   actions: {
     display: 'flex',
@@ -439,41 +669,46 @@ const pageHeaderStyles: Record<string, CSSProperties> = {
 }
 
 // ============================================================================
-// KPI CARDS
+// KPI CARDS - Large bold numbers, small label, colored left-border accent
 // ============================================================================
 
 export function KpiCard({ 
   label, 
   value, 
-  trend,
+  accent,
   active,
   onClick 
 }: { 
   label: string
   value: string | number
-  trend?: { value: string; positive?: boolean }
+  accent?: 'primary' | 'success' | 'warning' | 'error'
   active?: boolean
   onClick?: () => void
 }) {
+  const accentColors = {
+    primary: theme.colors.primary,
+    success: theme.colors.success,
+    warning: theme.colors.warning,
+    error: theme.colors.error,
+  }
+  
+  const accentColor = accent ? accentColors[accent] : theme.colors.border
+  
   return (
     <button
       onClick={onClick}
       style={{
         ...kpiStyles.card,
-        ...(active ? kpiStyles.cardActive : {}),
+        borderLeftColor: accentColor,
+        ...(active ? { 
+          background: theme.colors.primaryMuted,
+          borderColor: theme.colors.primary,
+        } : {}),
         cursor: onClick ? 'pointer' : 'default',
       }}
     >
-      <div style={kpiStyles.label}>{label}</div>
       <div style={kpiStyles.value}>{value}</div>
-      {trend && (
-        <div style={{
-          ...kpiStyles.trend,
-          color: trend.positive ? theme.colors.success : theme.colors.error,
-        }}>
-          {trend.positive ? '+' : ''}{trend.value}
-        </div>
-      )}
+      <div style={kpiStyles.label}>{label}</div>
     </button>
   )
 }
@@ -482,40 +717,96 @@ const kpiStyles: Record<string, CSSProperties> = {
   card: {
     background: theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
+    borderLeft: '3px solid',
     borderRadius: theme.radius.lg,
-    padding: '32px',
+    padding: '24px',
     textAlign: 'left',
-    transition: 'all 0.2s ease-out',
+    transition: 'all 0.2s ease',
     width: '100%',
-    boxShadow: theme.shadows.none,
-    cursor: 'pointer',
-  },
-  cardActive: {
-    borderColor: theme.colors.primary,
-    background: theme.colors.primaryMuted,
-    boxShadow: theme.shadows.none,
-    transform: 'none',
-  },
-  label: {
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textMuted,
-    marginBottom: '14px',
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: theme.typography.letterSpacing.wide,
   },
   value: {
-    fontSize: '56px',
+    fontSize: '40px',
     fontWeight: 700,
     color: theme.colors.textPrimary,
-    letterSpacing: theme.typography.letterSpacing.tight,
+    letterSpacing: '-0.03em',
     lineHeight: 1,
-    marginBottom: '16px',
+    marginBottom: '8px',
   },
-  trend: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: 700,
-    marginTop: '14px',
+  label: {
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+    fontWeight: 500,
+  },
+}
+
+// ============================================================================
+// CARD - Use space and hierarchy instead of borders everywhere
+// ============================================================================
+
+export function Card({
+  children,
+  title,
+  subtitle,
+  actions,
+  noPadding,
+  style,
+}: {
+  children: ReactNode
+  title?: string
+  subtitle?: string
+  actions?: ReactNode
+  noPadding?: boolean
+  style?: CSSProperties
+}) {
+  return (
+    <div style={{ ...cardStyles.container, ...style }} data-ui="card">
+      {(title || actions) && (
+        <div style={cardStyles.header}>
+          <div>
+            {title && <h3 style={cardStyles.title}>{title}</h3>}
+            {subtitle && <p style={cardStyles.subtitle}>{subtitle}</p>}
+          </div>
+          {actions && <div style={cardStyles.actions}>{actions}</div>}
+        </div>
+      )}
+      <div style={noPadding ? {} : cardStyles.content}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+const cardStyles: Record<string, CSSProperties> = {
+  container: {
+    background: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    boxShadow: theme.shadows.sm,
+    overflow: 'hidden',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: '24px 24px 0',
+    gap: '16px',
+  },
+  title: {
+    fontSize: '17px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+    margin: 0,
+  },
+  subtitle: {
+    fontSize: '14px',
+    color: theme.colors.textMuted,
+    margin: '4px 0 0',
+  },
+  actions: {
+    display: 'flex',
+    gap: '8px',
+  },
+  content: {
+    padding: '24px',
   },
 }
 
@@ -531,28 +822,23 @@ export function Button({
   loading,
   onClick,
   style: customStyle,
-  title: tooltip,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
-  title?: string
 }) {
-  const [hovered, setHovered] = useState(false)
-
   const variantStyles: Record<string, CSSProperties> = {
     primary: {
       background: theme.colors.primary,
       color: theme.colors.textInverse,
       border: 'none',
-      boxShadow: theme.shadows.sm,
     },
     secondary: {
       background: theme.colors.surface,
       color: theme.colors.textPrimary,
-      border: `1.5px solid ${theme.colors.border}`,
+      border: `1px solid ${theme.colors.border}`,
     },
     ghost: {
       background: 'transparent',
@@ -562,35 +848,14 @@ export function Button({
     danger: {
       background: theme.colors.errorMuted,
       color: theme.colors.error,
-      border: `1.5px solid ${theme.colors.error}`,
+      border: `1px solid ${theme.colors.error}`,
     },
   }
   
   const sizeStyles: Record<string, CSSProperties> = {
-    sm: { padding: '8px 14px', fontSize: theme.typography.fontSize.sm, height: '36px', fontWeight: 600 },
-    md: { padding: '10px 18px', fontSize: theme.typography.fontSize.base, height: '40px', fontWeight: 600 },
-    lg: { padding: '12px 24px', fontSize: theme.typography.fontSize.lg, height: '46px', fontWeight: 600 },
-  }
-
-  const hoverStateStyles: Record<string, CSSProperties> = {
-    primary: {
-      background: hovered && !disabled ? theme.colors.primaryHover : theme.colors.primary,
-      transform: 'none',
-      boxShadow: hovered && !disabled ? theme.shadows.md : theme.shadows.sm,
-    },
-    secondary: {
-      background: hovered && !disabled ? theme.colors.surfaceHover : theme.colors.surface,
-      borderColor: hovered && !disabled ? theme.colors.primary : theme.colors.border,
-    },
-    ghost: {
-      background: hovered && !disabled ? theme.colors.surfaceActive : 'transparent',
-      color: hovered && !disabled ? theme.colors.primary : theme.colors.textSecondary,
-    },
-    danger: {
-      background: hovered && !disabled ? theme.colors.error : theme.colors.errorMuted,
-      color: hovered && !disabled ? theme.colors.textInverse : theme.colors.error,
-      borderColor: hovered && !disabled ? theme.colors.error : theme.colors.error,
-    },
+    sm: { padding: '8px 14px', fontSize: '13px', height: '34px' },
+    md: { padding: '10px 18px', fontSize: '15px', height: '40px' },
+    lg: { padding: '12px 24px', fontSize: '16px', height: '48px' },
   }
   
   return (
@@ -598,14 +863,9 @@ export function Button({
       onClick={onClick}
       disabled={disabled || loading}
       data-ui="button"
-      data-variant={variant}
-      data-size={size}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         ...buttonStyles.base,
         ...variantStyles[variant],
-        ...hoverStateStyles[variant],
         ...sizeStyles[size],
         opacity: disabled ? 0.5 : 1,
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -613,9 +873,7 @@ export function Button({
       }}
       {...props}
     >
-      {loading ? (
-        <span style={buttonStyles.loader} />
-      ) : children}
+      {loading ? <span style={buttonStyles.loader} /> : children}
     </button>
   )
 }
@@ -628,11 +886,9 @@ const buttonStyles: Record<string, CSSProperties> = {
     gap: '8px',
     borderRadius: theme.radius.md,
     fontWeight: 600,
-    transition: 'all 0.16s ease-out',
+    transition: 'all 0.15s ease',
     whiteSpace: 'nowrap',
-    border: 'none',
     cursor: 'pointer',
-    letterSpacing: theme.typography.letterSpacing.normal,
   },
   loader: {
     width: '16px',
@@ -645,59 +901,7 @@ const buttonStyles: Record<string, CSSProperties> = {
 }
 
 // ============================================================================
-// TOOLTIP
-// ============================================================================
-
-export function Tooltip({ 
-  text, 
-  children 
-}: { 
-  text: string
-  children: ReactNode 
-}) {
-  const [visible, setVisible] = useState(false)
-  
-  return (
-    <div style={tooltipStyles.wrapper}>
-      <div 
-        onMouseEnter={() => setVisible(true)}
-        onMouseLeave={() => setVisible(false)}
-      >
-        {children}
-      </div>
-      {visible && (
-        <div style={tooltipStyles.tooltip}>{text}</div>
-      )}
-    </div>
-  )
-}
-
-const tooltipStyles: Record<string, CSSProperties> = {
-  wrapper: {
-    position: 'relative',
-    display: 'inline-block',
-  },
-  tooltip: {
-    position: 'absolute',
-    bottom: '100%',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    marginBottom: '10px',
-    padding: '10px 14px',
-    background: theme.colors.textPrimary,
-    color: theme.colors.textInverse,
-    fontSize: theme.typography.fontSize.xs,
-    borderRadius: theme.radius.md,
-    whiteSpace: 'nowrap',
-    zIndex: 1000,
-    boxShadow: theme.shadows.lg,
-    pointerEvents: 'none',
-    fontWeight: 600,
-  },
-}
-
-// ============================================================================
-// STATUS BADGE
+// STATUS BADGE - Pill shaped, soft color fills
 // ============================================================================
 
 export function StatusBadge({ 
@@ -707,186 +911,184 @@ export function StatusBadge({
   status: string
   size?: 'sm' | 'md'
 }) {
-  const statusConfig: Record<string, { bg: string; text: string; border?: string }> = {
+  const statusConfig: Record<string, { bg: string; text: string }> = {
     NEW: { bg: theme.colors.warningMuted, text: theme.colors.warning },
     ASSIGNED: { bg: theme.colors.infoMuted, text: theme.colors.info },
     IN_PROGRESS: { bg: theme.colors.infoMuted, text: theme.colors.info },
     WAITING_PARTS: { bg: theme.colors.warningMuted, text: theme.colors.warning },
     CLOSED: { bg: theme.colors.successMuted, text: theme.colors.success },
     ACTIVE: { bg: theme.colors.successMuted, text: theme.colors.success },
-    INACTIVE: { bg: theme.colors.errorMuted, text: theme.colors.error },
+    INACTIVE: { bg: theme.colors.muted, text: theme.colors.textMuted },
     HIGH: { bg: theme.colors.errorMuted, text: theme.colors.error },
     MEDIUM: { bg: theme.colors.warningMuted, text: theme.colors.warning },
-    LOW: { bg: theme.colors.surfaceElevated, text: theme.colors.textSecondary },
+    LOW: { bg: theme.colors.infoMuted, text: theme.colors.info },
   }
   
-  const config = statusConfig[status] || statusConfig.LOW
+  const config = statusConfig[status] || { bg: theme.colors.muted, text: theme.colors.textMuted }
+  
+  const sizeStyles = {
+    sm: { padding: '4px 10px', fontSize: '11px' },
+    md: { padding: '5px 12px', fontSize: '12px' },
+  }
   
   return (
     <span style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      padding: size === 'sm' ? '4px 11px' : '6px 13px',
-      borderRadius: theme.radius.full,
-      fontSize: size === 'sm' ? theme.typography.fontSize.xs : theme.typography.fontSize.sm,
-      fontWeight: 700,
-      letterSpacing: theme.typography.letterSpacing.wide,
+      ...badgeStyles.base,
+      ...sizeStyles[size],
       background: config.bg,
       color: config.text,
-      textTransform: 'uppercase',
-      lineHeight: 1,
     }}>
-      {status.replace('_', ' ')}
+      {status.replace(/_/g, ' ')}
     </span>
   )
 }
 
+const badgeStyles: Record<string, CSSProperties> = {
+  base: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    borderRadius: theme.radius.full,
+    fontWeight: 600,
+    textTransform: 'capitalize',
+    letterSpacing: '0.01em',
+  },
+}
+
 // ============================================================================
-// CARD
+// PRIORITY DOT - Colored dot only, not text
 // ============================================================================
 
-export function Card({ 
-  children,
-  title,
-  subtitle,
-  actions,
-  noPadding,
-  style: customStyle,
-}: { 
-  children: ReactNode
-  title?: string
-  subtitle?: string
-  actions?: ReactNode
-  noPadding?: boolean
-  style?: CSSProperties
-}) {
+export function PriorityDot({ priority }: { priority: string }) {
+  const colors: Record<string, string> = {
+    HIGH: theme.colors.error,
+    MEDIUM: theme.colors.warning,
+    LOW: theme.colors.success,
+  }
+  
   return (
-    <div data-ui="card" style={{ ...cardStyles.container, ...customStyle }}>
-      {(title || actions) && (
-        <div style={cardStyles.header}>
-          <div>
-            {title && <div style={cardStyles.title}>{title}</div>}
-            {subtitle && <div style={cardStyles.subtitle}>{subtitle}</div>}
-          </div>
-          {actions && <div style={cardStyles.actions}>{actions}</div>}
-        </div>
-      )}
-      <div style={noPadding ? {} : cardStyles.content}>
-        {children}
-      </div>
-    </div>
+    <span style={{
+      width: '8px',
+      height: '8px',
+      borderRadius: '50%',
+      background: colors[priority] || theme.colors.textMuted,
+      display: 'inline-block',
+      flexShrink: 0,
+    }} />
   )
 }
 
-const cardStyles: Record<string, CSSProperties> = {
-  container: {
-    background: theme.colors.surface,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.lg,
-    overflow: 'hidden',
-    boxShadow: theme.shadows.none,
-    transition: 'all 0.2s ease-out',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: '28px 32px',
-    borderBottom: `1px solid ${theme.colors.borderSubtle}`,
-    gap: '16px',
-  },
-  title: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: 700,
-    color: theme.colors.textPrimary,
-    letterSpacing: theme.typography.letterSpacing.tight,
-  },
-  subtitle: {
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textMuted,
-    marginTop: '4px',
-    fontWeight: 500,
-  },
-  actions: {
-    display: 'flex',
-    gap: '8px',
-  },
-  content: {
-    padding: '32px',
-  },
-}
-
 // ============================================================================
-// INPUT
+// SEARCH INPUT
 // ============================================================================
 
-export function Input({ 
-  label,
-  placeholder,
+export function SearchInput({
   value,
   onChange,
-  type = 'text',
-  error,
-  style: customStyle,
-}: { 
-  label?: string
-  placeholder?: string
+  placeholder = 'Search...',
+  style,
+}: {
   value: string
   onChange: (value: string) => void
-  type?: string
-  error?: string
+  placeholder?: string
   style?: CSSProperties
 }) {
   return (
-    <div style={inputStyles.container}>
-      {label && <label style={inputStyles.label}>{label}</label>}
+    <div style={{ ...searchStyles.container, ...style }}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={searchStyles.icon}>
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+      </svg>
       <input
-        type={type}
+        type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        style={{
-          ...inputStyles.input,
-          borderColor: error ? theme.colors.error : theme.colors.border,
-          ...customStyle,
-        }}
+        style={searchStyles.input}
       />
-      {error && <div style={inputStyles.error}>{error}</div>}
     </div>
   )
 }
 
-const inputStyles: Record<string, CSSProperties> = {
+const searchStyles: Record<string, CSSProperties> = {
   container: {
+    position: 'relative',
     display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: '320px',
   },
-  label: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-    letterSpacing: theme.typography.letterSpacing.normal,
-    textTransform: 'none',
+  icon: {
+    position: 'absolute',
+    left: '14px',
+    pointerEvents: 'none',
   },
   input: {
-    background: theme.colors.surface,
-    border: `1px solid ${theme.colors.border}`,
+    width: '100%',
+    padding: '12px 16px 12px 44px',
     borderRadius: theme.radius.md,
-    padding: '14px 18px',
+    border: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surface,
     fontSize: '15px',
     color: theme.colors.textPrimary,
     outline: 'none',
-    transition: 'all 0.2s ease-out',
-    lineHeight: theme.typography.lineHeight.normal,
-    WebkitAppearance: 'none',
-    appearance: 'none',
-    boxShadow: theme.shadows.none,
+    transition: 'all 0.15s ease',
   },
-  error: {
-    fontSize: '13px',
-    color: theme.colors.error,
+}
+
+// ============================================================================
+// FILTER TABS
+// ============================================================================
+
+export function FilterTabs({
+  options,
+  value,
+  onChange,
+}: {
+  options: { label: string; value: string }[]
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div style={filterTabStyles.container}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          style={{
+            ...filterTabStyles.tab,
+            ...(value === option.value ? filterTabStyles.tabActive : {}),
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const filterTabStyles: Record<string, CSSProperties> = {
+  container: {
+    display: 'flex',
+    gap: '4px',
+    padding: '4px',
+    background: theme.colors.muted,
+    borderRadius: theme.radius.md,
+  },
+  tab: {
+    padding: '8px 16px',
+    borderRadius: theme.radius.sm,
+    border: 'none',
+    background: 'transparent',
+    color: theme.colors.textMuted,
+    fontSize: '14px',
     fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  tabActive: {
+    background: theme.colors.surface,
+    color: theme.colors.textPrimary,
+    boxShadow: theme.shadows.xs,
   },
 }
 
@@ -894,91 +1096,65 @@ const inputStyles: Record<string, CSSProperties> = {
 // SELECT
 // ============================================================================
 
-export function Select({ 
-  label,
+export function Select({
   value,
   onChange,
   options,
   placeholder,
-  style: customStyle,
-}: { 
-  label?: string
+  style,
+}: {
   value: string
   onChange: (value: string) => void
-  options: { value: string; label: string }[]
+  options: { label: string; value: string }[]
   placeholder?: string
   style?: CSSProperties
 }) {
   return (
-    <div style={selectStyles.container}>
-      {label && <label style={selectStyles.label}>{label}</label>}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ ...selectStyles.select, ...customStyle }}
-      >
-        {placeholder && <option value="">{placeholder}</option>}
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-    </div>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ ...selectStyles.select, ...style }}
+    >
+      {placeholder && <option value="">{placeholder}</option>}
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   )
 }
 
 const selectStyles: Record<string, CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-  },
-  label: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-    letterSpacing: theme.typography.letterSpacing.normal,
-  },
   select: {
-    background: theme.colors.surface,
-    border: `1px solid ${theme.colors.border}`,
+    padding: '10px 40px 10px 14px',
     borderRadius: theme.radius.md,
-    padding: '14px 18px',
-    paddingRight: '40px',
+    border: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surface,
     fontSize: '15px',
     color: theme.colors.textPrimary,
-    outline: 'none',
     cursor: 'pointer',
-    minHeight: '48px',
-    transition: 'all 0.2s ease-out',
-    lineHeight: theme.typography.lineHeight.normal,
-    WebkitAppearance: 'none',
-    appearance: 'none',
-    backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'8\' viewBox=\'0 0 12 8\'%3E%3Cpath fill=\'%23737373\' d=\'M1 1l5 5 5-5\'/%3E%3C/svg%3E")',
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'right 14px center',
-    boxShadow: theme.shadows.none,
+    minWidth: '140px',
   },
 }
 
 // ============================================================================
-// DRAWER
+// DRAWER - Slide-over panel
 // ============================================================================
 
-export function Drawer({ 
+export function Drawer({
   open,
   onClose,
   title,
   subtitle,
   children,
-  width = 480,
   isMobile,
-}: { 
+}: {
   open: boolean
   onClose: () => void
-  title?: string
+  title: string
   subtitle?: string
   children: ReactNode
-  width?: number
   isMobile?: boolean
 }) {
   if (!open) return null
@@ -987,16 +1163,16 @@ export function Drawer({
     <>
       <div style={drawerStyles.overlay} onClick={onClose} />
       <div style={{
-        ...drawerStyles.container,
-        width: isMobile ? '100%' : `${width}px`,
+        ...drawerStyles.panel,
+        width: isMobile ? '100%' : '480px',
       }}>
         <div style={drawerStyles.header}>
           <div>
-            {title && <div style={drawerStyles.title}>{title}</div>}
-            {subtitle && <div style={drawerStyles.subtitle}>{subtitle}</div>}
+            <h2 style={drawerStyles.title}>{title}</h2>
+            {subtitle && <p style={drawerStyles.subtitle}>{subtitle}</p>}
           </div>
-          <button onClick={onClose} style={drawerStyles.closeButton} data-ui="icon-button" aria-label="Close">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <button onClick={onClose} style={drawerStyles.closeButton} aria-label="Close">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 6 6 18" />
               <path d="m6 6 12 12" />
             </svg>
@@ -1015,44 +1191,38 @@ const drawerStyles: Record<string, CSSProperties> = {
     position: 'fixed',
     inset: 0,
     background: theme.colors.overlay,
-    zIndex: 50,
-    animation: 'fadeIn 0.2s ease-out',
+    zIndex: 300,
+    animation: 'fadeIn 0.2s ease',
   },
-  container: {
+  panel: {
     position: 'fixed',
     top: 0,
     right: 0,
-    height: '100dvh',
-    background: theme.colors.background,
-    borderLeft: `1px solid ${theme.colors.border}`,
-    zIndex: 60,
+    bottom: 0,
+    background: theme.colors.surface,
+    zIndex: 301,
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden',
-    animation: 'slideInRight 0.3s ease-out',
-    boxShadow: theme.shadows.xl,
+    animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: '28px 32px',
-    paddingTop: 'calc(28px + env(safe-area-inset-top))',
-    borderBottom: `1px solid ${theme.colors.borderSubtle}`,
-    gap: '16px',
+    padding: '24px',
+    borderBottom: `1px solid ${theme.colors.border}`,
     flexShrink: 0,
   },
   title: {
-    fontSize: theme.typography.fontSize.xl,
+    fontSize: '20px',
     fontWeight: 700,
     color: theme.colors.textPrimary,
-    letterSpacing: theme.typography.letterSpacing.tight,
+    margin: 0,
   },
   subtitle: {
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: '14px',
     color: theme.colors.textMuted,
-    marginTop: '6px',
-    fontWeight: 500,
+    margin: '4px 0 0',
   },
   closeButton: {
     display: 'flex',
@@ -1062,17 +1232,15 @@ const drawerStyles: Record<string, CSSProperties> = {
     height: '40px',
     borderRadius: theme.radius.md,
     background: 'transparent',
-    color: theme.colors.textSecondary,
+    color: theme.colors.textMuted,
     border: 'none',
     cursor: 'pointer',
     flexShrink: 0,
-    transition: 'all 0.2s ease-out',
   },
   content: {
     flex: 1,
-    overflowY: 'auto',
-    padding: '32px',
-    paddingBottom: 'calc(32px + env(safe-area-inset-bottom))',
+    overflow: 'auto',
+    padding: '24px',
   },
 }
 
@@ -1080,388 +1248,142 @@ const drawerStyles: Record<string, CSSProperties> = {
 // EMPTY STATE
 // ============================================================================
 
-export function EmptyState({ 
+export function EmptyState({
   title,
   description,
   action,
-}: { 
+}: {
   title: string
   description?: string
   action?: ReactNode
 }) {
   return (
-    <div style={emptyStyles.container}>
-      <div style={emptyStyles.icon}>
+    <div style={emptyStateStyles.container}>
+      <div style={emptyStateStyles.icon}>
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-          <path d="M12 10v6" />
-          <path d="m9 13 3-3 3 3" />
+          <path d="M21 8v13H3V8" />
+          <path d="M1 3h22v5H1z" />
+          <path d="M10 12h4" />
         </svg>
       </div>
-      <div style={emptyStyles.title}>{title}</div>
-      {description && <div style={emptyStyles.description}>{description}</div>}
-      {action && <div style={emptyStyles.action}>{action}</div>}
+      <h3 style={emptyStateStyles.title}>{title}</h3>
+      {description && <p style={emptyStateStyles.description}>{description}</p>}
+      {action && <div style={emptyStateStyles.action}>{action}</div>}
     </div>
   )
 }
 
-const emptyStyles: Record<string, CSSProperties> = {
+const emptyStateStyles: Record<string, CSSProperties> = {
   container: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '72px 24px',
+    padding: '64px 24px',
     textAlign: 'center',
-    minHeight: '400px',
   },
   icon: {
-    marginBottom: '28px',
-    opacity: 0.3,
+    marginBottom: '20px',
+    opacity: 0.5,
   },
   title: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: 700,
+    fontSize: '17px',
+    fontWeight: 600,
     color: theme.colors.textPrimary,
-    marginBottom: '10px',
-    letterSpacing: theme.typography.letterSpacing.tight,
+    margin: 0,
   },
   description: {
-    fontSize: theme.typography.fontSize.base,
+    fontSize: '14px',
     color: theme.colors.textMuted,
-    maxWidth: '380px',
-    lineHeight: theme.typography.lineHeight.relaxed,
-    fontWeight: 500,
+    margin: '8px 0 0',
+    maxWidth: '320px',
   },
   action: {
-    marginTop: '28px',
+    marginTop: '20px',
   },
 }
 
 // ============================================================================
-// APP SHELL
+// LOADING SPINNER
 // ============================================================================
 
-export function AppShell({ 
-  children,
-  isMobile,
-}: { 
-  children: ReactNode
-  isMobile: boolean
-}) {
+export function LoadingSpinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const sizes = { sm: '20px', md: '32px', lg: '48px' }
+  
   return (
     <div style={{
-      display: 'grid',
-      gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
-      minHeight: '100dvh',
-      height: '100dvh',
-      overflow: 'hidden',
-      background: theme.colors.muted,
-    }}>
-      {!isMobile && <Sidebar />}
-      <main style={{
-        overflow: 'auto',
-        overscrollBehavior: 'contain',
-        padding: isMobile ? '0' : '32px',
-      }}>
-        {children}
-      </main>
-    </div>
+      width: sizes[size],
+      height: sizes[size],
+      border: `3px solid ${theme.colors.border}`,
+      borderTopColor: theme.colors.primary,
+      borderRadius: '50%',
+      animation: 'spin 0.8s linear infinite',
+    }} />
   )
 }
 
 // ============================================================================
-// MOBILE MENU
+// ACTIVITY ITEM - For timeline/feed
 // ============================================================================
 
-export function MobileMenu({ 
-  open,
-  onClose,
-}: { 
-  open: boolean
-  onClose: () => void
+export function ActivityItem({
+  icon,
+  title,
+  description,
+  time,
+}: {
+  icon: ReactNode
+  title: string
+  description?: string
+  time: string
 }) {
-  const pathname = usePathname()
-  
-  if (!open) return null
-  
   return (
-    <>
-      <div style={mobileMenuStyles.overlay} onClick={onClose} />
-      <div style={mobileMenuStyles.container}>
-        <div style={mobileMenuStyles.header}>
-          <div style={mobileMenuStyles.brand}>
-            <div style={mobileMenuStyles.logoBox}>B</div>
-            <div style={mobileMenuStyles.brandText}>Bamakor</div>
-          </div>
-          <button onClick={onClose} style={mobileMenuStyles.closeButton}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6 6 18" />
-              <path d="m6 6 12 12" />
-            </svg>
-          </button>
-        </div>
-        <nav style={mobileMenuStyles.nav}>
-          {navItems.map((item) => {
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                style={{
-                  ...mobileMenuStyles.navLink,
-                  ...(isActive ? mobileMenuStyles.navLinkActive : {}),
-                }}
-              >
-                <NavIcon type={item.icon} active={isActive} />
-                <span>{item.label}</span>
-              </Link>
-            )
-          })}
-        </nav>
+    <div style={activityStyles.container}>
+      <div style={activityStyles.iconWrap}>{icon}</div>
+      <div style={activityStyles.content}>
+        <div style={activityStyles.title}>{title}</div>
+        {description && <div style={activityStyles.description}>{description}</div>}
       </div>
-    </>
+      <div style={activityStyles.time}>{time}</div>
+    </div>
   )
 }
 
-const mobileMenuStyles: Record<string, CSSProperties> = {
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    background: theme.colors.overlay,
-    zIndex: 100,
-  },
+const activityStyles: Record<string, CSSProperties> = {
   container: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '300px',
-    height: '100dvh',
-    background: theme.colors.background,
-    borderRight: `1px solid ${theme.colors.border}`,
-    zIndex: 101,
     display: 'flex',
-    flexDirection: 'column',
-    animation: 'slideInLeft 0.3s ease-out',
-    boxShadow: theme.shadows.xl,
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '28px 24px',
-    paddingTop: 'calc(28px + env(safe-area-inset-top))',
-    borderBottom: `1px solid ${theme.colors.borderSubtle}`,
-  },
-  brand: {
-    display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: '12px',
+    padding: '12px 0',
+    borderBottom: `1px solid ${theme.colors.border}`,
   },
-  logoBox: {
-    width: '44px',
-    height: '44px',
-    borderRadius: theme.radius.lg,
-    background: theme.colors.primary,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: theme.colors.textInverse,
-    fontWeight: 700,
-    fontSize: '18px',
-    boxShadow: theme.shadows.sm,
-  },
-  brandText: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: 700,
-    color: theme.colors.textPrimary,
-    letterSpacing: theme.typography.letterSpacing.tight,
-  },
-  closeButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '40px',
-    height: '40px',
-    borderRadius: theme.radius.md,
-    background: 'transparent',
-    color: theme.colors.textSecondary,
-    border: 'none',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease-out',
-  },
-  nav: {
-    display: 'flex',
-    flexDirection: 'column',
-    padding: '16px 12px',
-    gap: '6px',
-  },
-  navLink: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-    padding: '12px 14px',
-    borderRadius: theme.radius.md,
-    color: theme.colors.textSecondary,
-    textDecoration: 'none',
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: 700,
-    transition: 'all 0.2s ease-out',
-  },
-  navLinkActive: {
-    background: theme.colors.primaryMuted,
-    color: theme.colors.primary,
-    borderColor: theme.colors.primarySubtle,
-  },
-}
-
-// ============================================================================
-// SEARCH INPUT
-// ============================================================================
-
-export function SearchInput({ 
-  value,
-  onChange,
-  placeholder = 'Search...',
-  style: customStyle,
-}: { 
-  value: string
-  onChange: (value: string) => void
-  placeholder?: string
-  style?: CSSProperties
-}) {
-  return (
-    <div data-ui="search" style={{ ...searchStyles.container, ...customStyle }}>
-      <svg 
-        width="18" 
-        height="18" 
-        viewBox="0 0 24 24" 
-        fill="none" 
-        stroke={theme.colors.textMuted} 
-        strokeWidth="2" 
-        strokeLinecap="round" 
-        strokeLinejoin="round"
-        style={searchStyles.icon}
-      >
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.3-4.3" />
-      </svg>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={searchStyles.input}
-        data-ui="input"
-      />
-    </div>
-  )
-}
-
-const searchStyles: Record<string, CSSProperties> = {
-  container: {
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    flex: 1,
-    minWidth: '200px',
-  },
-  icon: {
-    position: 'absolute',
-    left: '16px',
-    pointerEvents: 'none',
-  },
-  input: {
-    width: '100%',
-    background: theme.colors.surface,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '14px 18px 14px 48px',
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textPrimary,
-    outline: 'none',
-    transition: 'all 0.2s ease-out',
-    lineHeight: theme.typography.lineHeight.normal,
-    boxShadow: theme.shadows.none,
-  },
-}
-
-// ============================================================================
-// FILTER TABS
-// ============================================================================
-
-export function FilterTabs({ 
-  options,
-  value,
-  onChange,
-}: { 
-  options: { value: string; label: string; count?: number }[]
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <div style={filterTabsStyles.container}>
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          style={{
-            ...filterTabsStyles.tab,
-            ...(value === opt.value ? filterTabsStyles.tabActive : {}),
-          }}
-        >
-          {opt.label}
-          {opt.count !== undefined && (
-            <span style={{
-              ...filterTabsStyles.count,
-              background: value === opt.value ? theme.colors.primary : theme.colors.surfaceElevated,
-              color: value === opt.value ? theme.colors.textInverse : theme.colors.textMuted,
-            }}>
-              {opt.count}
-            </span>
-          )}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-const filterTabsStyles: Record<string, CSSProperties> = {
-  container: {
-    display: 'flex',
-    gap: '6px',
-    padding: '8px',
-    background: theme.colors.surfaceElevated,
-    borderRadius: theme.radius.lg,
-    border: `1px solid ${theme.colors.border}`,
-    overflowX: 'auto',
-  },
-  tab: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '11px 20px',
-    borderRadius: theme.radius.md,
-    background: 'transparent',
-    border: 'none',
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: 700,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    transition: 'all 0.2s ease-out',
-  },
-  tabActive: {
-    background: theme.colors.background,
-    color: theme.colors.textPrimary,
-    boxShadow: theme.shadows.sm,
-  },
-  count: {
-    padding: '3px 10px',
+  iconWrap: {
+    width: '32px',
+    height: '32px',
     borderRadius: theme.radius.full,
-    fontSize: theme.typography.fontSize.xs,
-    fontWeight: 700,
-    lineHeight: 1,
+    background: theme.colors.muted,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  content: {
+    flex: 1,
+    minWidth: 0,
+  },
+  title: {
+    fontSize: '14px',
+    fontWeight: 500,
+    color: theme.colors.textPrimary,
+  },
+  description: {
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+    marginTop: '2px',
+  },
+  time: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+    flexShrink: 0,
   },
 }

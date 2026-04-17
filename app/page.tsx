@@ -8,16 +8,18 @@ import {
   AppShell, 
   MobileHeader, 
   MobileMenu, 
-  PageHeader, 
-  Button, 
+  KpiCard,
+  Card,
+  Button,
+  StatusBadge,
+  PriorityDot,
+  SearchInput,
+  Drawer,
+  LoadingSpinner,
   theme 
 } from './components/ui'
-import { DashboardStats } from './components/dashboard/DashboardStats'
-import { ProjectFilterSection } from './components/dashboard/ProjectFilterSection'
-import { QrManagementSection } from './components/dashboard/QrManagementSection'
 import { TicketDetailDrawer } from './components/tickets/TicketDetailDrawer'
 import { AddTicketModal } from './components/tickets/AddTicketModal'
-import { ImageLightbox } from './components/shared/ImageLightbox'
 
 type TicketRow = {
   id: string
@@ -28,6 +30,7 @@ type TicketRow = {
   reporter_phone: string
   description: string
   status: string
+  priority?: string
   assigned_worker_id: string | null
   created_at: string
   closed_at: string | null
@@ -65,44 +68,25 @@ type TicketWithProjects = TicketRow & {
   projects?: Array<{ project_code: string; name: string }> | { project_code: string; name: string }
 }
 
-const statusOptions = ['ALL', 'NEW', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED'] as const
-const editableStatusOptions = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED'] as const
-
-const WHATSAPP_NUMBER = '972559740732'
-
-export default function HomePage() {
+export default function DashboardPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([])
-  const [allTickets, setAllTickets] = useState<TicketRow[]>([])
   const [projects, setProjects] = useState<ProjectRow[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
   const [workersMap, setWorkersMap] = useState<Record<string, string>>({})
   const [menuOpen, setMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
 
   const [selectedTicket, setSelectedTicket] = useState<TicketRow | null>(null)
   const [ticketLogs, setTicketLogs] = useState<TicketLog[]>([])
   const [drawerLoading, setDrawerLoading] = useState(false)
   const [savingTicket, setSavingTicket] = useState(false)
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
-
-  const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState('ALL')
-  const [showQrSection, setShowQrSection] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
-
-  const [activeKpi, setActiveKpi] = useState<'ALL' | 'NEW' | 'ASSIGNED' | 'CLOSED'>('ALL')
-  const [selectedProjectCode, setSelectedProjectCode] = useState<string>('ALL')
-
   const [draftDescription, setDraftDescription] = useState('')
-  const [draftPhone, setDraftPhone] = useState('')
   const [draftStatus, setDraftStatus] = useState('NEW')
-  const [draftPriority, setDraftPriority] = useState('LOW')
   const [draftWorkerId, setDraftWorkerId] = useState('')
   const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentRow[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
 
-  // Add Ticket Modal States
   const [showAddTicketModal, setShowAddTicketModal] = useState(false)
   const [addTicketForm, setAddTicketForm] = useState({
     project_code: '',
@@ -113,9 +97,7 @@ export default function HomePage() {
   const [addingTicket, setAddingTicket] = useState(false)
   const [addTicketError, setAddTicketError] = useState('')
 
-  const activeSource = useMemo(() => {
-    return 'all'
-  }, [])
+  const [activeKpi, setActiveKpi] = useState<'ALL' | 'NEW' | 'IN_PROGRESS' | 'CLOSED'>('ALL')
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -125,385 +107,214 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    loadWorkers()
-    loadProjects()
-    loadAllTickets()
+    loadData()
   }, [])
 
-  useEffect(() => {
-    loadTickets(activeSource)
-    setMenuOpen(false)
-  }, [activeSource])
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('bamakor-live-updates')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'tickets' },
-        async () => {
-          await Promise.all([loadTickets(activeSource), loadAllTickets()])
-          if (selectedTicket) {
-            await loadTicketLogs(selectedTicket.id)
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'ticket_logs' },
-        async () => {
-          if (selectedTicket) {
-            await loadTicketLogs(selectedTicket.id)
-          }
-        }
-      )
-      .subscribe()
-
-    const handleFocus = async () => {
-      await Promise.all([loadTickets(activeSource), loadAllTickets()])
-      if (selectedTicket) {
-        await loadTicketLogs(selectedTicket.id)
-      }
-    }
-
-    const backgroundRefreshInterval = setInterval(async () => {
-      await Promise.all([loadTickets(activeSource), loadAllTickets()])
-      if (selectedTicket) {
-        await loadTicketLogs(selectedTicket.id)
-      }
-    }, 10 * 60 * 1000)
-
-    window.addEventListener('focus', handleFocus)
-
-    return () => {
-      supabase.removeChannel(channel)
-      window.removeEventListener('focus', handleFocus)
-      clearInterval(backgroundRefreshInterval)
-    }
-  }, [activeSource, selectedTicket])
-
-  async function loadWorkers() {
-    await asyncHandler(
-      async () => {
-        const { data, error } = await supabase
-          .from('workers')
-          .select('id, full_name')
-          .order('full_name', { ascending: true })
-
-        if (error) throw error
-
-        if (data) {
-          const map: Record<string, string> = {}
-          data.forEach((worker) => {
-            map[worker.id] = worker.full_name
-          })
-          setWorkersMap(map)
-        }
-        return true
-      },
-      { context: 'Failed to load workers', showErrorToast: false }
-    )
-  }
-
-  async function loadProjects() {
-    await asyncHandler(
-      async () => {
-        const { data, error } = await supabase
-          .from('projects')
-          .select('id, name, project_code')
-          .order('project_code', { ascending: true })
-
-        if (error) throw error
-
-        if (data) {
-          setProjects(data as ProjectRow[])
-        }
-        return true
-      },
-      { context: 'Failed to load projects', showErrorToast: false }
-    )
-  }
-
-  async function loadAllTickets() {
-    await asyncHandler(
-      async () => {
-        const { data, error } = await supabase
-          .from('tickets')
-          .select(`
-        id,
-        ticket_number,
-        project_id,
-        reporter_phone,
-        description,
-        status,
-        assigned_worker_id,
-        created_at,
-        closed_at,
-        projects (
-          project_code,
-          name
-        )
-      `)
-          .order('created_at', { ascending: false })
-
-        if (error) throw error
-
-        const formatted: TicketRow[] =
-          data?.map((row: TicketWithProjects) => ({
-            id: row.id,
-            ticket_number: row.ticket_number,
-            project_id: row.project_id,
-            project_code: Array.isArray(row.projects) ? row.projects?.[0]?.project_code || '' : row.projects?.project_code || '',
-            project_name: Array.isArray(row.projects) ? row.projects?.[0]?.name || '' : row.projects?.name || '',
-            reporter_phone: row.reporter_phone,
-            description: row.description,
-            status: row.status,
-            assigned_worker_id: row.assigned_worker_id,
-            created_at: row.created_at,
-            closed_at: row.closed_at,
-          })) || []
-
-        setAllTickets(formatted)
-        return true
-      },
-      { context: 'Failed to load tickets', showErrorToast: false }
-    )
-  }
-
-  async function loadTickets(source: string) {
+  async function loadData() {
     setLoading(true)
-    setError('')
-
     await asyncHandler(
       async () => {
-        if (source === 'all') {
-          const { data, error } = await supabase
+        const [ticketsResult, projectsResult, workersResult] = await Promise.all([
+          supabase
             .from('tickets')
             .select(`
-            id,
-            ticket_number,
-            project_id,
-            reporter_phone,
-            description,
-            status,
-            assigned_worker_id,
-            created_at,
-            closed_at,
-            projects (
-              project_code,
-              name
-            )
-          `)
-            .order('created_at', { ascending: false })
+              id, ticket_number, project_id, reporter_phone, description, 
+              status, priority, assigned_worker_id, created_at, closed_at,
+              projects (project_code, name)
+            `)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('projects')
+            .select('id, name, project_code')
+            .order('project_code', { ascending: true }),
+          supabase
+            .from('workers')
+            .select('id, full_name')
+            .order('full_name', { ascending: true }),
+        ])
 
-          if (error) throw error
+        if (ticketsResult.error) throw ticketsResult.error
+        if (projectsResult.error) throw projectsResult.error
+        if (workersResult.error) throw workersResult.error
 
-          const formatted: TicketRow[] =
-            data?.map((row: TicketWithProjects) => ({
-              id: row.id,
-              ticket_number: row.ticket_number,
-              project_id: row.project_id,
-              project_code: Array.isArray(row.projects) ? row.projects?.[0]?.project_code || '' : row.projects?.project_code || '',
-              project_name: Array.isArray(row.projects) ? row.projects?.[0]?.name || '' : row.projects?.name || '',
-              reporter_phone: row.reporter_phone,
-              description: row.description,
-              status: row.status,
-              assigned_worker_id: row.assigned_worker_id,
-              created_at: row.created_at,
-              closed_at: row.closed_at,
-            })) || []
+        const formatted: TicketRow[] = (ticketsResult.data || []).map((row: TicketWithProjects) => ({
+          id: row.id,
+          ticket_number: row.ticket_number,
+          project_id: row.project_id,
+          project_code: Array.isArray(row.projects) ? row.projects?.[0]?.project_code || '' : row.projects?.project_code || '',
+          project_name: Array.isArray(row.projects) ? row.projects?.[0]?.name || '' : row.projects?.name || '',
+          reporter_phone: row.reporter_phone,
+          description: row.description,
+          status: row.status,
+          priority: row.priority,
+          assigned_worker_id: row.assigned_worker_id,
+          created_at: row.created_at,
+          closed_at: row.closed_at,
+        }))
 
-          setTickets(formatted)
-        } else {
-          const { data, error } = await supabase
-            .from(source)
-            .select('*')
-            .order('created_at', { ascending: false })
+        setTickets(formatted)
+        setProjects(projectsResult.data || [])
 
-          if (error) throw error
-
-          setTickets((data as TicketRow[]) || [])
-        }
+        const map: Record<string, string> = {}
+        workersResult.data?.forEach((worker: { id: string; full_name: string }) => {
+          map[worker.id] = worker.full_name
+        })
+        setWorkersMap(map)
         return true
       },
-      {
-        context: 'Failed to load tickets',
-        showErrorToast: false,
-        onError: (err) => setError(err),
-      }
+      { context: 'Failed to load dashboard data', showErrorToast: true }
     )
-
     setLoading(false)
+  }
+
+  const stats = useMemo(() => {
+    const total = tickets.length
+    const open = tickets.filter((t) => t.status === 'NEW').length
+    const inProgress = tickets.filter((t) => t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS').length
+    const closed = tickets.filter((t) => t.status === 'CLOSED').length
+    return { total, open, inProgress, closed }
+  }, [tickets])
+
+  const filteredTickets = useMemo(() => {
+    let filtered = tickets
+    if (activeKpi === 'NEW') filtered = tickets.filter((t) => t.status === 'NEW')
+    else if (activeKpi === 'IN_PROGRESS') filtered = tickets.filter((t) => t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS')
+    else if (activeKpi === 'CLOSED') filtered = tickets.filter((t) => t.status === 'CLOSED')
+    return filtered.slice(0, 8)
+  }, [tickets, activeKpi])
+
+  const projectStats = useMemo(() => {
+    return projects.map((project) => {
+      const projectTickets = tickets.filter((t) => t.project_code === project.project_code)
+      const open = projectTickets.filter((t) => t.status !== 'CLOSED').length
+      const total = projectTickets.length
+      const progress = total > 0 ? Math.round(((total - open) / total) * 100) : 0
+      const lastActivity = projectTickets[0]?.created_at
+      return { ...project, open, total, progress, lastActivity }
+    }).filter(p => p.total > 0).sort((a, b) => b.open - a.open).slice(0, 6)
+  }, [projects, tickets])
+
+  const recentActivity = useMemo(() => {
+    return tickets.slice(0, 5).map((ticket) => ({
+      id: ticket.id,
+      type: ticket.status === 'CLOSED' ? 'closed' : ticket.status === 'NEW' ? 'created' : 'updated',
+      ticket_number: ticket.ticket_number,
+      project_code: ticket.project_code,
+      description: ticket.description,
+      time: formatRelativeTime(ticket.created_at),
+    }))
+  }, [tickets])
+
+  function formatRelativeTime(dateString: string) {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays < 7) return `${diffDays}d ago`
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  function getGreeting() {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 18) return 'Good afternoon'
+    return 'Good evening'
+  }
+
+  function formatDate() {
+    return new Date().toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      month: 'long', 
+      day: 'numeric' 
+    })
   }
 
   async function loadTicketLogs(ticketId: string) {
     setDrawerLoading(true)
-
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('ticket_logs')
       .select('*')
       .eq('ticket_id', ticketId)
       .order('created_at', { ascending: false })
-
-    if (!error) {
-      setTicketLogs((data as TicketLog[]) || [])
-    } else {
-      setTicketLogs([])
-    }
-
+    setTicketLogs((data as TicketLog[]) || [])
     setDrawerLoading(false)
   }
 
-  async function refreshData() {
-    await Promise.all([loadTickets(activeSource), loadAllTickets()])
+  async function loadTicketAttachments(ticketId: string) {
+    setLoadingAttachments(true)
+    try {
+      const { data } = await supabase
+        .from('ticket_attachments')
+        .select('id, ticket_id, file_name, file_url, mime_type, created_at')
+        .eq('ticket_id', ticketId)
+        .order('created_at', { ascending: false })
 
-    if (selectedTicket) {
-      let nextTicket: TicketRow | null = null
-
-      if (activeSource === 'all') {
-        const { data } = await supabase
-          .from('tickets')
-          .select(`
-            id,
-            ticket_number,
-            project_id,
-            reporter_phone,
-            description,
-            status,
-            assigned_worker_id,
-            created_at,
-            closed_at,
-            projects (
-              project_code,
-              name
-            )
-          `)
-          .eq('id', selectedTicket.id)
-          .single()
-
-        if (data) {
-          const project = Array.isArray(data.projects) ? data.projects?.[0] : data.projects
-          nextTicket = {
-            id: data.id,
-            ticket_number: data.ticket_number,
-            project_id: data.project_id,
-            project_code: project?.project_code || '',
-            project_name: project?.name || '',
-            reporter_phone: data.reporter_phone,
-            description: data.description,
-            status: data.status,
-            assigned_worker_id: data.assigned_worker_id,
-            created_at: data.created_at,
-            closed_at: data.closed_at,
-          }
-        }
+      if (data && data.length > 0) {
+        const attachmentsWithUrls = await Promise.all(
+          data.map(async (attachment: AttachmentRow) => {
+            try {
+              const { data: signedUrlData } = await supabase.storage
+                .from('ticket-attachments')
+                .createSignedUrl(attachment.file_url || '', 3600)
+              return { ...attachment, signed_url: signedUrlData?.signedUrl || null }
+            } catch {
+              return { ...attachment, signed_url: null }
+            }
+          })
+        )
+        setSelectedTicketAttachments(attachmentsWithUrls)
       } else {
-        const { data } = await supabase
-          .from(activeSource)
-          .select('*')
-          .eq('id', selectedTicket.id)
-          .single()
-
-        if (data) {
-          nextTicket = data as TicketRow
-        }
+        setSelectedTicketAttachments([])
       }
-
-      if (nextTicket) {
-        setSelectedTicket(nextTicket)
-        setDraftDescription(nextTicket.description || '')
-        setDraftStatus(nextTicket.status || 'NEW')
-        setDraftWorkerId(nextTicket.assigned_worker_id || '')
-        await loadTicketLogs(nextTicket.id)
-      }
+    } catch {
+      setSelectedTicketAttachments([])
     }
+    setLoadingAttachments(false)
   }
 
-  async function assignWorker(ticketId: string, workerId: string) {
-    if (!workerId) {
-      await asyncHandler(
-        async () => {
-          await supabase.from('tickets').update({ assigned_worker_id: null }).eq('id', ticketId)
-          await refreshData()
-          return true
-        },
-        { context: 'Failed to unassign worker', showErrorToast: true }
-      )
-      return
-    }
-
-    await asyncHandler(
-      async () => {
-        const response = await fetch('/api/assign-ticket', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ticket_id: ticketId, worker_id: workerId }),
-        })
-
-        if (!response.ok) {
-          const result = await response.json()
-          throw new Error(result.error || 'Failed to assign worker')
-        }
-
-        toast.success('Worker assigned')
-        await refreshData()
-        return true
-      },
-      { context: 'Failed to assign worker', showErrorToast: true }
-    )
+  function openTicket(ticket: TicketRow) {
+    setSelectedTicket(ticket)
+    setDraftDescription(ticket.description || '')
+    setDraftStatus(ticket.status)
+    setDraftWorkerId(ticket.assigned_worker_id || '')
+    loadTicketLogs(ticket.id)
+    loadTicketAttachments(ticket.id)
   }
 
-  async function updateTicketStatus(ticketId: string, nextStatus: string) {
-    await asyncHandler(
-      async () => {
-        const payload: Record<string, string | null> = { status: nextStatus }
-        if (nextStatus === 'CLOSED') payload.closed_at = new Date().toISOString()
-        if (nextStatus !== 'CLOSED') payload.closed_at = null
-
-        const { error } = await supabase
-          .from('tickets')
-          .update(payload)
-          .eq('id', ticketId)
-
-        if (error) throw error
-
-        toast.success(`Ticket marked as ${nextStatus}`)
-        await refreshData()
-        return true
-      },
-      { context: 'Failed to update status', showErrorToast: true }
-    )
+  function closeDrawer() {
+    setSelectedTicket(null)
+    setDraftDescription('')
+    setDraftStatus('NEW')
+    setDraftWorkerId('')
+    setSelectedTicketAttachments([])
+    setTicketLogs([])
   }
 
   async function saveSelectedTicket() {
     if (!selectedTicket) return
     setSavingTicket(true)
-
     await asyncHandler(
       async () => {
         const workerChanged = (selectedTicket.assigned_worker_id || '') !== (draftWorkerId || '')
-
-        // If worker assignment changed, use API route to ensure SMS is sent exactly once.
         if (workerChanged && draftWorkerId) {
-          const response = await fetch('/api/assign-ticket', {
+          await fetch('/api/assign-ticket', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ticket_id: selectedTicket.id, worker_id: draftWorkerId }),
           })
-
-          if (!response.ok) {
-            const result = await response.json().catch(() => ({}))
-            throw new Error((result as { error?: string }).error || 'Failed to assign worker')
-          }
         }
 
         const payload: Record<string, string | null> = {
           description: draftDescription,
           status: draftStatus,
-          // Always set to draftWorkerId - the API already handled SMS notification
           assigned_worker_id: draftWorkerId || null,
         }
-
         if (draftStatus === 'CLOSED') {
           payload.closed_at = selectedTicket.closed_at || new Date().toISOString()
         } else {
@@ -516,267 +327,21 @@ export default function HomePage() {
           .eq('id', selectedTicket.id)
 
         if (error) throw error
-
         toast.success('Ticket saved')
-        await refreshData()
+        await loadData()
         return true
       },
       { context: 'Failed to save ticket', showErrorToast: true }
     )
-
     setSavingTicket(false)
-  }
-
-  async function closeTicket(ticketId: string) {
-    setActionLoadingId(ticketId)
-    await asyncHandler(
-      async () => {
-        const response = await fetch('/api/close-ticket', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ticket_id: ticketId }),
-        })
-
-        if (!response.ok) {
-          const result = await response.json()
-          throw new Error(result.error || 'Failed to close ticket')
-        }
-
-        toast.success('Ticket closed')
-        await refreshData()
-        return true
-      },
-      { context: 'Failed to close ticket', showErrorToast: true }
-    )
-    setActionLoadingId(null)
-  }
-
-  function openTicket(ticket: TicketRow) {
-    setSelectedTicket(ticket)
-    setDraftDescription(ticket.description || '')
-    setDraftPhone(ticket.reporter_phone || '')
-    setDraftWorkerId(ticket.assigned_worker_id || '')
-    setDraftStatus(ticket.status)
-    setSelectedTicketAttachments([])
-    loadTicketAttachments(ticket.id)
-    loadTicketLogs(ticket.id)
-  }
-
-  function closeDrawer() {
-    setSelectedTicket(null)
-    setDraftDescription('')
-    setDraftPhone('')
-    setDraftWorkerId('')
-    setDraftPriority('LOW')
-    setDraftStatus('NEW')
-    setSelectedTicketAttachments([])
-    setSelectedImageUrl(null)
-  }
-
-  async function loadTicketAttachments(ticketId: string) {
-    setLoadingAttachments(true)
-    try {
-      if (!ticketId || typeof ticketId !== 'string') {
-        setSelectedTicketAttachments([])
-        setLoadingAttachments(false)
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('ticket_attachments')
-        .select('id, ticket_id, file_name, file_url, mime_type, created_at')
-        .eq('ticket_id', ticketId)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        setSelectedTicketAttachments([])
-      } else if (!data || data.length === 0) {
-        setSelectedTicketAttachments([])
-      } else {
-        const attachmentsWithUrls = await Promise.all(
-          (data || []).map(async (attachment: AttachmentRow) => {
-            try {
-              if (!attachment.file_url) {
-                return { ...attachment, signed_url: null }
-              }
-
-              const { data: signedUrlData } = await supabase.storage
-                .from('ticket-attachments')
-                .createSignedUrl(attachment.file_url, 3600)
-
-              return { ...attachment, signed_url: signedUrlData?.signedUrl || null }
-            } catch {
-              return {
-                ...attachment,
-                signed_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_url}`,
-              }
-            }
-          })
-        )
-
-        setSelectedTicketAttachments(attachmentsWithUrls)
-      }
-    } catch {
-      setSelectedTicketAttachments([])
-    } finally {
-      setLoadingAttachments(false)
-    }
-  }
-
-  function getImageUrl(attachment: AttachmentRow): string {
-    if (attachment.signed_url) {
-      return attachment.signed_url
-    }
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jsliqlmjksintyigkulq.supabase.co'
-    return `${supabaseUrl}/storage/v1/object/public/ticket-attachments/${attachment.file_url}`
-  }
-
-  async function copyText(value: string, label = 'Copied') {
-    try {
-      await navigator.clipboard.writeText(value)
-      toast.success(label)
-    } catch {
-      toast.error('Copy failed')
-    }
-  }
-
-  function exportCurrentViewToCsv() {
-    const rows = filteredTickets.map((ticket) => ({
-      ticket_number: ticket.ticket_number,
-      project_code: ticket.project_code || '',
-      project_name: ticket.project_name || '',
-      reporter_phone: ticket.reporter_phone,
-      description: ticket.description,
-      status: ticket.status,
-      worker: ticket.assigned_worker_id
-        ? workersMap[ticket.assigned_worker_id] || ticket.assigned_worker_id
-        : '',
-      created_at: ticket.created_at,
-      closed_at: ticket.closed_at || '',
-    }))
-
-    const headers = [
-      'ticket_number',
-      'project_code',
-      'project_name',
-      'reporter_phone',
-      'description',
-      'status',
-      'worker',
-      'created_at',
-      'closed_at',
-    ]
-
-    const csv = [
-      headers.join(','),
-      ...rows.map((row) =>
-        headers
-          .map((header) => `"${String((row as Record<string, unknown>)[header] ?? '').replace(/"/g, '""')}"`)
-          .join(',')
-      ),
-    ].join('\n')
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', `bamakor-all-tickets.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  }
-
-  function buildWhatsappLink(projectCode: string) {
-    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`START_${projectCode}`)}`
-  }
-
-  const stats = useMemo(() => {
-    const total = allTickets.length
-    const open = allTickets.filter((t) => t.status === 'NEW').length
-    const assigned = allTickets.filter((t) => t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS').length
-    const closed = allTickets.filter((t) => t.status === 'CLOSED').length
-
-    return { total, open, assigned, closed }
-  }, [allTickets])
-
-  const projectCounts = useMemo(() => {
-    return projects.map((project) => {
-      const ticketsForProject = allTickets.filter((t) => t.project_code === project.project_code)
-
-      return {
-        ...project,
-        total: ticketsForProject.length,
-        open: ticketsForProject.filter((t) => t.status === 'NEW').length,
-        assigned: ticketsForProject.filter((t) => t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS').length,
-        closed: ticketsForProject.filter((t) => t.status === 'CLOSED').length,
-      }
-    })
-  }, [projects, allTickets])
-
-  const filteredTickets = useMemo(() => {
-    return tickets.filter((ticket) => {
-      const q = searchTerm.trim().toLowerCase()
-      const matchesSearch =
-        !q ||
-        String(ticket.ticket_number).toLowerCase().includes(q) ||
-        ticket.reporter_phone.toLowerCase().includes(q) ||
-        ticket.description.toLowerCase().includes(q) ||
-        (ticket.project_name || '').toLowerCase().includes(q) ||
-        (ticket.project_code || '').toLowerCase().includes(q)
-
-      const matchesStatus =
-        statusFilter === 'ALL' || ticket.status === statusFilter
-
-      const matchesKpi =
-        activeKpi === 'ALL' ||
-        (activeKpi === 'NEW' && ticket.status === 'NEW') ||
-        (activeKpi === 'ASSIGNED' && (ticket.status === 'ASSIGNED' || ticket.status === 'IN_PROGRESS')) ||
-        (activeKpi === 'CLOSED' && ticket.status === 'CLOSED')
-
-      const matchesProject =
-        selectedProjectCode === 'ALL' || ticket.project_code === selectedProjectCode
-
-      return matchesSearch && matchesStatus && matchesKpi && matchesProject
-    })
-  }, [tickets, searchTerm, statusFilter, activeKpi, selectedProjectCode])
-
-  function formatLogTitle(actionType: string) {
-    switch (actionType) {
-      case 'TICKET_CREATED':
-        return 'Ticket Created'
-      case 'USER_MESSAGE':
-        return 'User Message'
-      case 'ASSIGNED_TO_WORKER':
-        return 'Assigned To Worker'
-      case 'TICKET_CLOSED':
-        return 'Ticket Closed'
-      case 'AUTO_ASSIGNED':
-        return 'Auto Assigned'
-      default:
-        return actionType
-    }
-  }
-
-  function resetAllFilters() {
-    setActiveKpi('ALL')
-    setSelectedProjectCode('ALL')
-    setStatusFilter('ALL')
-    setSearchTerm('')
   }
 
   async function handleCreateTicket(e: React.FormEvent) {
     e.preventDefault()
-
-    if (!addTicketForm.project_code) {
-      setAddTicketError('Please select a project')
+    if (!addTicketForm.project_code || !addTicketForm.description.trim()) {
+      setAddTicketError('Please fill in all required fields')
       return
     }
-    if (!addTicketForm.description || addTicketForm.description.trim().length < 3) {
-      setAddTicketError('Description must be at least 3 characters')
-      return
-    }
-
     setAddingTicket(true)
     setAddTicketError('')
 
@@ -784,57 +349,37 @@ export default function HomePage() {
       const formData = new FormData()
       formData.append('project_code', addTicketForm.project_code)
       formData.append('description', addTicketForm.description)
-      if (addTicketForm.reporter_name) {
-        formData.append('reporter_name', addTicketForm.reporter_name)
-      }
-      if (addTicketForm.reporter_phone) {
-        formData.append('reporter_phone', addTicketForm.reporter_phone)
-      }
+      if (addTicketForm.reporter_name) formData.append('reporter_name', addTicketForm.reporter_name)
+      if (addTicketForm.reporter_phone) formData.append('reporter_phone', addTicketForm.reporter_phone)
       formData.append('source', 'manual')
 
-      const response = await fetch('/api/create-ticket', {
-        method: 'POST',
-        body: formData,
-      })
-
+      const response = await fetch('/api/create-ticket', { method: 'POST', body: formData })
       if (!response.ok) {
         const result = await response.json()
         throw new Error(result.error || 'Failed to create ticket')
       }
 
       const result = await response.json()
-
-      if (result.imageUploadWarning) {
-        toast.success(`Ticket #${result.ticketNumber} created successfully`)
-        toast.error(result.imageUploadWarning)
-      } else {
-        toast.success(`Ticket #${result.ticketNumber} created successfully`)
-      }
-
-      setAddTicketForm({
-        project_code: '',
-        description: '',
-        reporter_name: '',
-        reporter_phone: '',
-      })
+      toast.success(`Ticket #${result.ticketNumber} created`)
+      setAddTicketForm({ project_code: '', description: '', reporter_name: '', reporter_phone: '' })
       setShowAddTicketModal(false)
-
-      await refreshData()
+      await loadData()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create ticket'
       setAddTicketError(message)
       toast.error(message)
-    } finally {
-      setAddingTicket(false)
     }
+    setAddingTicket(false)
   }
+
+  const openTicketsCount = stats.open
 
   return (
     <AppShell isMobile={isMobile}>
       {isMobile && (
         <MobileHeader
-          title="Bamakor"
-          subtitle="Hello Sarah"
+          title="Dashboard"
+          subtitle={formatDate()}
           onMenuClick={() => setMenuOpen(true)}
         />
       )}
@@ -842,88 +387,231 @@ export default function HomePage() {
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
       <div style={styles.content}>
-        {!isMobile && (
-          <PageHeader
-            title="Dashboard"
-            subtitle="Welcome back. Here&apos;s what&apos;s happening today."
-            actions={
-              <>
-                <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
-                  + New Ticket
-                </Button>
-                <Button variant="secondary" onClick={() => setShowQrSection((prev) => !prev)}>
-                  QR Management
-                </Button>
-                <Button variant="secondary" onClick={exportCurrentViewToCsv}>
-                  Export CSV
-                </Button>
-                <Button variant="secondary" onClick={refreshData} title="Manually refresh dashboard">
-                  Refresh
-                </Button>
-              </>
-            }
-          />
-        )}
-
-        {/* Dashboard Stats */}
-        <DashboardStats
-          stats={stats}
-          activeKpi={activeKpi}
-          onKpiChange={setActiveKpi}
-          isMobile={isMobile}
-        />
-
-        {/* Projects Filter */}
-        <ProjectFilterSection
-          projectCounts={projectCounts}
-          selectedProjectCode={selectedProjectCode}
-          onProjectSelect={setSelectedProjectCode}
-        />
-
-        {/* QR Management Section */}
-        {showQrSection && (
-          <QrManagementSection
-            projects={projects}
-            onCopyText={copyText}
-          />
-        )}
-
-        {/* Dashboard Quick Actions */}
-        <div style={styles.quickActionsContainer}>
-          <div style={styles.quickActionCard}>
-            <h3 style={styles.quickActionTitle}>Dashboard Overview</h3>
-            <p style={styles.quickActionDescription}>
-              View summary statistics and project filters above
-            </p>
-            <div style={styles.quickActionButtons}>
-              <Link href="/tickets" style={styles.quickActionLink}>
-                Go to Tickets Workspace →
-              </Link>
-            </div>
+        {/* Hero Section */}
+        <div style={styles.hero}>
+          <div style={styles.heroText}>
+            <h1 style={styles.heroTitle}>{getGreeting()}</h1>
+            <p style={styles.heroDate}>{formatDate()}</p>
+            {openTicketsCount > 0 && (
+              <p style={styles.heroStatus}>
+                <span style={styles.statusDot} />
+                {openTicketsCount} open ticket{openTicketsCount !== 1 ? 's' : ''} need attention
+              </p>
+            )}
+          </div>
+          <div style={styles.heroActions}>
+            <Button variant="primary" size="lg" onClick={() => setShowAddTicketModal(true)}>
+              New Ticket
+            </Button>
           </div>
         </div>
+
+        {loading ? (
+          <div style={styles.loadingContainer}>
+            <LoadingSpinner size="lg" />
+          </div>
+        ) : (
+          <>
+            {/* KPI Cards */}
+            <div style={{
+              ...styles.kpiGrid,
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+            }}>
+              <KpiCard
+                label="Total Tickets"
+                value={stats.total}
+                accent="primary"
+                active={activeKpi === 'ALL'}
+                onClick={() => setActiveKpi('ALL')}
+              />
+              <KpiCard
+                label="Open"
+                value={stats.open}
+                accent="warning"
+                active={activeKpi === 'NEW'}
+                onClick={() => setActiveKpi('NEW')}
+              />
+              <KpiCard
+                label="In Progress"
+                value={stats.inProgress}
+                accent="primary"
+                active={activeKpi === 'IN_PROGRESS'}
+                onClick={() => setActiveKpi('IN_PROGRESS')}
+              />
+              <KpiCard
+                label="Resolved"
+                value={stats.closed}
+                accent="success"
+                active={activeKpi === 'CLOSED'}
+                onClick={() => setActiveKpi('CLOSED')}
+              />
+            </div>
+
+            {/* Main Grid */}
+            <div style={{
+              ...styles.mainGrid,
+              gridTemplateColumns: isMobile ? '1fr' : '1fr 340px',
+            }}>
+              {/* Project Status Section */}
+              <Card title="Project Status" subtitle="Active projects with pending work">
+                <div style={styles.projectList}>
+                  {projectStats.length === 0 ? (
+                    <p style={styles.emptyText}>No projects with tickets yet</p>
+                  ) : (
+                    projectStats.map((project) => (
+                      <Link 
+                        href={`/tickets?project=${encodeURIComponent(project.project_code)}`}
+                        key={project.id} 
+                        style={styles.projectCard}
+                      >
+                        <div style={styles.projectHeader}>
+                          <div>
+                            <div style={styles.projectName}>{project.name}</div>
+                            <div style={styles.projectCode}>{project.project_code}</div>
+                          </div>
+                          <div style={styles.projectStats}>
+                            <span style={styles.projectTicketCount}>{project.open} open</span>
+                          </div>
+                        </div>
+                        <div style={styles.progressBarContainer}>
+                          <div style={styles.progressBarBg}>
+                            <div 
+                              style={{
+                                ...styles.progressBarFill,
+                                width: `${project.progress}%`,
+                              }} 
+                            />
+                          </div>
+                          <span style={styles.progressLabel}>{project.progress}% complete</span>
+                        </div>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </Card>
+
+              {/* Recent Activity */}
+              <Card title="Recent Activity" subtitle="Latest ticket updates">
+                <div style={styles.activityList}>
+                  {recentActivity.map((activity) => (
+                    <div key={activity.id} style={styles.activityItem}>
+                      <div style={styles.activityIcon}>
+                        {activity.type === 'created' && (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.success} strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M12 8v8" />
+                            <path d="M8 12h8" />
+                          </svg>
+                        )}
+                        {activity.type === 'closed' && (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.success} strokeWidth="2">
+                            <path d="M20 6 9 17l-5-5" />
+                          </svg>
+                        )}
+                        {activity.type === 'updated' && (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.info} strokeWidth="2">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div style={styles.activityContent}>
+                        <div style={styles.activityTitle}>
+                          Ticket #{activity.ticket_number}
+                          <span style={styles.activityBadge}>{activity.project_code}</span>
+                        </div>
+                        <div style={styles.activityDesc}>
+                          {activity.description?.slice(0, 50)}{(activity.description?.length || 0) > 50 ? '...' : ''}
+                        </div>
+                      </div>
+                      <div style={styles.activityTime}>{activity.time}</div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+
+            {/* Recent Tickets Table */}
+            <Card 
+              title="Recent Tickets" 
+              subtitle={activeKpi === 'ALL' ? 'All tickets' : `Filtered by ${activeKpi.toLowerCase()}`}
+              actions={
+                <Link href="/tickets" style={styles.viewAllLink}>
+                  View all
+                </Link>
+              }
+              noPadding
+            >
+              <div style={styles.tableContainer}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>#</th>
+                      <th style={styles.th}>Project</th>
+                      <th style={styles.th}>Description</th>
+                      <th style={styles.th}>Status</th>
+                      <th style={styles.th}>Assigned</th>
+                      <th style={styles.th}>Age</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredTickets.map((ticket) => (
+                      <tr 
+                        key={ticket.id} 
+                        style={styles.tr}
+                        onClick={() => openTicket(ticket)}
+                      >
+                        <td style={styles.td}>
+                          <span style={styles.ticketNumber}>{ticket.ticket_number}</span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={styles.projectBadge}>{ticket.project_code}</span>
+                        </td>
+                        <td style={{ ...styles.td, maxWidth: '300px' }}>
+                          <span style={styles.descriptionText}>
+                            {ticket.description?.slice(0, 60)}{(ticket.description?.length || 0) > 60 ? '...' : ''}
+                          </span>
+                        </td>
+                        <td style={styles.td}>
+                          <StatusBadge status={ticket.status} size="sm" />
+                        </td>
+                        <td style={styles.td}>
+                          <span style={styles.workerName}>
+                            {ticket.assigned_worker_id ? workersMap[ticket.assigned_worker_id] || 'Unknown' : '-'}
+                          </span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={styles.ageText}>{formatRelativeTime(ticket.created_at)}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Ticket Detail Drawer */}
       <TicketDetailDrawer
-        selectedTicket={selectedTicket}
-        isMobile={isMobile}
-        draftDescription={draftDescription}
-        draftWorkerId={draftWorkerId}
-        draftStatus={draftStatus}
-        selectedTicketAttachments={selectedTicketAttachments}
+        ticket={selectedTicket}
+        workersMap={workersMap}
         ticketLogs={ticketLogs}
+        attachments={selectedTicketAttachments}
+        loadingAttachments={loadingAttachments}
         drawerLoading={drawerLoading}
         savingTicket={savingTicket}
-        workersMap={workersMap}
+        draftDescription={draftDescription}
+        draftStatus={draftStatus}
+        draftWorkerId={draftWorkerId}
         onClose={closeDrawer}
-        onDescriptionChange={setDraftDescription}
-        onWorkerChange={setDraftWorkerId}
-        onStatusChange={setDraftStatus}
         onSave={saveSelectedTicket}
-        onSelectImage={setSelectedImageUrl}
-        onCloseTicket={() => closeTicket(selectedTicket?.id || '')}
-        getImageUrl={getImageUrl}
+        onDescriptionChange={setDraftDescription}
+        onStatusChange={setDraftStatus}
+        onWorkerChange={setDraftWorkerId}
+        onImageClick={setSelectedImageUrl}
+        isMobile={isMobile}
       />
 
       {/* Add Ticket Modal */}
@@ -931,40 +619,21 @@ export default function HomePage() {
         open={showAddTicketModal}
         onClose={() => setShowAddTicketModal(false)}
         projects={projects}
-        projectCode={addTicketForm.project_code}
-        description={addTicketForm.description}
-        reporterName={addTicketForm.reporter_name}
-        reporterPhone={addTicketForm.reporter_phone}
-        error={addTicketError}
-        loading={addingTicket}
-        onProjectCodeChange={(value) =>
-          setAddTicketForm({ ...addTicketForm, project_code: value })
-        }
-        onDescriptionChange={(value) =>
-          setAddTicketForm({ ...addTicketForm, description: value })
-        }
-        onReporterNameChange={(value) =>
-          setAddTicketForm({ ...addTicketForm, reporter_name: value })
-        }
-        onReporterPhoneChange={(value) =>
-          setAddTicketForm({ ...addTicketForm, reporter_phone: value })
-        }
+        form={addTicketForm}
+        onFormChange={setAddTicketForm}
         onSubmit={handleCreateTicket}
+        loading={addingTicket}
+        error={addTicketError}
+        isMobile={isMobile}
       />
 
       {/* Image Lightbox */}
-      <ImageLightbox imageUrl={selectedImageUrl} onClose={() => setSelectedImageUrl(null)} />
-
-      {/* Mobile Actions */}
-      {isMobile && (
-        <div style={styles.mobileBottomActions}>
-          <Button
-            variant="primary"
-            onClick={() => setShowAddTicketModal(true)}
-            style={{ flex: 1 }}
-          >
-            + New Ticket
-          </Button>
+      {selectedImageUrl && (
+        <div 
+          style={styles.lightboxOverlay} 
+          onClick={() => setSelectedImageUrl(null)}
+        >
+          <img src={selectedImageUrl} alt="Attachment" style={styles.lightboxImage} />
         </div>
       )}
     </AppShell>
@@ -973,57 +642,257 @@ export default function HomePage() {
 
 const styles: Record<string, CSSProperties> = {
   content: {
-    padding: '24px',
-    paddingBottom: '100px',
+    padding: '32px 40px',
+    maxWidth: '1400px',
+    margin: '0 auto',
   },
-  quickActionsContainer: {
-    marginTop: '32px',
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    gap: '20px',
+  hero: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '40px',
+    flexWrap: 'wrap',
+    gap: '24px',
   },
-  quickActionCard: {
-    padding: '24px',
-    background: theme.colors.surface,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.lg,
-    textAlign: 'center',
-  },
-  quickActionTitle: {
-    fontSize: '16px',
-    fontWeight: 600,
+  heroText: {},
+  heroTitle: {
+    fontSize: '34px',
+    fontWeight: 700,
     color: theme.colors.textPrimary,
-    margin: '0 0 8px 0',
+    margin: 0,
+    letterSpacing: '-0.02em',
   },
-  quickActionDescription: {
-    fontSize: '14px',
+  heroDate: {
+    fontSize: '17px',
     color: theme.colors.textMuted,
-    margin: '8px 0 16px 0',
-    lineHeight: '1.5',
+    margin: '8px 0 0',
   },
-  quickActionButtons: {
+  heroStatus: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '15px',
+    color: theme.colors.textSecondary,
+    margin: '16px 0 0',
+  },
+  statusDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: theme.colors.warning,
+  },
+  heroActions: {
     display: 'flex',
     gap: '12px',
-    justifyContent: 'center',
   },
-  quickActionLink: {
+  loadingContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '80px 0',
+  },
+  kpiGrid: {
+    display: 'grid',
+    gap: '16px',
+    marginBottom: '32px',
+  },
+  mainGrid: {
+    display: 'grid',
+    gap: '24px',
+    marginBottom: '32px',
+  },
+  projectList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  },
+  projectCard: {
+    display: 'block',
+    padding: '16px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+    textDecoration: 'none',
+    transition: 'all 0.2s ease',
+    cursor: 'pointer',
+  },
+  projectHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '12px',
+  },
+  projectName: {
+    fontSize: '15px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+  },
+  projectCode: {
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+    marginTop: '2px',
+  },
+  projectStats: {
+    textAlign: 'right',
+  },
+  projectTicketCount: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: theme.colors.warning,
+  },
+  progressBarContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  progressBarBg: {
+    flex: 1,
+    height: '4px',
+    background: theme.colors.muted,
+    borderRadius: '2px',
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    background: theme.colors.primary,
+    borderRadius: '2px',
+    transition: 'width 0.3s ease',
+  },
+  progressLabel: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+    flexShrink: 0,
+  },
+  activityList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  activityItem: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '12px',
+    padding: '12px 0',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  activityIcon: {
+    width: '32px',
+    height: '32px',
+    borderRadius: theme.radius.full,
+    background: theme.colors.muted,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  activityContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  activityTitle: {
+    fontSize: '14px',
+    fontWeight: 500,
+    color: theme.colors.textPrimary,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  activityBadge: {
+    fontSize: '11px',
+    fontWeight: 500,
+    color: theme.colors.textMuted,
+    background: theme.colors.muted,
+    padding: '2px 6px',
+    borderRadius: theme.radius.xs,
+  },
+  activityDesc: {
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+    marginTop: '2px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  activityTime: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+    flexShrink: 0,
+  },
+  viewAllLink: {
     fontSize: '14px',
     fontWeight: 500,
     color: theme.colors.primary,
     textDecoration: 'none',
-    transition: 'color 0.2s ease',
   },
-  mobileBottomActions: {
-    position: 'fixed',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  tableContainer: {
+    overflowX: 'auto',
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+  },
+  th: {
+    textAlign: 'left',
+    padding: '14px 20px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    borderBottom: `1px solid ${theme.colors.border}`,
+    background: theme.colors.muted,
+  },
+  tr: {
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
+  },
+  td: {
     padding: '16px 20px',
-    paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
-    background: theme.colors.surface,
-    borderTop: `1px solid ${theme.colors.border}`,
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
+    borderBottom: `1px solid ${theme.colors.border}`,
+    verticalAlign: 'middle',
+  },
+  ticketNumber: {
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
+  },
+  projectBadge: {
+    fontSize: '12px',
+    fontWeight: 500,
+    color: theme.colors.textMuted,
+    background: theme.colors.muted,
+    padding: '4px 8px',
+    borderRadius: theme.radius.sm,
+  },
+  descriptionText: {
+    color: theme.colors.textSecondary,
+  },
+  workerName: {
+    color: theme.colors.textSecondary,
+  },
+  ageText: {
+    color: theme.colors.textMuted,
+    fontSize: '13px',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: theme.colors.textMuted,
+    padding: '32px 0',
+  },
+  lightboxOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0, 0, 0, 0.9)',
     display: 'flex',
-    gap: '10px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 500,
+    cursor: 'pointer',
+  },
+  lightboxImage: {
+    maxWidth: '90vw',
+    maxHeight: '90vh',
+    objectFit: 'contain',
+    borderRadius: theme.radius.lg,
   },
 }
-  
