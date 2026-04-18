@@ -44,11 +44,12 @@ type TicketRow = {
 type AttachmentRow = {
   id: string
   ticket_id: string
-  file_name: string
-  file_url: string
-  file_size: number | null
-  mime_type: string
-  created_at: string
+  file_name: string | null
+  file_url: string | null
+  mime_type: string | null
+  attachment_type: string
+  whatsapp_media_id: string | null
+  created_at: string | null
   signed_url?: string | null
 }
 
@@ -101,6 +102,7 @@ export default function TicketsPage() {
   const [draftWorkerId, setDraftWorkerId] = useState<string>('')
   const [savingTicket, setSavingTicket] = useState(false)
   const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentRow[]>([])
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null)
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [showAddTicketModal, setShowAddTicketModal] = useState(false)
   const [addTicketForm, setAddTicketForm] = useState({
@@ -265,23 +267,19 @@ export default function TicketsPage() {
     try {
       const { data } = await supabase
         .from('ticket_attachments')
-        .select('id, ticket_id, file_name, file_url, file_size, mime_type, created_at')
+        .select('id, ticket_id, file_name, file_url, mime_type, attachment_type, whatsapp_media_id, created_at')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: false })
 
       if (data && data.length > 0) {
-        const attachmentsWithUrls = await Promise.all(
-          (data || []).map(async (attachment: AttachmentRow) => {
-            try {
-              const { data: signedUrlData } = await supabase.storage
-                .from('ticket-attachments')
-                .createSignedUrl(attachment.file_url, 3600)
-              return { ...attachment, signed_url: signedUrlData?.signedUrl || null }
-            } catch {
-              return { ...attachment, signed_url: null }
-            }
-          })
-        )
+        const attachmentsWithUrls = data.map((attachment: AttachmentRow) => {
+          // Get public URL - bucket is PUBLIC so no signed URL needed
+          const filePath = attachment.file_url || ''
+          const { data: publicUrlData } = supabase.storage
+            .from('ticket-attachments')
+            .getPublicUrl(filePath)
+          return { ...attachment, signed_url: publicUrlData?.publicUrl || null }
+        })
         setSelectedTicketAttachments(attachmentsWithUrls)
       } else {
         setSelectedTicketAttachments([])
@@ -601,18 +599,21 @@ export default function TicketsPage() {
                 <label style={styles.formLabel}>Attachments</label>
                 <div style={styles.attachmentGrid}>
                   {selectedTicketAttachments.map((attachment) => (
-                    <a
+                    <div
                       key={attachment.id}
-                      href={attachment.signed_url || '#'}
-                      target="_blank"
-                      rel="noreferrer"
                       style={styles.attachmentItem}
+                      onClick={() => {
+                        if (attachment.signed_url) {
+                          setLightboxImage(attachment.signed_url)
+                        }
+                      }}
                     >
                       {attachment.mime_type?.startsWith('image/') ? (
                         <img
                           src={attachment.signed_url || ''}
-                          alt={attachment.file_name}
+                          alt={attachment.file_name || 'attachment'}
                           style={styles.attachmentImage}
+                          crossOrigin="anonymous"
                         />
                       ) : (
                         <div style={styles.attachmentFile}>
@@ -623,7 +624,7 @@ export default function TicketsPage() {
                           <span style={styles.attachmentName}>{attachment.file_name}</span>
                         </div>
                       )}
-                    </a>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -710,6 +711,56 @@ export default function TicketsPage() {
           </div>
         </form>
       </Drawer>
+
+      {/* Image Lightbox */}
+      {lightboxImage && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0, 0, 0, 0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+          onClick={() => setLightboxImage(null)}
+        >
+          <button
+            onClick={() => setLightboxImage(null)}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '44px',
+              height: '44px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#fff',
+              fontSize: '24px',
+            }}
+          >
+            &times;
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Attachment"
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              objectFit: 'contain',
+              borderRadius: '8px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </AppShell>
   )
 }
@@ -840,7 +891,8 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: theme.radius.md,
     overflow: 'hidden',
     border: `1px solid ${theme.colors.border}`,
-    textDecoration: 'none',
+    cursor: 'pointer',
+    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   },
   attachmentImage: {
     width: '100%',
