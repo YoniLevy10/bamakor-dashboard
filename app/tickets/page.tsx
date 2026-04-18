@@ -102,6 +102,7 @@ export default function TicketsPage() {
   const [draftWorkerId, setDraftWorkerId] = useState<string>('')
   const [savingTicket, setSavingTicket] = useState(false)
   const [selectedTicketAttachments, setSelectedTicketAttachments] = useState<AttachmentRow[]>([])
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null)
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [showAddTicketModal, setShowAddTicketModal] = useState(false)
   const [addTicketForm, setAddTicketForm] = useState({
@@ -631,26 +632,21 @@ export default function TicketsPage() {
                 <label style={styles.formLabel}>Attachments</label>
                 <div style={styles.attachmentGrid}>
                   {selectedTicketAttachments.map((attachment) => (
-                    <a
+                    <div
                       key={attachment.id}
-                      href={attachment.signed_url || '#'}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       style={styles.attachmentItem}
-                      onClick={(e) => {
-                        if (!attachment.signed_url) {
-                          e.preventDefault()
-                          console.log('[v0] No signed_url for attachment:', attachment)
-                        } else {
-                          console.log('[v0] Opening attachment:', attachment.signed_url)
+                      onClick={() => {
+                        if (attachment.signed_url) {
+                          setLightboxImage(attachment.signed_url)
                         }
                       }}
                     >
                       {attachment.mime_type?.startsWith('image/') ? (
                         <img
                           src={attachment.signed_url || ''}
-                          alt={attachment.file_name}
+                          alt={attachment.file_name || 'attachment'}
                           style={styles.attachmentImage}
+                          crossOrigin="anonymous"
                         />
                       ) : (
                         <div style={styles.attachmentFile}>
@@ -661,7 +657,7 @@ export default function TicketsPage() {
                           <span style={styles.attachmentName}>{attachment.file_name}</span>
                         </div>
                       )}
-                    </a>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -748,6 +744,56 @@ export default function TicketsPage() {
           </div>
         </form>
       </Drawer>
+
+      {/* Image Lightbox */}
+      {lightboxImage && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0, 0, 0, 0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+          onClick={() => setLightboxImage(null)}
+        >
+          <button
+            onClick={() => setLightboxImage(null)}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '44px',
+              height: '44px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#fff',
+              fontSize: '24px',
+            }}
+          >
+            &times;
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Attachment"
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              objectFit: 'contain',
+              borderRadius: '8px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </AppShell>
   )
 }
@@ -878,7 +924,8 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: theme.radius.md,
     overflow: 'hidden',
     border: `1px solid ${theme.colors.border}`,
-    textDecoration: 'none',
+    cursor: 'pointer',
+    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   },
   attachmentImage: {
     width: '100%',
