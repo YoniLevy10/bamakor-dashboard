@@ -635,8 +635,16 @@ export default function TicketsPage() {
                       key={attachment.id}
                       href={attachment.signed_url || '#'}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       style={styles.attachmentItem}
+                      onClick={(e) => {
+                        if (!attachment.signed_url) {
+                          e.preventDefault()
+                          console.log('[v0] No signed_url for attachment:', attachment)
+                        } else {
+                          console.log('[v0] Opening attachment:', attachment.signed_url)
+                        }
+                      }}
                     >
                       {attachment.mime_type?.startsWith('image/') ? (
                         <img
