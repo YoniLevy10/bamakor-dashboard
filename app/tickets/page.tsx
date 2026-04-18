@@ -264,60 +264,27 @@ export default function TicketsPage() {
 
   async function loadTicketAttachments(ticketId: string) {
     setLoadingAttachments(true)
-    console.log('[v0] Loading attachments for ticket:', ticketId)
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('ticket_attachments')
         .select('id, ticket_id, file_name, file_url, mime_type, attachment_type, whatsapp_media_id, created_at')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: false })
 
-      console.log('[v0] Attachments query result:', { data, error, count: data?.length })
-
       if (data && data.length > 0) {
-        const attachmentsWithUrls = await Promise.all(
-          (data || []).map(async (attachment: AttachmentRow) => {
-            try {
-              // Extract just the path if file_url contains full URL
-              let filePath = attachment.file_url
-              console.log('[v0] Original file_url:', filePath)
-              
-              // If it's a full Supabase URL, extract just the path
-              if (filePath && filePath.includes('supabase.co/storage')) {
-                // Extract path after /ticket-attachments/
-                const match = filePath.match(/\/ticket-attachments\/(.+)$/)
-                if (match) {
-                  filePath = match[1]
-                  console.log('[v0] Extracted path from URL:', filePath)
-                }
-              }
-              
-              // If it starts with ticket-attachments/, remove that prefix
-              if (filePath && filePath.startsWith('ticket-attachments/')) {
-                filePath = filePath.replace('ticket-attachments/', '')
-                console.log('[v0] Removed bucket prefix:', filePath)
-              }
-              
-              console.log('[v0] Final path for signed URL:', filePath)
-              const { data: signedUrlData, error: signedError } = await supabase.storage
-                .from('ticket-attachments')
-                .createSignedUrl(filePath, 3600)
-              console.log('[v0] Signed URL result:', { signedUrl: signedUrlData?.signedUrl, error: signedError })
-              return { ...attachment, signed_url: signedUrlData?.signedUrl || null }
-            } catch (err) {
-              console.log('[v0] Error creating signed URL:', err)
-              return { ...attachment, signed_url: null }
-            }
-          })
-        )
-        console.log('[v0] Final attachments with URLs:', attachmentsWithUrls)
+        const attachmentsWithUrls = data.map((attachment: AttachmentRow) => {
+          // Get public URL - bucket is PUBLIC so no signed URL needed
+          const filePath = attachment.file_url || ''
+          const { data: publicUrlData } = supabase.storage
+            .from('ticket-attachments')
+            .getPublicUrl(filePath)
+          return { ...attachment, signed_url: publicUrlData?.publicUrl || null }
+        })
         setSelectedTicketAttachments(attachmentsWithUrls)
       } else {
-        console.log('[v0] No attachments found for ticket')
         setSelectedTicketAttachments([])
       }
-    } catch (err) {
-      console.log('[v0] Error loading attachments:', err)
+    } catch {
       setSelectedTicketAttachments([])
     }
     setLoadingAttachments(false)
