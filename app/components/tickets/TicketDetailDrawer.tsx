@@ -152,13 +152,24 @@ export function TicketDetailDrawer({
 
           <div style={styles.drawerSection}>
             <div style={styles.drawerLabel}>Reporter Phone</div>
-            <div style={styles.drawerValue}>{selectedTicket.reporter_phone}</div>
+            <a 
+              href={`tel:${selectedTicket.reporter_phone}`}
+              style={styles.phoneLink}
+            >
+              {selectedTicket.reporter_phone}
+            </a>
           </div>
 
           <div style={styles.drawerSection}>
             <div style={styles.drawerLabel}>Created</div>
             <div style={styles.drawerValue}>
-              {new Date(selectedTicket.created_at).toLocaleString()}
+              {new Date(selectedTicket.created_at).toLocaleDateString('en-US', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
             </div>
           </div>
 
@@ -224,7 +235,12 @@ export function TicketDetailDrawer({
                     <div style={styles.logHeader}>
                       <span style={styles.logAction}>{formatLogTitle(log.action_type)}</span>
                       <span style={styles.logTime}>
-                        {new Date(log.created_at).toLocaleString()}
+                        {new Date(log.created_at).toLocaleDateString('en-US', {
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
                       </span>
                     </div>
                     {log.notes && <div style={styles.logNotes}>{log.notes}</div>}
@@ -260,6 +276,12 @@ const styles: Record<string, CSSProperties> = {
   drawerValue: {
     fontSize: '14px',
     color: theme.colors.textPrimary,
+  },
+  phoneLink: {
+    fontSize: '14px',
+    color: theme.colors.primary,
+    textDecoration: 'none',
+    fontWeight: 500,
   },
   drawerSelect: {
     background: theme.colors.surfaceElevated,

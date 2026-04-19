@@ -1171,6 +1171,7 @@ const drawerStyles: Record<string, CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     padding: '24px',
+    paddingTop: 'calc(24px + env(safe-area-inset-top))',
     borderBottom: `1px solid ${theme.colors.border}`,
     flexShrink: 0,
   },
@@ -1202,6 +1203,7 @@ const drawerStyles: Record<string, CSSProperties> = {
     flex: 1,
     overflow: 'auto',
     padding: '24px',
+    paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
   },
 }
 
