@@ -511,7 +511,7 @@ export async function POST(req: NextRequest) {
               try {
                 await sendWhatsAppTextMessage(
                   from,
-                  '✅ התמונה התקבלה וצורפה לתקלה.\n\nצוות כבר טוען על זה — תשמעו ממנו בקרוב!'
+                  '✅ התמונה התקבלה בהצלחה וצורפה לתקלה. צוות הטכנאים יטפל בבקשתך בהקדם.'
                 )
                 console.log(`✅ PIPELINE_SUCCESS: Step 4 USER_MSG - Confirmation message sent`)
               } catch (sendError) {
@@ -621,7 +621,7 @@ export async function POST(req: NextRequest) {
               try {
                 await sendWhatsAppTextMessage(
                   from,
-                  '✅ התמונה התקבלה וצורפה לתקלה.\n\nצוות כבר טוען על זה — תשמעו ממנו בקרוב!'
+                  '✅ התמונה התקבלה בהצלחה וצורפה לתקלה. צוות הטכנאים יטפל בבקשתך בהקדם.'
                 )
               } catch (sendError) {
                 console.error('⚠️ PIPELINE_WARNING: Failed to send confirmation (recent ticket attach)', sendError)
