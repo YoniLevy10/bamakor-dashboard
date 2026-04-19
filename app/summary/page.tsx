@@ -10,8 +10,6 @@ import {
   PageHeader,
   KpiCard,
   Card,
-  Button,
-  StatusBadge,
   Select,
   LoadingSpinner,
   theme
@@ -168,7 +166,11 @@ export default function SummaryPage() {
   const projectStats = useMemo(() => {
     return projects
       .map((project) => {
-        const projectTickets = tickets.filter((t) => t.project_code === project.project_code)
+        const projectTickets = tickets.filter(
+          (t) =>
+            (t.project_id && t.project_id === project.id) ||
+            (!!t.project_code && t.project_code === project.project_code)
+        )
         return {
           id: project.id,
           name: project.name,
@@ -218,7 +220,7 @@ export default function SummaryPage() {
   }
 
   function formatDate() {
-    return new Date().toLocaleDateString('en-US', {
+    return new Date().toLocaleDateString('he-IL', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -230,7 +232,7 @@ export default function SummaryPage() {
     <AppShell isMobile={isMobile}>
       {isMobile && (
         <MobileHeader
-          title="Summary"
+          title="סיכום"
           subtitle={formatDate()}
           onMenuClick={() => setMenuOpen(true)}
         />
@@ -241,20 +243,34 @@ export default function SummaryPage() {
       <div style={styles.content}>
         {!isMobile && (
           <PageHeader
-            title="Summary"
-            subtitle="Operational overview and performance metrics"
+            title="סיכום"
+            subtitle="סקירה תפעולית ומדדי ביצוע"
             actions={
               <Select
                 value={period}
                 onChange={(value) => setPeriod(value as 'week' | 'month' | 'all')}
                 options={[
-                  { label: 'This Week', value: 'week' },
-                  { label: 'This Month', value: 'month' },
-                  { label: 'All Time', value: 'all' },
+                  { label: 'השבוע', value: 'week' },
+                  { label: 'החודש', value: 'month' },
+                  { label: 'מתחילת התקופה', value: 'all' },
                 ]}
               />
             }
           />
+        )}
+        {isMobile && (
+          <div style={{ marginBottom: '24px', marginTop: '-8px' }}>
+            <Select
+              value={period}
+              onChange={(value) => setPeriod(value as 'week' | 'month' | 'all')}
+              options={[
+                { label: 'השבוע', value: 'week' },
+                { label: 'החודש', value: 'month' },
+                { label: 'מתחילת התקופה', value: 'all' },
+              ]}
+              style={{ width: '100%', maxWidth: '360px' }}
+            />
+          </div>
         )}
 
         {loading ? (
@@ -269,58 +285,58 @@ export default function SummaryPage() {
               gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             }}>
               <KpiCard
-                label="Open Now"
+                label="פתוחות כעת"
                 value={summary.openNow}
                 accent="warning"
                 onClick={() => navigateToTickets({ status: 'NEW' })}
               />
               <KpiCard
-                label="In Progress"
+                label="בטיפול"
                 value={summary.assignedNow}
                 accent="primary"
                 onClick={() => navigateToTickets({ status: 'ASSIGNED' })}
               />
               <KpiCard
-                label="Opened This Week"
+                label="נפתחו השבוע"
                 value={summary.weekOpened}
                 accent="primary"
                 onClick={() => navigateToTickets()}
               />
               <KpiCard
-                label="Closed This Week"
+                label="נסגרו השבוע"
                 value={summary.weekClosed}
                 accent="success"
               />
             </div>
 
             {/* System Health */}
-            <Card title="System Health" subtitle="Key performance indicators">
+            <Card title="בריאות המערכת" subtitle="מדדי ביצוע מרכזיים">
               <div style={styles.metricsGrid}>
                 <div style={styles.metricCard}>
                   <div style={styles.metricValue}>
                     {summary.weekOpened > 0
                       ? `${Math.round((summary.weekClosed / summary.weekOpened) * 100)}%`
-                      : 'N/A'}
+                      : '—'}
                   </div>
-                  <div style={styles.metricLabel}>Resolution Rate (7d)</div>
+                  <div style={styles.metricLabel}>אחוז סגירה (7 ימים)</div>
                   <div style={styles.metricDescription}>
-                    {summary.weekClosed} of {summary.weekOpened} closed
+                    {summary.weekClosed} מתוך {summary.weekOpened} נסגרו
                   </div>
                 </div>
 
                 <div style={styles.metricCard}>
                   <div style={styles.metricValue}>{summary.openNow}</div>
-                  <div style={styles.metricLabel}>Pending Assignment</div>
+                  <div style={styles.metricLabel}>ממתינות לשיוך</div>
                   <div style={styles.metricDescription}>
-                    Tickets awaiting workers
+                    תקלות ממתינות לעובד
                   </div>
                 </div>
 
                 <div style={styles.metricCard}>
                   <div style={styles.metricValue}>{workerLoad.length}</div>
-                  <div style={styles.metricLabel}>Active Workers</div>
+                  <div style={styles.metricLabel}>עובדים פעילים</div>
                   <div style={styles.metricDescription}>
-                    With assigned tasks
+                    עם משימות משויכות
                   </div>
                 </div>
 
@@ -328,9 +344,9 @@ export default function SummaryPage() {
                   <div style={styles.metricValue}>
                     {Math.max(0, projectStats.length - projectsRequiringAttention.length)}
                   </div>
-                  <div style={styles.metricLabel}>Projects On Track</div>
+                  <div style={styles.metricLabel}>פרויקטים תקינים</div>
                   <div style={styles.metricDescription}>
-                    No open issues
+                    אין תקלות פתוחות
                   </div>
                 </div>
               </div>
@@ -342,7 +358,7 @@ export default function SummaryPage() {
               gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
             }}>
               {/* Top Priority Projects */}
-              <Card title="Top Priority Projects" subtitle="Highest workload">
+              <Card title="פרויקטים עם עומס גבוה" subtitle="עומס תקלות גבוה ביותר">
                 {projectsRequiringAttention.length === 0 ? (
                   <div style={styles.emptyState}>
                     <div style={styles.emptyIcon}>
@@ -350,8 +366,8 @@ export default function SummaryPage() {
                         <path d="M20 6 9 17l-5-5" />
                       </svg>
                     </div>
-                    <div style={styles.emptyTitle}>All Clear</div>
-                    <div style={styles.emptyText}>No projects have pending tickets</div>
+                    <div style={styles.emptyTitle}>הכל נקי</div>
+                    <div style={styles.emptyText}>אין פרויקטים עם תקלות ממתינות</div>
                   </div>
                 ) : (
                   <div style={styles.priorityList}>
@@ -367,8 +383,8 @@ export default function SummaryPage() {
                           <div style={styles.priorityCode}>{project.project_code}</div>
                         </div>
                         <div style={styles.priorityStats}>
-                          <span style={styles.priorityOpen}>{project.open} open</span>
-                          <span style={styles.priorityAssigned}>{project.assigned} in progress</span>
+                          <span style={styles.priorityOpen}>{project.open} פתוחות</span>
+                          <span style={styles.priorityAssigned}>{project.assigned} בטיפול</span>
                         </div>
                       </div>
                     ))}
@@ -377,7 +393,7 @@ export default function SummaryPage() {
               </Card>
 
               {/* Team Capacity */}
-              <Card title="Team Capacity" subtitle="Worker load distribution">
+              <Card title="עומס צוות" subtitle="התפלגות עומס עובדים" style={{ overflow: 'visible' }}>
                 {workerLoad.length === 0 ? (
                   <div style={styles.emptyState}>
                     <div style={styles.emptyIcon}>
@@ -386,8 +402,8 @@ export default function SummaryPage() {
                         <circle cx="9" cy="7" r="4" />
                       </svg>
                     </div>
-                    <div style={styles.emptyTitle}>No Active Assignments</div>
-                    <div style={styles.emptyText}>All workers are currently available</div>
+                    <div style={styles.emptyTitle}>אין שיבוצים פעילים</div>
+                    <div style={styles.emptyText}>כל העובדים זמינים כרגע</div>
                   </div>
                 ) : (
                   <div style={styles.workerList}>
@@ -402,7 +418,15 @@ export default function SummaryPage() {
                           style={styles.workerItem}
                           onClick={() => navigateToTickets({ worker: worker.id })}
                         >
-                          <div style={styles.workerName}>{worker.full_name}</div>
+                          <div style={styles.workerItemRow}>
+                            <div style={styles.workerName}>{worker.full_name}</div>
+                            <div style={{
+                              ...styles.workerCount,
+                              color: isHighLoad ? theme.colors.error : theme.colors.textMuted,
+                            }}>
+                              {worker.assigned_tickets} {isHighLoad ? '(עומס גבוה)' : 'פעיל'}
+                            </div>
+                          </div>
                           <div style={styles.workerBarContainer}>
                             <div style={styles.workerBarBg}>
                               <div
@@ -414,12 +438,6 @@ export default function SummaryPage() {
                               />
                             </div>
                           </div>
-                          <div style={{
-                            ...styles.workerCount,
-                            color: isHighLoad ? theme.colors.error : theme.colors.textMuted,
-                          }}>
-                            {worker.assigned_tickets} {isHighLoad ? '(High)' : 'active'}
-                          </div>
                         </div>
                       )
                     })}
@@ -429,22 +447,22 @@ export default function SummaryPage() {
             </div>
 
             {/* Projects Performance Table */}
-            <Card title="Projects Performance" subtitle="Ticket volume by project" noPadding>
+            <Card title="ביצועי פרויקטים" subtitle="נפח תקלות לפי פרויקט" noPadding>
               {projectStats.length === 0 ? (
                 <div style={styles.emptyTableState}>
-                  <p style={styles.emptyText}>No project data found</p>
+                  <p style={styles.emptyText}>לא נמצאו נתוני פרויקטים</p>
                 </div>
               ) : (
                 <div style={styles.tableContainer}>
                   <table style={styles.table}>
                     <thead>
                       <tr>
-                        <th style={styles.th}>Project</th>
-                        <th style={styles.th}>Code</th>
-                        <th style={styles.th}>Total</th>
-                        <th style={styles.th}>Open</th>
-                        <th style={styles.th}>In Progress</th>
-                        <th style={styles.th}>Closed</th>
+                        <th style={styles.th}>פרויקט</th>
+                        <th style={styles.th}>קוד</th>
+                        <th style={styles.th}>סה״כ</th>
+                        <th style={styles.th}>פתוחות</th>
+                        <th style={styles.th}>בטיפול</th>
+                        <th style={styles.th}>נסגרו</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -504,6 +522,9 @@ const styles: Record<string, CSSProperties> = {
     padding: '32px 40px',
     maxWidth: '1400px',
     margin: '0 auto',
+    outline: 'none',
+    border: 'none',
+    boxSizing: 'border-box',
   },
   loadingContainer: {
     display: 'flex',
@@ -634,22 +655,36 @@ const styles: Record<string, CSSProperties> = {
   workerList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '14px',
+    gap: '16px',
+    overflow: 'visible',
+    paddingBottom: '8px',
   },
   workerItem: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
+    flexDirection: 'column',
+    gap: '8px',
     cursor: 'pointer',
+    minHeight: '52px',
+    overflow: 'visible',
+  },
+  workerItemRow: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    width: '100%',
   },
   workerName: {
     fontSize: '14px',
     fontWeight: 500,
     color: theme.colors.textPrimary,
-    minWidth: '100px',
+    minWidth: 0,
+    flex: 1,
   },
   workerBarContainer: {
-    flex: 1,
+    width: '100%',
+    minHeight: '8px',
   },
   workerBarBg: {
     height: '6px',
@@ -664,8 +699,8 @@ const styles: Record<string, CSSProperties> = {
   },
   workerCount: {
     fontSize: '12px',
-    minWidth: '60px',
-    textAlign: 'right',
+    flexShrink: 0,
+    textAlign: 'left',
   },
   tableContainer: {
     overflowX: 'auto',
@@ -675,13 +710,13 @@ const styles: Record<string, CSSProperties> = {
     borderCollapse: 'collapse',
   },
   th: {
-    textAlign: 'left',
+    textAlign: 'start',
     padding: '14px 20px',
     fontSize: '12px',
     fontWeight: 600,
     color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    textTransform: 'none',
+    letterSpacing: '0.02em',
     borderBottom: `1px solid ${theme.colors.border}`,
     background: theme.colors.muted,
   },

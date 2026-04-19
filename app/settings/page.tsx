@@ -6,7 +6,8 @@
  * WhatsApp credentials are stored in Supabase `clients` (not .env); env vars remain read-only at runtime for server defaults elsewhere.
  */
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import {
@@ -44,11 +45,20 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id']
 
-export default function SettingsPage() {
+function SettingsPageInner() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const tabFromUrl = searchParams.get('tab') as TabId | null
+  const activeTab: TabId =
+    tabFromUrl && TABS.some((t) => t.id === tabFromUrl) ? tabFromUrl : 'company'
+
+  function goTab(id: TabId) {
+    router.replace(`/settings?tab=${encodeURIComponent(id)}`, { scroll: false })
+  }
+
   const [isMobile, setIsMobile] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<TabId>('company')
 
   const [clientId, setClientId] = useState<string>('')
   const [client, setClient] = useState<ClientRow | null>(null)
@@ -292,12 +302,14 @@ export default function SettingsPage() {
           </div>
         ) : (
           <>
-            <div style={styles.tabBar}>
+            <div style={styles.tabBar} role="tablist" aria-label="הגדרות">
               {TABS.map((t) => (
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => setActiveTab(t.id)}
+                  role="tab"
+                  aria-selected={activeTab === t.id}
+                  onClick={() => goTab(t.id)}
                   style={{
                     ...styles.tabBtn,
                     ...(activeTab === t.id ? styles.tabBtnActive : {}),
@@ -317,7 +329,7 @@ export default function SettingsPage() {
                       value={companyName}
                       onChange={(e) => setCompanyName(e.target.value)}
                       style={styles.input}
-                      placeholder="שם לצג ברשומות"
+                      placeholder="לדוגמה: חברת שרה ניהול נכסים"
                     />
                   </div>
                   <div style={styles.formGroup}>
@@ -486,11 +498,29 @@ export default function SettingsPage() {
   )
 }
 
+export default function SettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppShell isMobile={false}>
+          <div style={{ padding: '80px 40px', display: 'flex', justifyContent: 'center' }}>
+            <LoadingSpinner size="lg" />
+          </div>
+        </AppShell>
+      }
+    >
+      <SettingsPageInner />
+    </Suspense>
+  )
+}
+
 const styles: Record<string, CSSProperties> = {
   content: {
     padding: '32px 40px',
     maxWidth: '900px',
     margin: '0 auto',
+    outline: 'none',
+    boxShadow: 'none',
   },
   loadingContainer: {
     display: 'flex',
@@ -502,6 +532,8 @@ const styles: Record<string, CSSProperties> = {
     flexWrap: 'wrap',
     gap: '8px',
     marginBottom: '24px',
+    position: 'relative',
+    zIndex: 2,
   },
   tabBtn: {
     padding: '10px 16px',
@@ -512,6 +544,8 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 500,
     color: theme.colors.textSecondary,
     cursor: 'pointer',
+    position: 'relative',
+    zIndex: 2,
   },
   tabBtnActive: {
     borderColor: theme.colors.primary,

@@ -36,7 +36,6 @@ type TicketRow = {
   assigned_worker_id?: string | null
   created_at?: string
   closed_at?: string | null
-  merged_into_ticket_id?: string | null
   projects?:
     | { name?: string | null; project_code?: string | null }[]
     | { name?: string | null; project_code?: string | null }
@@ -85,6 +84,12 @@ const priorityOptions = [
   { label: 'בינונית', value: 'MEDIUM' },
   { label: 'נמוכה', value: 'LOW' },
 ]
+
+const TICKETS_LIST_SELECT = `
+  id, ticket_number, project_id, reporter_phone, reporter_name,
+  description, status, priority, assigned_worker_id, created_at, closed_at,
+  projects (name, project_code)
+`.trim()
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([])
@@ -163,11 +168,7 @@ export default function TicketsPage() {
         const [ticketsResult, workersResult, projectsResult] = await Promise.all([
           supabase
             .from('tickets')
-            .select(`
-              id, ticket_number, project_id, reporter_phone, reporter_name,
-              description, status, priority, assigned_worker_id, created_at, closed_at, merged_into_ticket_id,
-              projects (name, project_code)
-            `)
+            .select(TICKETS_LIST_SELECT)
             .order('created_at', { ascending: false }),
           supabase
             .from('workers')
@@ -183,14 +184,16 @@ export default function TicketsPage() {
         if (workersResult.error) throw workersResult.error
         if (projectsResult.error) throw projectsResult.error
 
-        const normalizedTickets: TicketRow[] = (ticketsResult.data as TicketRow[] || []).map((ticket) => {
-          const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
-          return {
-            ...ticket,
-            project_code: project?.project_code || '',
-            project_name: project?.name || '',
+        const normalizedTickets: TicketRow[] = ((ticketsResult.data ?? []) as unknown as TicketRow[]).map(
+          (ticket) => {
+            const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
+            return {
+              ...ticket,
+              project_code: project?.project_code || '',
+              project_name: project?.name || '',
+            }
           }
-        })
+        )
 
         setTickets(normalizedTickets)
         setWorkers((workersResult.data as WorkerRow[]) || [])
@@ -502,6 +505,14 @@ export default function TicketsPage() {
       )}
 
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+      {isMobile && (
+        <div style={{ padding: '12px 20px 0', display: 'flex', justifyContent: 'flex-start' }}>
+          <Button variant="primary" size="md" onClick={() => setShowAddTicketModal(true)}>
+            תקלה חדשה
+          </Button>
+        </div>
+      )}
 
       <div style={styles.content}>
         {!isMobile && (

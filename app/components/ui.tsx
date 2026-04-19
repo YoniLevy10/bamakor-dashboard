@@ -100,7 +100,7 @@ const navItems = [
   { href: '/workers', label: 'עובדים', icon: 'users' },
   { href: '/residents', label: 'דיירים', icon: 'users' },
   { href: '/qr', label: 'קודי QR', icon: 'qr' },
-  { href: '/summary', label: 'סיכומים', icon: 'chart' },
+  { href: '/summary', label: 'סיכום', icon: 'chart' },
 ]
 
 function NavIcon({ type, active }: { type: string; active?: boolean }) {
@@ -682,11 +682,11 @@ export function PageHeader({
 }) {
   return (
     <div style={pageHeaderStyles.container}>
-      <div>
+      {actions && <div style={pageHeaderStyles.actions}>{actions}</div>}
+      <div style={{ flex: 1, minWidth: 0 }}>
         <h1 style={pageHeaderStyles.title}>{title}</h1>
         {subtitle && <p style={pageHeaderStyles.subtitle}>{subtitle}</p>}
       </div>
-      {actions && <div style={pageHeaderStyles.actions}>{actions}</div>}
     </div>
   )
 }
@@ -729,13 +729,11 @@ export function KpiCard({
   label,
   value,
   accent,
-  active,
   onClick,
 }: {
   label: string
   value: string | number
   accent?: 'primary' | 'success' | 'warning' | 'error'
-  active?: boolean
   onClick?: () => void
 }) {
   const accentColors = {
@@ -749,11 +747,11 @@ export function KpiCard({
 
   return (
     <button
+      type="button"
       onClick={onClick}
       style={{
         ...kpiStyles.card,
         borderInlineStartColor: accentColor,
-        ...(active ? { background: theme.colors.primaryMuted, borderColor: theme.colors.primary } : {}),
         cursor: onClick ? 'pointer' : 'default',
       }}
     >

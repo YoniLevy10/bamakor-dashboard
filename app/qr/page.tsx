@@ -77,7 +77,7 @@ export default function QrPage() {
       await navigator.clipboard.writeText(value)
       toast.success(label)
     } catch {
-      toast.error('Copy failed')
+      toast.error('ההעתקה נכשלה')
     }
   }
 
@@ -144,8 +144,8 @@ export default function QrPage() {
     <AppShell isMobile={isMobile}>
       {isMobile && (
         <MobileHeader
-          title="QR Codes"
-          subtitle={`${filteredProjects.length} projects`}
+          title="קודי QR"
+          subtitle={`${filteredProjects.length} פרויקטים`}
           onMenuClick={() => setMenuOpen(true)}
         />
       )}
@@ -155,8 +155,8 @@ export default function QrPage() {
       <div style={styles.content}>
         {!isMobile && (
           <PageHeader
-            title="QR Codes"
-            subtitle="Generate and manage WhatsApp QR codes for fast reporting"
+            title="קודי QR"
+            subtitle="יצירה וניהול קודי QR לוואטסאפ לדיווח מהיר"
           />
         )}
 
@@ -165,9 +165,9 @@ export default function QrPage() {
           ...styles.kpiGrid,
           gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)',
         }}>
-          <KpiCard label="Total Projects" value={stats.total} accent="primary" />
-          <KpiCard label="Active" value={stats.active} accent="success" />
-          <KpiCard label="Inactive" value={stats.inactive} />
+          <KpiCard label="סה״כ פרויקטים" value={stats.total} accent="primary" />
+          <KpiCard label="פעילים" value={stats.active} accent="success" />
+          <KpiCard label="לא פעילים" value={stats.inactive} />
         </div>
 
         {/* Info Banner */}
@@ -180,9 +180,9 @@ export default function QrPage() {
             </svg>
           </div>
           <div>
-            <div style={styles.infoBannerTitle}>How it works</div>
+            <div style={styles.infoBannerTitle}>איך זה עובד</div>
             <div style={styles.infoBannerText}>
-              Each QR code opens WhatsApp with the correct START code pre-filled. Print these QR codes and place them at each property for easy maintenance reporting.
+              כל קוד QR פותח את וואטסאפ עם קוד ההתחלה המתאים מראש. הדפיסו את הקודים והציבו בכל נכס לדיווח תקלות נוח.
             </div>
           </div>
         </div>
@@ -193,7 +193,7 @@ export default function QrPage() {
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder="Search by project name, code, or address..."
+              placeholder="חיפוש לפי שם פרויקט, קוד או כתובת..."
               style={{ maxWidth: isMobile ? '100%' : '400px' }}
             />
           </div>
@@ -204,8 +204,8 @@ export default function QrPage() {
             </div>
           ) : filteredProjects.length === 0 ? (
             <EmptyState
-              title="No projects found"
-              description="Try a different search term or add projects first."
+              title="לא נמצאו פרויקטים"
+              description="נסו מילת חיפוש אחרת או הוסיפו פרויקטים."
             />
           ) : (
             <div style={{
@@ -215,11 +215,15 @@ export default function QrPage() {
               {filteredProjects.map((project) => {
                 const whatsappLink = buildWhatsAppLink(project)
                 const startCode = buildStartCode(project)
+                const inactive = project.is_active === false
 
                 return (
                   <div
                     key={project.id}
-                    style={styles.qrCard}
+                    style={{
+                      ...styles.qrCard,
+                      ...(inactive ? styles.qrCardInactive : {}),
+                    }}
                     onClick={() => openProjectDrawer(project)}
                     data-ui="card"
                   >
@@ -228,50 +232,75 @@ export default function QrPage() {
                         <div style={styles.projectName}>{project.name}</div>
                         <div style={styles.projectCode}>{project.project_code}</div>
                       </div>
-                      <StatusBadge status={project.is_active === false ? 'INACTIVE' : 'ACTIVE'} size="sm" />
+                      <StatusBadge status={inactive ? 'INACTIVE' : 'ACTIVE'} size="sm" />
                     </div>
 
-                    <div
-                      ref={(el) => { qrRefs.current[project.project_code] = el }}
-                      style={styles.qrContainer}
-                    >
-                      <QRCodeCanvas
-                        value={whatsappLink}
-                        size={140}
-                        bgColor="#FFFFFF"
-                        fgColor={theme.colors.textPrimary}
-                        includeMargin
-                        level="M"
-                      />
+                    <div style={styles.qrContainerWrap}>
+                      <div
+                        ref={(el) => { qrRefs.current[project.project_code] = el }}
+                        style={{
+                          ...styles.qrContainer,
+                          ...(inactive ? styles.qrCanvasMuted : {}),
+                        }}
+                      >
+                        <QRCodeCanvas
+                          value={whatsappLink}
+                          size={140}
+                          bgColor="#FFFFFF"
+                          fgColor={theme.colors.textPrimary}
+                          includeMargin
+                          level="M"
+                        />
+                      </div>
+                      {inactive && (
+                        <div style={styles.qrInactiveBanner}>
+                          פרויקט לא פעיל — QR מושבת
+                        </div>
+                      )}
                     </div>
 
                     <div style={styles.startCodeBox}>
-                      <span style={styles.startCodeLabel}>Start Code</span>
+                      <span style={styles.startCodeLabel}>קוד התחלה</span>
                       <span style={styles.startCodeValue}>{startCode}</span>
                     </div>
 
-                    <div style={styles.qrCardActions} onClick={(e) => e.stopPropagation()}>
+                    <div
+                      style={{
+                        ...styles.qrCardActions,
+                        ...(inactive ? { opacity: 0.45, pointerEvents: 'none' as const } : {}),
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => copyText(startCode, 'Code copied')}
+                        onClick={() => copyText(startCode, 'הקוד הועתק')}
+                        disabled={inactive}
                       >
-                        Copy Code
+                        העתקת קוד
                       </Button>
                       <Button
                         variant="secondary"
                         size="sm"
                         onClick={() => downloadQr(project.project_code)}
+                        disabled={inactive}
                       >
-                        Download
+                        הורדה
                       </Button>
                       <a
-                        href={whatsappLink}
+                        href={inactive ? '#' : whatsappLink}
                         target="_blank"
                         rel="noreferrer"
-                        style={styles.whatsappButton}
+                        style={{
+                          ...styles.whatsappButton,
+                          ...(inactive ? { pointerEvents: 'none', opacity: 0.5 } : {}),
+                        }}
+                        aria-disabled={inactive}
+                        onClick={(e) => {
+                          if (inactive) e.preventDefault()
+                        }}
                       >
-                        Open WhatsApp
+                        פתיחת וואטסאפ
                       </a>
                     </div>
                   </div>
@@ -290,33 +319,43 @@ export default function QrPage() {
         subtitle={selectedProject?.project_code}
         isMobile={isMobile}
       >
-        {selectedProject && (
+        {selectedProject && (() => {
+          const drawerInactive = selectedProject.is_active === false
+          return (
           <div style={styles.drawerContent}>
-            <div
-              ref={(el) => { if (el) qrRefs.current[selectedProject.project_code] = el }}
-              style={styles.drawerQrContainer}
-            >
-              <QRCodeCanvas
-                value={buildWhatsAppLink(selectedProject)}
-                size={isMobile ? 200 : 240}
-                level="H"
-                includeMargin
-                bgColor="#FFFFFF"
-                fgColor={theme.colors.textPrimary}
-              />
+            <div style={styles.drawerQrWrap}>
+              <div
+                ref={(el) => { if (el) qrRefs.current[selectedProject.project_code] = el }}
+                style={{
+                  ...styles.drawerQrContainer,
+                  ...(drawerInactive ? styles.qrCanvasMuted : {}),
+                }}
+              >
+                <QRCodeCanvas
+                  value={buildWhatsAppLink(selectedProject)}
+                  size={isMobile ? 200 : 240}
+                  level="H"
+                  includeMargin
+                  bgColor="#FFFFFF"
+                  fgColor={theme.colors.textPrimary}
+                />
+              </div>
+              {drawerInactive && (
+                <div style={styles.qrInactiveBanner}>פרויקט לא פעיל — QR מושבת</div>
+              )}
             </div>
 
             <div style={styles.detailSection}>
               <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Start Code</span>
+                <span style={styles.detailLabel}>קוד התחלה</span>
                 <span style={styles.detailCode}>{buildStartCode(selectedProject)}</span>
               </div>
               <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Address</span>
+                <span style={styles.detailLabel}>כתובת</span>
                 <span style={styles.detailValue}>{selectedProject.address || '-'}</span>
               </div>
               <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Status</span>
+                <span style={styles.detailLabel}>סטטוס</span>
                 <StatusBadge status={selectedProject.is_active === false ? 'INACTIVE' : 'ACTIVE'} size="sm" />
               </div>
             </div>
@@ -324,45 +363,51 @@ export default function QrPage() {
             <div style={styles.actionButtons}>
               <Button
                 variant="secondary"
-                onClick={() => copyText(buildStartCode(selectedProject), 'START code copied')}
+                onClick={() => copyText(buildStartCode(selectedProject), 'קוד START הועתק')}
                 style={{ flex: 1 }}
               >
-                Copy START Code
+                העתקת קוד START
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => copyText(buildWhatsAppLink(selectedProject), 'WhatsApp link copied')}
+                onClick={() => copyText(buildWhatsAppLink(selectedProject), 'קישור וואטסאפ הועתק')}
                 style={{ flex: 1 }}
               >
-                Copy Link
+                העתקת קישור
               </Button>
             </div>
 
             <div style={styles.actionButtons}>
               <Button
                 variant="secondary"
-                onClick={() => copyText(buildReportLink(selectedProject), 'Report link copied')}
+                onClick={() => copyText(buildReportLink(selectedProject), 'קישור דיווח הועתק')}
                 style={{ flex: 1 }}
               >
-                Copy Report Link
+                העתקת קישור דיווח
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => downloadQr(selectedProject.project_code)}
                 style={{ flex: 1 }}
               >
-                Download QR
+                הורדת QR
               </Button>
             </div>
 
             <div style={styles.primaryActions}>
               <a
-                href={buildWhatsAppLink(selectedProject)}
+                href={drawerInactive ? '#' : buildWhatsAppLink(selectedProject)}
                 target="_blank"
                 rel="noreferrer"
-                style={styles.primaryButton}
+                style={{
+                  ...styles.primaryButton,
+                  ...(drawerInactive ? { opacity: 0.45, pointerEvents: 'none' } : {}),
+                }}
+                onClick={(e) => {
+                  if (drawerInactive) e.preventDefault()
+                }}
               >
-                Open WhatsApp
+                פתיחת וואטסאפ
               </a>
               <a
                 href={buildReportLink(selectedProject)}
@@ -370,11 +415,12 @@ export default function QrPage() {
                 rel="noreferrer"
                 style={styles.secondaryLink}
               >
-                View Report Page
+                דף דיווח
               </a>
             </div>
           </div>
-        )}
+          )
+        })()}
       </Drawer>
     </AppShell>
   )
@@ -440,6 +486,32 @@ const styles: Record<string, CSSProperties> = {
     transition: 'all 0.2s ease',
     textAlign: 'center',
   },
+  qrCardInactive: {
+    opacity: 0.92,
+  },
+  qrContainerWrap: {
+    position: 'relative',
+    marginBottom: '16px',
+  },
+  qrCanvasMuted: {
+    opacity: 0.35,
+    filter: 'grayscale(1)',
+  },
+  qrInactiveBanner: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '12px',
+    textAlign: 'center',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: theme.colors.textSecondary,
+    background: 'rgba(255,255,255,0.82)',
+    borderRadius: theme.radius.md,
+    pointerEvents: 'none',
+  },
   qrCardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -464,7 +536,6 @@ const styles: Record<string, CSSProperties> = {
     padding: '16px',
     background: theme.colors.muted,
     borderRadius: theme.radius.md,
-    marginBottom: '16px',
   },
   startCodeBox: {
     display: 'flex',
@@ -508,6 +579,11 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: '20px',
+  },
+  drawerQrWrap: {
+    position: 'relative',
+    borderRadius: theme.radius.lg,
+    overflow: 'hidden',
   },
   drawerQrContainer: {
     display: 'flex',

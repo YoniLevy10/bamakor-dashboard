@@ -430,14 +430,22 @@ export default function ProjectsPage() {
                         {project.qr_identifier || `START_${project.project_code}`}
                       </span>
                     </div>
-                    <div style={styles.metaItem} onClick={(e) => e.stopPropagation()}>
+                    <div style={styles.metaItem}>
                       <span style={styles.metaLabel}>עובד אחזקה</span>
+                      <span style={styles.metaValue}>
+                        {project.assigned_worker_id
+                          ? workers.find((w) => w.id === project.assigned_worker_id)?.full_name ?? 'לא ידוע'
+                          : 'לא שויך'}
+                      </span>
+                    </div>
+                    <div style={styles.metaItem} onClick={(e) => e.stopPropagation()}>
+                      <span style={styles.metaLabel}>שינוי שיבוץ</span>
                       <div style={{ flex: 1, minWidth: 0, maxWidth: '240px' }}>
                         <Select
                           value={project.assigned_worker_id || ''}
                           onChange={(value) => updateProjectAssignedWorker(project.id, value)}
                           options={[
-                            { label: 'ללא', value: '' },
+                            { label: 'לא שויך', value: '' },
                             ...workers.map((w) => ({ label: w.full_name, value: w.id })),
                           ]}
                           style={{ width: '100%' }}
@@ -656,12 +664,12 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: '64px 0',
+    padding: '32px 0',
   },
   projectGrid: {
     display: 'grid',
     gap: '20px',
-    padding: '24px',
+    padding: '16px 24px 24px',
   },
   projectCard: {
     background: theme.colors.surface,
@@ -697,6 +705,7 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: '12px',
   },
   metaLabel: {
     fontSize: '13px',
