@@ -28,6 +28,12 @@ const SMS_019_API_TOKEN = process.env.SMS_019_API_TOKEN
 const SMS_019_USERNAME = process.env.SMS_019_USERNAME
 const SMS_019_SENDER = process.env.SMS_019_SENDER || '0559899132'
 
+/** Primary manager SMS destination (שרה / מנהלת) — overrides per-project when set */
+export function getManagerPhoneFromEnv(): string | undefined {
+  const v = process.env.MANAGER_PHONE
+  return v && String(v).trim() ? String(v).trim() : undefined
+}
+
 /**
  * Normalize phone number to 019SMS format
  * Required format: 5xxxxxxx or 05xxxxxxx (Israeli phone numbers)

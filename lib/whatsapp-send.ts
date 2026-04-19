@@ -6,6 +6,51 @@ type WhatsAppTemplateComponent = {
   }>
 }
 
+/** Send using explicit Meta credentials (e.g. from Supabase `clients` row). */
+export async function sendRawWhatsAppPayloadWithCredentials(
+  phoneNumberId: string,
+  accessToken: string,
+  payload: Record<string, unknown>
+) {
+  const response = await fetch(
+    `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        ...payload,
+      }),
+    }
+  )
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(`WhatsApp send failed: ${JSON.stringify(data)}`)
+  }
+
+  return data
+}
+
+export async function sendWhatsAppTextMessageWithCredentials(
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  body: string
+) {
+  return sendRawWhatsAppPayloadWithCredentials(phoneNumberId, accessToken, {
+    to,
+    type: 'text',
+    text: {
+      body,
+    },
+  })
+}
+
 async function sendRawWhatsAppPayload(payload: Record<string, unknown>) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID

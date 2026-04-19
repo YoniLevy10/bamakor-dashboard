@@ -44,17 +44,6 @@ export default function QrPage() {
 
   const qrRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
-
-  useEffect(() => {
-    loadProjects()
-  }, [])
-
   async function loadProjects() {
     setLoading(true)
     const { data, error } = await supabase
@@ -70,6 +59,18 @@ export default function QrPage() {
     }
     setLoading(false)
   }
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial projects list
+    void loadProjects()
+  }, [])
 
   async function copyText(value: string, label: string) {
     try {

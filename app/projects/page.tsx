@@ -30,7 +30,10 @@ type ProjectRow = {
   is_active: boolean
   created_at: string
   client_id: string
+  assigned_worker_id?: string | null
 }
+
+type WorkerRow = { id: string; full_name: string }
 
 type ClientRow = { id: string }
 
@@ -40,6 +43,7 @@ type ProjectForm = {
   address: string
   qr_identifier: string
   is_active: boolean
+  assigned_worker_id: string
 }
 
 type TicketRow = {
@@ -55,10 +59,12 @@ const emptyForm: ProjectForm = {
   address: '',
   qr_identifier: '',
   is_active: true,
+  assigned_worker_id: '',
 }
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([])
+  const [workers, setWorkers] = useState<WorkerRow[]>([])
   const [clientId, setClientId] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -74,17 +80,6 @@ export default function ProjectsPage() {
   const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null)
   const [projectTickets, setProjectTickets] = useState<TicketRow[]>([])
   const [loadingTickets, setLoadingTickets] = useState(false)
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
-
-  useEffect(() => {
-    initializePage()
-  }, [])
 
   async function loadClientId() {
     const { data, error } = await supabase
@@ -110,11 +105,38 @@ export default function ProjectsPage() {
     setProjects((data as ProjectRow[]) || [])
   }
 
+  async function loadWorkers() {
+    const { data, error } = await supabase
+      .from('workers')
+      .select('id, full_name')
+      .order('full_name', { ascending: true })
+
+    if (error) throw error
+    setWorkers((data as WorkerRow[]) || [])
+  }
+
+  async function updateProjectAssignedWorker(projectId: string, workerId: string) {
+    await asyncHandler(
+      async () => {
+        const { error } = await supabase
+          .from('projects')
+          .update({ assigned_worker_id: workerId || null })
+          .eq('id', projectId)
+        if (error) throw error
+        toast.success('עובד אחזקה עודכן')
+        await loadProjects()
+        return true
+      },
+      { context: 'Failed to update assigned worker', showErrorToast: true }
+    )
+  }
+
   async function initializePage() {
     setLoading(true)
     await asyncHandler(
       async () => {
         await loadClientId()
+        await loadWorkers()
         await loadProjects()
         return true
       },
@@ -122,6 +144,18 @@ export default function ProjectsPage() {
     )
     setLoading(false)
   }
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 900)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial page data
+    void initializePage()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- mount only
 
   function openCreateDrawer() {
     setEditingProject(null)
@@ -137,6 +171,7 @@ export default function ProjectsPage() {
       address: project.address || '',
       qr_identifier: project.qr_identifier || '',
       is_active: project.is_active,
+      assigned_worker_id: project.assigned_worker_id || '',
     })
     setDrawerOpen(true)
   }
@@ -209,6 +244,7 @@ export default function ProjectsPage() {
           qr_identifier: form.qr_identifier.trim() || null,
           is_active: form.is_active,
           client_id: editingProject?.client_id || clientId,
+          assigned_worker_id: form.assigned_worker_id.trim() || null,
         }
 
         if (editingProject) {
@@ -217,18 +253,18 @@ export default function ProjectsPage() {
             .update(payload)
             .eq('id', editingProject.id)
           if (error) throw error
-          toast.success('Project updated')
+          toast.success('הפרויקט עודכן')
         } else {
           const { error } = await supabase.from('projects').insert(payload)
           if (error) throw error
-          toast.success('Project created')
+          toast.success('הפרויקט נוצר')
         }
 
         await loadProjects()
         closeDrawer()
         return true
       },
-      { context: 'Failed to save project', showErrorToast: true }
+      { context: 'שמירת פרויקט נכשלה', showErrorToast: true }
     )
     setSaving(false)
   }
@@ -242,7 +278,7 @@ export default function ProjectsPage() {
           .eq('id', project.id)
 
         if (error) throw error
-        toast.success(project.is_active ? 'Project deactivated' : 'Project activated')
+        toast.success(project.is_active ? 'הפרויקט הושבת' : 'הפרויקט הופעל')
         await loadProjects()
         return true
       },
@@ -251,14 +287,14 @@ export default function ProjectsPage() {
   }
 
   async function deleteProject(project: ProjectRow) {
-    const confirmed = window.confirm(`Delete ${project.name}? This action cannot be undone.`)
+    const confirmed = window.confirm(`למחוק את ${project.name}? פעולה זו בלתי הפיכה.`)
     if (!confirmed) return
 
     await asyncHandler(
       async () => {
         const { error } = await supabase.from('projects').delete().eq('id', project.id)
         if (error) throw error
-        toast.success('Project deleted')
+        toast.success('הפרויקט נמחק')
         await loadProjects()
         if (editingProject?.id === project.id) closeDrawer()
         return true
@@ -294,8 +330,8 @@ export default function ProjectsPage() {
     <AppShell isMobile={isMobile}>
       {isMobile && (
         <MobileHeader
-          title="Projects"
-          subtitle={`${filteredProjects.length} projects`}
+          title="פרויקטים"
+          subtitle={`${filteredProjects.length} פרויקטים`}
           onMenuClick={() => setMenuOpen(true)}
         />
       )}
@@ -305,11 +341,11 @@ export default function ProjectsPage() {
       <div style={styles.content}>
         {!isMobile && (
           <PageHeader
-            title="Projects"
-            subtitle="Manage your properties and locations"
+            title="פרויקטים"
+            subtitle="ניהול בניינים ומיקומים"
             actions={
               <Button variant="primary" onClick={openCreateDrawer}>
-                New Project
+                פרויקט חדש
               </Button>
             }
           />
@@ -320,9 +356,9 @@ export default function ProjectsPage() {
           ...styles.kpiGrid,
           gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)',
         }}>
-          <KpiCard label="Total Projects" value={stats.total} accent="primary" />
-          <KpiCard label="Active" value={stats.active} accent="success" />
-          <KpiCard label="Inactive" value={stats.inactive} />
+          <KpiCard label="סה״כ פרויקטים" value={stats.total} accent="primary" />
+          <KpiCard label="פעילים" value={stats.active} accent="success" />
+          <KpiCard label="לא פעילים" value={stats.inactive} />
         </div>
 
         {/* Filters + Grid */}
@@ -334,16 +370,16 @@ export default function ProjectsPage() {
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder="Search projects..."
+              placeholder="חיפוש פרויקטים..."
               style={{ flex: 1, maxWidth: isMobile ? '100%' : '320px' }}
             />
             <Select
               value={statusFilter}
               onChange={(value) => setStatusFilter(value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
               options={[
-                { label: 'All Status', value: 'ALL' },
-                { label: 'Active', value: 'ACTIVE' },
-                { label: 'Inactive', value: 'INACTIVE' },
+                { label: 'כל הסטטוסים', value: 'ALL' },
+                { label: 'פעיל', value: 'ACTIVE' },
+                { label: 'לא פעיל', value: 'INACTIVE' },
               ]}
               style={{ minWidth: '140px' }}
             />
@@ -355,11 +391,11 @@ export default function ProjectsPage() {
             </div>
           ) : filteredProjects.length === 0 ? (
             <EmptyState
-              title="No projects found"
-              description="Try adjusting your filters or create a new project."
+              title="לא נמצאו פרויקטים"
+              description="נסו לשנות מסננים או ליצור פרויקט חדש."
               action={
                 <Button variant="primary" onClick={openCreateDrawer}>
-                  Add Project
+                  הוספת פרויקט
                 </Button>
               }
             />
@@ -385,23 +421,37 @@ export default function ProjectsPage() {
 
                   <div style={styles.projectMeta}>
                     <div style={styles.metaItem}>
-                      <span style={styles.metaLabel}>Address</span>
+                      <span style={styles.metaLabel}>כתובת</span>
                       <span style={styles.metaValue}>{project.address || '-'}</span>
                     </div>
                     <div style={styles.metaItem}>
-                      <span style={styles.metaLabel}>Start Code</span>
+                      <span style={styles.metaLabel}>קוד התחלה</span>
                       <span style={styles.metaCode}>
                         {project.qr_identifier || `START_${project.project_code}`}
                       </span>
+                    </div>
+                    <div style={styles.metaItem} onClick={(e) => e.stopPropagation()}>
+                      <span style={styles.metaLabel}>עובד אחזקה</span>
+                      <div style={{ flex: 1, minWidth: 0, maxWidth: '240px' }}>
+                        <Select
+                          value={project.assigned_worker_id || ''}
+                          onChange={(value) => updateProjectAssignedWorker(project.id, value)}
+                          options={[
+                            { label: 'ללא', value: '' },
+                            ...workers.map((w) => ({ label: w.full_name, value: w.id })),
+                          ]}
+                          style={{ width: '100%' }}
+                        />
+                      </div>
                     </div>
                   </div>
 
                   <div style={styles.projectActions} onClick={(e) => e.stopPropagation()}>
                     <Button variant="secondary" size="sm" onClick={() => openEditDrawer(project)}>
-                      Edit
+                      עריכה
                     </Button>
                     <Button variant="secondary" size="sm" onClick={() => toggleProjectStatus(project)}>
-                      {project.is_active ? 'Deactivate' : 'Activate'}
+                      {project.is_active ? 'השבתה' : 'הפעלה'}
                     </Button>
                   </div>
                 </div>
@@ -415,23 +465,23 @@ export default function ProjectsPage() {
       <Drawer
         open={drawerOpen}
         onClose={closeDrawer}
-        title={editingProject ? 'Edit Project' : 'New Project'}
-        subtitle={editingProject ? 'Update project details' : 'Create a new property'}
+        title={editingProject ? 'עריכת פרויקט' : 'פרויקט חדש'}
+        subtitle={editingProject ? 'עדכון פרטי פרויקט' : 'יצירת בניין חדש'}
         isMobile={isMobile}
       >
         <div style={styles.drawerContent}>
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Project Name *</label>
+            <label style={styles.formLabel}>שם פרויקט *</label>
             <input
               value={form.name}
               onChange={(e) => updateForm('name', e.target.value)}
-              placeholder="Enter project name"
+              placeholder="שם הבניין / הפרויקט"
               style={styles.input}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Project Code *</label>
+            <label style={styles.formLabel}>קוד פרויקט *</label>
             <input
               value={form.project_code}
               onChange={(e) => updateForm('project_code', e.target.value.toUpperCase())}
@@ -441,24 +491,37 @@ export default function ProjectsPage() {
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Address</label>
+            <label style={styles.formLabel}>כתובת</label>
             <input
               value={form.address}
               onChange={(e) => updateForm('address', e.target.value)}
-              placeholder="Project location"
+              placeholder="מיקום"
               style={styles.input}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>QR Identifier</label>
+            <label style={styles.formLabel}>מזהה QR</label>
             <input
               value={form.qr_identifier}
               onChange={(e) => updateForm('qr_identifier', e.target.value)}
               placeholder={`Default: START_${form.project_code || 'CODE'}`}
               style={styles.input}
             />
-            <span style={styles.formHint}>Leave empty to use default START code</span>
+            <span style={styles.formHint}>השאירו ריק לשימוש בקוד START ברירת מחדל</span>
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>עובד אחזקה</label>
+            <Select
+              value={form.assigned_worker_id}
+              onChange={(value) => updateForm('assigned_worker_id', value)}
+              options={[
+                { label: 'ללא', value: '' },
+                ...workers.map((w) => ({ label: w.full_name, value: w.id })),
+              ]}
+              style={{ width: '100%' }}
+            />
           </div>
 
           <div style={styles.formGroup}>
@@ -469,16 +532,16 @@ export default function ProjectsPage() {
                 onChange={(e) => updateForm('is_active', e.target.checked)}
                 style={styles.checkbox}
               />
-              <span>Active</span>
+              <span>פעיל</span>
             </label>
           </div>
 
           <div style={styles.drawerActions}>
             <Button variant="secondary" onClick={closeDrawer}>
-              Cancel
+              ביטול
             </Button>
             <Button variant="primary" onClick={saveProject} loading={saving}>
-              {editingProject ? 'Update' : 'Create'}
+              {editingProject ? 'שמירה' : 'יצירה'}
             </Button>
           </div>
 
@@ -489,7 +552,7 @@ export default function ProjectsPage() {
                 onClick={() => deleteProject(editingProject)}
                 style={{ width: '100%' }}
               >
-                Delete Project
+                מחיקת פרויקט
               </Button>
             </div>
           )}
@@ -501,22 +564,22 @@ export default function ProjectsPage() {
         open={detailDrawerOpen}
         onClose={closeDetailDrawer}
         title={selectedProject?.name || ''}
-        subtitle={selectedProject?.project_code}
+        subtitle={selectedProject?.name}
         isMobile={isMobile}
       >
         {selectedProject && (
           <div style={styles.drawerContent}>
             <div style={styles.detailSection}>
               <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Status</span>
+                <span style={styles.detailLabel}>סטטוס</span>
                 <StatusBadge status={selectedProject.is_active ? 'ACTIVE' : 'INACTIVE'} />
               </div>
               <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Address</span>
+                <span style={styles.detailLabel}>כתובת</span>
                 <span style={styles.detailValue}>{selectedProject.address || '-'}</span>
               </div>
               <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Start Code</span>
+                <span style={styles.detailLabel}>קוד התחלה</span>
                 <span style={styles.detailCode}>
                   {selectedProject.qr_identifier || `START_${selectedProject.project_code}`}
                 </span>
@@ -525,13 +588,13 @@ export default function ProjectsPage() {
 
             <div style={styles.ticketsSection}>
               <div style={styles.ticketsSectionHeader}>
-                <h4 style={styles.ticketsSectionTitle}>Recent Tickets</h4>
+                <h4 style={styles.ticketsSectionTitle}>תקלות אחרונות</h4>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => window.location.href = `/tickets?project=${encodeURIComponent(selectedProject.project_code)}`}
                 >
-                  View All
+                  הכל
                 </Button>
               </div>
 
@@ -540,7 +603,7 @@ export default function ProjectsPage() {
                   <LoadingSpinner size="sm" />
                 </div>
               ) : projectTickets.length === 0 ? (
-                <p style={styles.emptyText}>No tickets for this project</p>
+                <p style={styles.emptyText}>אין תקלות לפרויקט זה</p>
               ) : (
                 <div style={styles.ticketList}>
                   {projectTickets.slice(0, 5).map((ticket) => (
@@ -555,13 +618,13 @@ export default function ProjectsPage() {
 
             <div style={styles.drawerActions}>
               <Button variant="secondary" onClick={() => openEditDrawer(selectedProject)}>
-                Edit Project
+                עריכת פרויקט
               </Button>
               <Button
                 variant="primary"
                 onClick={() => window.location.href = `/qr?project=${encodeURIComponent(selectedProject.project_code)}`}
               >
-                View QR Code
+                צפייה ב-QR
               </Button>
             </div>
           </div>

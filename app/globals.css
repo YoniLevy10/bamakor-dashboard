@@ -72,7 +72,7 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), "Segoe UI", "Arial Hebrew", "Noto Sans Hebrew", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: 'ss01' 1, 'cv01' 1;
@@ -122,6 +122,12 @@ select {
   background-position: right 12px center;
   background-size: 16px;
   padding-right: 40px;
+}
+
+[dir="rtl"] select {
+  background-position: left 12px center;
+  padding-right: 14px;
+  padding-left: 40px;
 }
 
 /* Input optimization */

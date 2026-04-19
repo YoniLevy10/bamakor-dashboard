@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { parseIncomingWhatsAppMessage } from '@/lib/whatsapp-parser'
+import { parseIncomingWhatsAppMessage, isAddressLikeText } from '@/lib/whatsapp-parser'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
-import { sendManagerSMS } from '@/lib/sms-send'
+import { sendManagerSMS, sendWorkerSMS, getManagerPhoneFromEnv } from '@/lib/sms-send'
 import {
   downloadWhatsAppMedia,
   uploadWhatsAppMediaToStorage,
@@ -143,33 +143,6 @@ function isNumericSelection(text: string): number | null {
   return null
 }
 
-function isAddressLikeText(text: string): boolean {
-  const t = text.trim()
-  if (t.length < 4) return false
-
-  // If it contains digits, it's likely a street+number or building identifier.
-  if (/\d/.test(t)) return true
-
-  // Hebrew cues that usually indicate an address/building lookup.
-  // Keep this conservative to avoid "aggressive" fuzzy searching on random greetings.
-  const addressCues = [
-    'רחוב',
-    'רח׳',
-    'כתובת',
-    'בניין',
-    'בנין',
-    'דירה',
-    'קומה',
-    'כניסה',
-    'שדרה',
-    'שד׳',
-  ]
-  if (addressCues.some((cue) => t.includes(cue))) return true
-
-  // Very short generic messages (e.g. "היי", "שלום") should not trigger search.
-  return false
-}
-
 function logWhatsAppRuntimePath(
   tag: string,
   params: {
@@ -250,6 +223,48 @@ type SessionRow = {
   project_id: string | null
   active_ticket_id: string | null
   is_active: boolean
+}
+
+/** Reuse last known building (project_id) for this phone — no new QR scan */
+async function restoreSessionFromLastProjectPhone(
+  phoneNumber: string,
+  supabaseAdmin: SupabaseClient
+): Promise<boolean> {
+  const { data: last, error } = await supabaseAdmin
+    .from('sessions')
+    .select('project_id')
+    .eq('phone_number', phoneNumber)
+    .not('project_id', 'is', null)
+    .order('last_activity_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !last?.project_id) return false
+
+  await supabaseAdmin
+    .from('sessions')
+    .update({
+      is_active: false,
+      active_ticket_id: null,
+      last_activity_at: new Date().toISOString(),
+    })
+    .eq('phone_number', phoneNumber)
+    .eq('is_active', true)
+
+  const { error: insertError } = await supabaseAdmin.from('sessions').insert({
+    phone_number: phoneNumber,
+    project_id: last.project_id,
+    is_active: true,
+    active_ticket_id: null,
+    last_activity_at: new Date().toISOString(),
+  })
+
+  if (insertError) {
+    console.error('❌ restoreSessionFromLastProjectPhone insert failed:', insertError)
+    return false
+  }
+  console.log('✅ Restored WhatsApp session from last project for phone', phoneNumber)
+  return true
 }
 
 async function getActiveSession(from: string, supabaseAdmin: SupabaseClient): Promise<SessionRow | null> {
@@ -812,7 +827,7 @@ export async function POST(req: NextRequest) {
 
         await sendWhatsAppTextMessage(
           from,
-          `ברוכים הבאים למערכת דיווח התקלות של Bamakor${buildingText}.\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+          `ברוכים הבאים! פתחנו תקלה חדשה עבורכם ב${project.name}${buildingText}. כתבו בקצרה את הבעיה 📝`
         )
       } catch (sendError) {
         console.error('⚠️ Failed to send start-flow reply:', sendError)
@@ -832,19 +847,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // STEP 2: create ticket from active session
-    const { data: session, error: sessionError } = await supabaseAdmin
-      .from('sessions')
-      .select('id, phone_number, project_id, active_ticket_id, is_active')
-      .eq('phone_number', from)
-      .eq('is_active', true)
-      .order('last_activity_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (sessionError) {
-      console.error('❌ Error fetching session:', sessionError)
-      return NextResponse.json({ error: 'Session lookup failed' }, { status: 500 })
+    // STEP 2: active session — or restore last building for this phone (no new QR)
+    let session = await getActiveSession(from, supabaseAdmin)
+    if (!session) {
+      const pendingEarly = await getPendingSelection(from, supabaseAdmin)
+      if (!pendingEarly) {
+        await restoreSessionFromLastProjectPhone(from, supabaseAdmin)
+        session = await getActiveSession(from, supabaseAdmin)
+      }
     }
 
     if (!session) {
@@ -903,7 +913,7 @@ export async function POST(req: NextRequest) {
           try {
             await sendWhatsAppTextMessage(
               from,
-              `✅ בחרתם ${selectedProject.name}!\n\nעכשיו כתבו בקצרה את התקלה 📝\n\n💡 טיפ: אפשר גם לצרף תמונה של התקלה — זה יעזור לנו לטפל בה מהר יותר!`
+              `ברוכים הבאים! פתחנו תקלה חדשה עבורכם ב${selectedProject.name}. כתבו בקצרה את הבעיה 📝`
             )
           } catch (sendError) {
             console.error('⚠️ Failed to send selection confirmation:', sendError)
@@ -1077,7 +1087,7 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            `מצאנו את הבניין: ${matchedProject.name}\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+            `ברוכים הבאים! פתחנו תקלה חדשה עבורכם ב${matchedProject.name}. כתבו בקצרה את הבעיה 📝`
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send search-match confirmation:', sendError)
@@ -1225,34 +1235,47 @@ export async function POST(req: NextRequest) {
     try {
       const { data: projectForNotification, error: projectNotificationError } = await supabaseAdmin
         .from('projects')
-        .select('name, manager_phone')
+        .select('name, manager_phone, assigned_worker_id')
         .eq('id', session.project_id)
         .single()
 
       if (projectNotificationError) {
         console.error('⚠️ Failed to fetch project manager phone:', projectNotificationError)
-      } else if (projectForNotification?.manager_phone) {
-        // CURRENT CHANNEL: SMS for manager notifications
-        console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket)')
+      } else if (projectForNotification) {
         const buildingLine = buildingNumber ? `בניין: ${buildingNumber}\n` : ''
         const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${textBody || 'ללא פירוט'}\nמדווח: ${from}\nכניסה למערכת:\nhttps://bamakor.vercel.app/tickets\nBamakor`
-        
-        const smsSent = await sendManagerSMS(projectForNotification.manager_phone, smsMessage)
-        
-        if (smsSent) {
-          console.log('✅ manager_sms_sent: Manager notification sent successfully via SMS')
-        } else {
-          console.error('❌ manager_sms_failed: Failed to send SMS to manager')
+
+        const managerDestination =
+          getManagerPhoneFromEnv() || projectForNotification.manager_phone
+
+        if (managerDestination) {
+          console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket) → manager')
+          const smsSent = await sendManagerSMS(managerDestination, smsMessage)
+          if (smsSent) {
+            console.log('✅ manager_sms_sent: Manager notification sent successfully via SMS')
+          } else {
+            console.error('❌ manager_sms_failed: Failed to send SMS to manager')
+          }
         }
 
-        // ARCHIVED: Old WhatsApp manager notification (kept for future restoration)
-        /*
-        await sendWhatsAppTextMessage(
-          projectForNotification.manager_phone,
-          `נכנסה תקלה חדשה במערכת.\n\nפרויקט: ${projectForNotification.name}${buildingText}\nפנייה: ${createdTicket.ticket_number}\nתיאור: ${textBody}\nמדווח: ${from}`
-        )
-        console.log('✅ manager_whatsapp_archived: Manager notification was sent via WhatsApp (now archived)')
-        */
+        if (projectForNotification.assigned_worker_id) {
+          const { data: workerRow } = await supabaseAdmin
+            .from('workers')
+            .select('phone, full_name')
+            .eq('id', projectForNotification.assigned_worker_id)
+            .maybeSingle()
+
+          if (workerRow?.phone) {
+            const workerMsg = `תקלה חדשה ב${projectForNotification.name}\n#${createdTicket.ticket_number}\n${textBody || 'ללא פירוט'}\nמדווח: ${from}\nhttps://bamakor.vercel.app/tickets`
+            console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket) → assigned worker')
+            const wOk = await sendWorkerSMS(workerRow.phone, workerMsg)
+            if (wOk) {
+              console.log('✅ worker_sms_sent: Assigned worker notified')
+            } else {
+              console.error('❌ worker_sms_failed')
+            }
+          }
+        }
       }
     } catch (notifyManagerError) {
       console.error('⚠️ manager_notification_failed: Error notifying manager:', notifyManagerError)
@@ -1263,7 +1286,7 @@ export async function POST(req: NextRequest) {
 
       await sendWhatsAppTextMessage(
         from,
-        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\n\n💡 טיפ: אפשר גם לשלוח תמונה של התקלה - זה יעזור לנו לטפל בה מהר יותר.\n\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה חדשה נוספת, סרקו שוב את קוד ה-QR.`
+        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\n\n💡 אפשר גם לשלוח תמונה של התקלה — זה יעזור לנו לטפל בה מהר יותר.\n\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה נוספת — כתבו בקצרה את הבעיה (אין צורך לסרוק QR שוב).`
       )
     } catch (sendError) {
       console.error('⚠️ Failed to send ticket-created reply:', sendError)

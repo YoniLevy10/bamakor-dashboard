@@ -1,0 +1,626 @@
+'use client'
+
+/**
+ * Settings: Next.js 16 / React 19 / TypeScript / Supabase / inline CSS (theme from ui), RTL Hebrew UI.
+ * Style aligned with app/projects/page.tsx — Card, Button, theme.colors, form patterns.
+ * WhatsApp credentials are stored in Supabase `clients` (not .env); env vars remain read-only at runtime for server defaults elsewhere.
+ */
+
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { supabase } from '@/lib/supabase'
+import { toast, asyncHandler } from '@/lib/error-handler'
+import {
+  AppShell,
+  MobileHeader,
+  MobileMenu,
+  PageHeader,
+  Card,
+  Button,
+  LoadingSpinner,
+  theme,
+} from '../components/ui'
+
+type ClientRow = {
+  id: string
+  company_name?: string | null
+  logo_url?: string | null
+  preferred_language?: string | null
+  manager_phone?: string | null
+  default_worker_phone?: string | null
+  sms_on_ticket_open?: boolean | null
+  sms_on_ticket_close?: boolean | null
+  whatsapp_phone_number_id?: string | null
+  whatsapp_access_token?: string | null
+  plan_tier?: string | null
+  buildings_allowed?: number | null
+}
+
+const TABS = [
+  { id: 'company', label: 'פרטי חברה' },
+  { id: 'notifications', label: 'התראות' },
+  { id: 'whatsapp', label: 'וואטסאפ / הטמעה' },
+  { id: 'billing', label: 'מנוי' },
+] as const
+
+type TabId = (typeof TABS)[number]['id']
+
+export default function SettingsPage() {
+  const [isMobile, setIsMobile] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<TabId>('company')
+
+  const [clientId, setClientId] = useState<string>('')
+  const [client, setClient] = useState<ClientRow | null>(null)
+  const [buildingsUsed, setBuildingsUsed] = useState(0)
+
+  const [companyName, setCompanyName] = useState('')
+  const [logoUrl, setLogoUrl] = useState('')
+  const [preferredLanguage, setPreferredLanguage] = useState<'he' | 'en'>('he')
+
+  const [managerPhone, setManagerPhone] = useState('')
+  const [defaultWorkerPhone, setDefaultWorkerPhone] = useState('')
+  const [smsOnOpen, setSmsOnOpen] = useState(true)
+  const [smsOnClose, setSmsOnClose] = useState(true)
+
+  const [waPhoneNumberId, setWaPhoneNumberId] = useState('')
+  const [waAccessToken, setWaAccessToken] = useState('')
+  const [waTokenLoaded, setWaTokenLoaded] = useState(false)
+
+  const [savingCompany, setSavingCompany] = useState(false)
+  const [savingNotifications, setSavingNotifications] = useState(false)
+  const [savingWhatsapp, setSavingWhatsapp] = useState(false)
+  const [testingWa, setTestingWa] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+
+  const [origin, setOrigin] = useState('')
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 900)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only origin for webhook URL
+    setOrigin(typeof window !== 'undefined' ? window.location.origin : '')
+  }, [])
+
+  const webhookUrl = useMemo(
+    () => (origin ? `${origin}/api/webhook/whatsapp` : '/api/webhook/whatsapp'),
+    [origin]
+  )
+
+  async function load() {
+    setLoading(true)
+    await asyncHandler(
+      async () => {
+        const { data: rows, error: cErr } = await supabase
+          .from('clients')
+          .select('*')
+          .order('created_at', { ascending: true })
+          .limit(1)
+
+        if (cErr) throw cErr
+        const row = (rows as ClientRow[] | null)?.[0]
+        if (!row?.id) throw new Error('לא נמצא רשומת לקוח')
+
+        setClientId(row.id)
+        setClient(row)
+
+        setCompanyName(row.company_name || '')
+        setLogoUrl(row.logo_url || '')
+        setPreferredLanguage(row.preferred_language === 'en' ? 'en' : 'he')
+
+        setManagerPhone(row.manager_phone || '')
+        setDefaultWorkerPhone(row.default_worker_phone || '')
+        setSmsOnOpen(row.sms_on_ticket_open !== false)
+        setSmsOnClose(row.sms_on_ticket_close !== false)
+
+        setWaPhoneNumberId(row.whatsapp_phone_number_id || '')
+        setWaAccessToken(row.whatsapp_access_token || '')
+        setWaTokenLoaded(true)
+
+        const { count, error: pErr } = await supabase
+          .from('projects')
+          .select('id', { count: 'exact', head: true })
+          .eq('client_id', row.id)
+
+        if (pErr) throw pErr
+        setBuildingsUsed(count ?? 0)
+
+        return true
+      },
+      { context: 'טעינת הגדרות נכשלה — הריצו מיגרציה ל-clients אם עדיין לא', showErrorToast: true }
+    )
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load from Supabase
+    void load()
+  }, [])
+
+  async function saveCompany() {
+    if (!clientId) return
+    setSavingCompany(true)
+    await asyncHandler(
+      async () => {
+        const { error } = await supabase
+          .from('clients')
+          .update({
+            company_name: companyName.trim() || null,
+            logo_url: logoUrl.trim() || null,
+            preferred_language: preferredLanguage,
+          })
+          .eq('id', clientId)
+        if (error) throw error
+        toast.success('נשמר')
+        await load()
+        return true
+      },
+      { context: 'שמירה נכשלה', showErrorToast: true }
+    )
+    setSavingCompany(false)
+  }
+
+  async function saveNotifications() {
+    if (!clientId) return
+    setSavingNotifications(true)
+    await asyncHandler(
+      async () => {
+        const { error } = await supabase
+          .from('clients')
+          .update({
+            manager_phone: managerPhone.trim() || null,
+            default_worker_phone: defaultWorkerPhone.trim() || null,
+            sms_on_ticket_open: smsOnOpen,
+            sms_on_ticket_close: smsOnClose,
+          })
+          .eq('id', clientId)
+        if (error) throw error
+        toast.success('נשמר')
+        await load()
+        return true
+      },
+      { context: 'שמירה נכשלה', showErrorToast: true }
+    )
+    setSavingNotifications(false)
+  }
+
+  async function saveWhatsapp() {
+    if (!clientId) return
+    setSavingWhatsapp(true)
+    await asyncHandler(
+      async () => {
+        const payload: Record<string, string | null> = {
+          whatsapp_phone_number_id: waPhoneNumberId.trim() || null,
+        }
+        if (waAccessToken.trim()) {
+          payload.whatsapp_access_token = waAccessToken.trim()
+        }
+        const { error } = await supabase.from('clients').update(payload).eq('id', clientId)
+        if (error) throw error
+        toast.success('נשמר')
+        await load()
+        return true
+      },
+      { context: 'שמירה נכשלה', showErrorToast: true }
+    )
+    setSavingWhatsapp(false)
+  }
+
+  async function onLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !clientId) return
+    setUploadingLogo(true)
+    await asyncHandler(
+      async () => {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('client_id', clientId)
+        const res = await fetch('/api/settings/upload-logo', { method: 'POST', body: fd })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error || 'העלאה נכשלה')
+        setLogoUrl(json.url)
+        toast.success('הלוגו הועלה — לחצו שמירה בטאב פרטי חברה')
+        return true
+      },
+      { context: 'העלאת לוגו נכשלה', showErrorToast: true }
+    )
+    setUploadingLogo(false)
+    e.target.value = ''
+  }
+
+  async function copyWebhook() {
+    try {
+      await navigator.clipboard.writeText(webhookUrl)
+      toast.success('הועתק')
+    } catch {
+      toast.error('העתקה נכשלה')
+    }
+  }
+
+  async function testWhatsapp() {
+    if (!clientId) return
+    setTestingWa(true)
+    await asyncHandler(
+      async () => {
+        const res = await fetch('/api/settings/test-whatsapp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_id: clientId }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error || 'בדיקה נכשלה')
+        toast.success('הודעת בדיקה נשלחה')
+        return true
+      },
+      { context: 'בדיקת וואטסאפ נכשלה', showErrorToast: true }
+    )
+    setTestingWa(false)
+  }
+
+  const planTier = (client?.plan_tier || 'basic').toLowerCase()
+  const planLabel =
+    planTier === 'pro' ? 'Pro' : planTier === 'enterprise' ? 'Enterprise' : 'Basic'
+  const planLabelHe =
+    planTier === 'pro' ? 'מקצועי' : planTier === 'enterprise' ? 'ארגוני' : 'בסיסי'
+
+  const buildingsAllowed = client?.buildings_allowed ?? 10
+
+  return (
+    <AppShell isMobile={isMobile}>
+      {isMobile && (
+        <MobileHeader
+          title="הגדרות"
+          subtitle="העדפות מערכת"
+          onMenuClick={() => setMenuOpen(true)}
+        />
+      )}
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+      <div style={styles.content}>
+        {!isMobile && (
+          <PageHeader title="הגדרות" subtitle="ניהול פרטי חברה, התראות, וואטסאפ ומנוי" />
+        )}
+
+        {loading ? (
+          <div style={styles.loadingContainer}>
+            <LoadingSpinner size="lg" />
+          </div>
+        ) : (
+          <>
+            <div style={styles.tabBar}>
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTab(t.id)}
+                  style={{
+                    ...styles.tabBtn,
+                    ...(activeTab === t.id ? styles.tabBtnActive : {}),
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === 'company' && (
+              <Card noPadding>
+                <div style={styles.cardInner}>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>שם חברה</label>
+                    <input
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      style={styles.input}
+                      placeholder="שם לצג ברשומות"
+                    />
+                  </div>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>לוגו</label>
+                    {logoUrl ? (
+                      <div style={styles.logoPreview}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={logoUrl} alt="" style={{ maxWidth: 120, maxHeight: 120, objectFit: 'contain' }} />
+                      </div>
+                    ) : null}
+                    <input type="file" accept="image/*" onChange={onLogoFile} style={styles.fileInput} />
+                    <span style={styles.formHint}>העלאה ל-Supabase Storage (bucket: client-logos)</span>
+                    {uploadingLogo && <span style={styles.formHint}>מעלה…</span>}
+                  </div>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>שפת ממשק</label>
+                    <div style={styles.langRow}>
+                      <button
+                        type="button"
+                        onClick={() => setPreferredLanguage('he')}
+                        style={{
+                          ...styles.langBtn,
+                          ...(preferredLanguage === 'he' ? styles.langBtnActive : {}),
+                        }}
+                      >
+                        עברית
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreferredLanguage('en')}
+                        style={{
+                          ...styles.langBtn,
+                          ...(preferredLanguage === 'en' ? styles.langBtnActive : {}),
+                        }}
+                      >
+                        English
+                      </button>
+                    </div>
+                    <span style={styles.formHint}>המערכת כרגע בעברית (RTL); העדפה נשמרת לעתיד</span>
+                  </div>
+                  <div style={styles.drawerActions}>
+                    <Button variant="primary" onClick={saveCompany} loading={savingCompany}>
+                      שמור שינויים
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {activeTab === 'notifications' && (
+              <Card noPadding>
+                <div style={styles.cardInner}>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>טלפון מנהל</label>
+                    <input
+                      type="tel"
+                      value={managerPhone}
+                      onChange={(e) => setManagerPhone(e.target.value)}
+                      style={styles.input}
+                      placeholder="05xxxxxxxx"
+                    />
+                  </div>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>טלפון עובד ברירת מחדל</label>
+                    <input
+                      type="tel"
+                      value={defaultWorkerPhone}
+                      onChange={(e) => setDefaultWorkerPhone(e.target.value)}
+                      style={styles.input}
+                      placeholder="אופציונלי"
+                    />
+                  </div>
+                  <label style={styles.checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={smsOnOpen}
+                      onChange={(e) => setSmsOnOpen(e.target.checked)}
+                      style={styles.checkbox}
+                    />
+                    <span>שלח SMS בפתיחת תקלה</span>
+                  </label>
+                  <label style={styles.checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={smsOnClose}
+                      onChange={(e) => setSmsOnClose(e.target.checked)}
+                      style={styles.checkbox}
+                    />
+                    <span>שלח SMS בסגירת תקלה</span>
+                  </label>
+                  <div style={styles.drawerActions}>
+                    <Button variant="primary" onClick={saveNotifications} loading={savingNotifications}>
+                      שמור שינויים
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {activeTab === 'whatsapp' && (
+              <Card noPadding>
+                <div style={styles.cardInner}>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>WhatsApp Phone Number ID</label>
+                    <input
+                      value={waPhoneNumberId}
+                      onChange={(e) => setWaPhoneNumberId(e.target.value)}
+                      style={styles.input}
+                      placeholder="מזהה מספר מטא"
+                    />
+                  </div>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>WhatsApp Access Token</label>
+                    <input
+                      type="password"
+                      value={waAccessToken}
+                      onChange={(e) => setWaAccessToken(e.target.value)}
+                      style={styles.input}
+                      placeholder={waTokenLoaded && client?.whatsapp_access_token ? 'הזינו טוקן חדש להחלפה' : 'הדביקו טוקן ארוך-טווח'}
+                      autoComplete="off"
+                    />
+                    <span style={styles.formHint}>השאירו ריק אם אינכם משנים את הטוקן השמור</span>
+                  </div>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Webhook URL (קריאה בלבד)</label>
+                    <div style={styles.readonlyRow}>
+                      <input readOnly value={webhookUrl} style={{ ...styles.input, flex: 1 }} />
+                      <Button variant="secondary" type="button" onClick={copyWebhook}>
+                        העתק
+                      </Button>
+                    </div>
+                  </div>
+                  <div style={styles.drawerActions}>
+                    <Button variant="secondary" type="button" onClick={testWhatsapp} loading={testingWa}>
+                      בדוק חיבור
+                    </Button>
+                    <Button variant="primary" onClick={saveWhatsapp} loading={savingWhatsapp}>
+                      שמור שינויים
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {activeTab === 'billing' && (
+              <Card noPadding>
+                <div style={styles.cardInner}>
+                  <div style={styles.planRow}>
+                    <span style={styles.planBadge}>{planLabelHe}</span>
+                    <span style={styles.planSub}>({planLabel})</span>
+                  </div>
+                  <p style={styles.planText}>
+                    בניינים בשימוש: <strong>{buildingsUsed}</strong> מתוך <strong>{buildingsAllowed}</strong>
+                  </p>
+                  <Button variant="secondary" type="button" onClick={() => toast.info('צור קשר לשדרוג')}>
+                    צור קשר לשדרוג
+                  </Button>
+                  <p style={styles.formHint}>תשלום / Stripe — יתווסף בהמשך</p>
+                </div>
+              </Card>
+            )}
+          </>
+        )}
+      </div>
+    </AppShell>
+  )
+}
+
+const styles: Record<string, CSSProperties> = {
+  content: {
+    padding: '32px 40px',
+    maxWidth: '900px',
+    margin: '0 auto',
+  },
+  loadingContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '80px 0',
+  },
+  tabBar: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    marginBottom: '24px',
+  },
+  tabBtn: {
+    padding: '10px 16px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surface,
+    fontSize: '14px',
+    fontWeight: 500,
+    color: theme.colors.textSecondary,
+    cursor: 'pointer',
+  },
+  tabBtnActive: {
+    borderColor: theme.colors.primary,
+    background: theme.colors.primaryMuted,
+    color: theme.colors.primary,
+  },
+  cardInner: {
+    padding: '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+  },
+  formGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  formLabel: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: theme.colors.textSecondary,
+  },
+  input: {
+    padding: '12px 14px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surface,
+    fontSize: '15px',
+    color: theme.colors.textPrimary,
+  },
+  formHint: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+  },
+  fileInput: {
+    fontSize: '14px',
+  },
+  logoPreview: {
+    padding: '12px',
+    background: theme.colors.muted,
+    borderRadius: theme.radius.md,
+    display: 'inline-block',
+  },
+  langRow: {
+    display: 'flex',
+    gap: '10px',
+  },
+  langBtn: {
+    padding: '10px 20px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surface,
+    cursor: 'pointer',
+    fontSize: '15px',
+  },
+  langBtnActive: {
+    borderColor: theme.colors.primary,
+    background: theme.colors.primaryMuted,
+    color: theme.colors.primary,
+  },
+  checkboxLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontSize: '15px',
+    color: theme.colors.textPrimary,
+    cursor: 'pointer',
+  },
+  checkbox: {
+    width: '18px',
+    height: '18px',
+    accentColor: theme.colors.primary,
+  },
+  drawerActions: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    paddingTop: '16px',
+    borderTop: `1px solid ${theme.colors.border}`,
+    marginTop: '8px',
+  },
+  readonlyRow: {
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  planRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  planBadge: {
+    display: 'inline-block',
+    padding: '6px 14px',
+    borderRadius: theme.radius.full,
+    background: theme.colors.primaryMuted,
+    color: theme.colors.primary,
+    fontWeight: 600,
+    fontSize: '15px',
+  },
+  planSub: {
+    fontSize: '14px',
+    color: theme.colors.textMuted,
+  },
+  planText: {
+    fontSize: '15px',
+    color: theme.colors.textSecondary,
+    margin: 0,
+  },
+}

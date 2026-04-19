@@ -85,17 +85,6 @@ export default function WorkersPage() {
   const [workerTickets, setWorkerTickets] = useState<TicketRow[]>([])
   const [loadingWorkerTickets, setLoadingWorkerTickets] = useState(false)
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
-
-  useEffect(() => {
-    initializePage()
-  }, [])
-
   async function loadClientId() {
     const { data, error } = await supabase
       .from('clients')
@@ -136,6 +125,18 @@ export default function WorkersPage() {
     )
     setLoading(false)
   }
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 900)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial page data
+    void initializePage()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- mount only
 
   function openCreateDrawer() {
     setEditingWorker(null)

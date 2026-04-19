@@ -22,8 +22,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Bamakor - Property Management Dashboard",
-  description: "Professional property and project management platform with real-time ticket tracking, worker assignment, and WhatsApp integration",
+  title: "במקור — ניהול תקלות ואחזקה",
+  description: "מערכת ניהול נכסים, תקלות בזמן אמת, שיבוץ עובדים ואינטגרציה לוואטסאפ",
   applicationName: "Bamakor",
   keywords: ["property management", "maintenance", "tickets", "project management", "real-time"],
   authors: [{ name: "Yoni Levy" }],
@@ -48,11 +48,11 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    locale: "en_US",
+    locale: "he_IL",
     url: "https://bamakor.vercel.app",
     siteName: "Bamakor",
-    title: "Bamakor - Property Management Dashboard",
-    description: "Professional property and project management platform",
+    title: "במקור — ניהול תקלות ואחזקה",
+    description: "מערכת ניהול נכסים ותקלות",
     images: [
       {
         url: "/icon.png",
@@ -65,8 +65,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Bamakor - Property Management Dashboard",
-    description: "Professional property and project management platform",
+    title: "במקור — ניהול תקלות ואחזקה",
+    description: "מערכת ניהול נכסים ותקלות",
     images: ["/icon.png"],
   },
   category: "productivity",
@@ -88,10 +88,11 @@ export default function RootLayout({
 
   return (
     <html
-      lang="en"
+      lang="he"
+      dir="rtl"
       className={`${inter.variable} font-sans antialiased bg-background`}
     >
-      <body className="min-h-screen flex flex-col bg-background text-foreground">
+      <body className="min-h-screen flex flex-col bg-background text-foreground" dir="rtl">
         {children}
         <ToastContainer />
       </body>

@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { getLogger } from '@/lib/logging'
+import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
 
 export async function POST(req: Request) {
   const logger = getLogger()
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
 
     const { data: ticket, error: ticketError } = await supabaseAdmin
       .from('tickets')
-      .select('id, ticket_number, status')
+      .select('id, ticket_number, status, reporter_phone')
       .eq('id', ticket_id)
       .single()
 
@@ -80,6 +81,23 @@ export async function POST(req: Request) {
     }
     
     logger.info('TICKET_API', 'Ticket closed successfully', { requestId, ticket_id })
+
+    const reporterPhone = (ticket as { reporter_phone?: string | null }).reporter_phone
+    if (reporterPhone) {
+      try {
+        await sendWhatsAppTextMessage(
+          reporterPhone,
+          '✅ התקלה שדיווחת טופלה וסגורה. תודה! אם יש בעיה נוספת, ניתן לפנות בכל עת.'
+        )
+        logger.info('TICKET_API', 'Resident WhatsApp sent on close', { requestId, ticket_id })
+      } catch (waErr) {
+        logger.warn('TICKET_API', 'Failed to send WhatsApp on ticket close', {
+          requestId,
+          ticket_id,
+          error: waErr instanceof Error ? waErr.message : String(waErr),
+        })
+      }
+    }
 
     const { error: sessionError } = await supabaseAdmin
       .from('sessions')

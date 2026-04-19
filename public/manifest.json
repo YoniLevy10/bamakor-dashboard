@@ -1,13 +1,13 @@
 {
-  "name": "Bamakor - Property Management Dashboard",
-  "short_name": "Bamakor",
-  "description": "Professional property and project management platform with real-time ticket tracking, worker assignment, and WhatsApp integration",
+  "name": "במקור — ניהול תקלות ואחזקה",
+  "short_name": "במקור",
+  "description": "מערכת ניהול נכסים, תקלות בזמן אמת, שיבוץ עובדים ואינטגרציה לוואטסאפ",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "dir": "ltr",
-  "lang": "en-US",
+  "dir": "rtl",
+  "lang": "he-IL",
   "theme_color": "#C41E3A",
   "background_color": "#FFFFFF",
   "prefer_related_applications": false,
@@ -59,30 +59,30 @@
   "categories": ["business", "productivity"],
   "shortcuts": [
     {
-      "name": "View Dashboard",
-      "short_name": "Dashboard",
-      "description": "Access main dashboard",
+      "name": "לוח בקרה",
+      "short_name": "בקרה",
+      "description": "מסך ראשי",
       "url": "/",
       "icons": [{"src": "/icon.png", "sizes": "96x96", "type": "image/png"}]
     },
     {
-      "name": "View Tickets",
-      "short_name": "Tickets",
-      "description": "View and manage all project tickets",
+      "name": "תקלות",
+      "short_name": "תקלות",
+      "description": "ניהול תקלות",
       "url": "/tickets",
       "icons": [{"src": "/icon.png", "sizes": "96x96", "type": "image/png"}]
     },
     {
-      "name": "View Projects",
-      "short_name": "Projects",
-      "description": "Manage all projects",
+      "name": "פרויקטים",
+      "short_name": "פרויקטים",
+      "description": "ניהול בניינים",
       "url": "/projects",
       "icons": [{"src": "/icon.png", "sizes": "96x96", "type": "image/png"}]
     },
     {
-      "name": "View Summary",
-      "short_name": "Summary",
-      "description": "View summary reports",
+      "name": "סיכומים",
+      "short_name": "סיכומים",
+      "description": "דוחות",
       "url": "/summary",
       "icons": [{"src": "/icon.png", "sizes": "96x96", "type": "image/png"}]
     }

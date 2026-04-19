@@ -65,7 +65,7 @@ export function AddTicketModal({
       <div style={styles.modalOverlay} onClick={onClose} />
       <div style={styles.modal}>
         <div style={styles.modalHeader}>
-          <h2 style={styles.modalTitle}>Create New Ticket</h2>
+          <h2 style={styles.modalTitle}>תקלה חדשה</h2>
           <button onClick={onClose} style={styles.modalClose}>
             <svg
               width="18"
@@ -84,52 +84,52 @@ export function AddTicketModal({
         </div>
         <form onSubmit={onSubmit} style={styles.modalForm}>
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Project</label>
+            <label style={styles.formLabel}>פרויקט</label>
             <select
               value={projectCode}
               onChange={(e) => onProjectCodeChange(e.target.value)}
               style={styles.formSelect}
             >
-              <option value="">Select a project</option>
+              <option value="">בחרו פרויקט</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.project_code}>
-                  {p.name} ({p.project_code})
+                  {p.name}
                 </option>
               ))}
             </select>
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Description</label>
+            <label style={styles.formLabel}>תיאור</label>
             <textarea
               value={description}
               onChange={(e) => onDescriptionChange(e.target.value)}
-              placeholder="Describe the issue..."
+              placeholder="תיאור התקלה..."
               style={styles.formTextarea}
               rows={4}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Reporter Name (optional)</label>
+            <label style={styles.formLabel}>שם מדווח (אופציונלי)</label>
             <input
               type="text"
               value={reporterName}
               onChange={(e) => onReporterNameChange(e.target.value)}
-              placeholder="Enter name"
+              placeholder="שם"
               style={styles.formInput}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Reporter Phone (optional)</label>
+            <label style={styles.formLabel}>טלפון מדווח (אופציונלי)</label>
             <input
               type="tel"
               value={reporterPhone}
               inputMode="tel"
               onChange={(e) => onReporterPhoneChange(sanitizePhoneKeystroke(e.target.value))}
               onBlur={() => onReporterPhoneChange(normalizePhone(reporterPhone))}
-              placeholder="Enter phone number"
+              placeholder="מספר טלפון"
               style={styles.formInput}
             />
           </div>
@@ -138,14 +138,14 @@ export function AddTicketModal({
 
           <div style={styles.modalActions}>
             <Button variant="secondary" onClick={onClose}>
-              Cancel
+              ביטול
             </Button>
             <Button
               variant="primary"
               loading={loading}
               type="submit"
             >
-              Create Ticket
+              יצירת תקלה
             </Button>
           </div>
         </form>
