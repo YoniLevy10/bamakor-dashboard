@@ -424,10 +424,13 @@ export function AppShell({
 export function MobileHeader({
   title,
   subtitle,
+  subtitleSuppressHydrationWarning,
   onMenuClick,
 }: {
   title: string
   subtitle?: string
+  /** Use when subtitle is locale/time dependent (e.g. `formatDate()`) to avoid React #418 on SSR. */
+  subtitleSuppressHydrationWarning?: boolean
   onMenuClick?: () => void
 }) {
   return (
@@ -435,7 +438,14 @@ export function MobileHeader({
       <div style={mobileHeaderStyles.left}>
         <div>
           <h1 style={mobileHeaderStyles.title}>{title}</h1>
-          {subtitle && <p style={mobileHeaderStyles.subtitle}>{subtitle}</p>}
+          {subtitle && (
+            <p
+              style={mobileHeaderStyles.subtitle}
+              suppressHydrationWarning={subtitleSuppressHydrationWarning}
+            >
+              {subtitle}
+            </p>
+          )}
         </div>
       </div>
       {onMenuClick && (
@@ -864,6 +874,7 @@ export function Button({
   children,
   variant = 'secondary',
   size = 'md',
+  type = 'button',
   disabled,
   loading,
   onClick,
@@ -890,6 +901,7 @@ export function Button({
 
   return (
     <button
+      type={type}
       onClick={onClick}
       disabled={disabled || loading}
       data-ui="button"
