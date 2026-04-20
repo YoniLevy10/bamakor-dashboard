@@ -2,6 +2,7 @@ export type ParsedWhatsAppMessage = {
   from: string
   messageType: string
   textBody: string
+  messageId?: string
   mediaId?: string
   mediaType?: 'image' | 'audio' | 'video' | 'document'
 }
@@ -50,6 +51,17 @@ export function isAddressLikeText(text: string): boolean {
   return false
 }
 
+/** Meta Cloud API: receiving phone number ID (identifies which Bamakor tenant / WhatsApp line). */
+export function extractWhatsAppPhoneNumberId(body: unknown): string | null {
+  const bodyRecord = body as Record<string, unknown>
+  const entry = (bodyRecord.entry as unknown[])?.[0] as Record<string, unknown>
+  const change = (entry?.changes as unknown[])?.[0] as Record<string, unknown>
+  const value = change?.value as Record<string, unknown>
+  const metadata = value?.metadata as Record<string, unknown>
+  const id = metadata?.phone_number_id
+  return typeof id === 'string' && id.length > 0 ? id : null
+}
+
 export function parseIncomingWhatsAppMessage(body: unknown): ParsedWhatsAppMessage | null {
   const bodyRecord = body as Record<string, unknown>
   const entry = (bodyRecord.entry as unknown[])?.[0] as Record<string, unknown>
@@ -59,10 +71,12 @@ export function parseIncomingWhatsAppMessage(body: unknown): ParsedWhatsAppMessa
 
   if (!message) return null
 
+  const mid = message?.id
   const result: ParsedWhatsAppMessage = {
     from: String(message?.from || ''),
     messageType: String(message?.type || ''),
     textBody: String((message?.text as Record<string, unknown>)?.body || '').trim(),
+    messageId: typeof mid === 'string' && mid.length > 0 ? mid : undefined,
   }
 
   // Extract media information if present

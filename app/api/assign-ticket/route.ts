@@ -42,26 +42,16 @@ export async function POST(req: Request) {
       )
     }
 
-    const { data: worker, error: workerError } = await supabaseAdmin
-      .from('workers')
-      .select('id, full_name, phone, role, is_active')
-      .eq('id', worker_id)
-      .single()
+    const headerClientId = req.headers.get('x-client-id')
 
-    if (workerError || !worker) {
-      return NextResponse.json(
-        { error: 'Worker not found' },
-        { status: 404 }
-      )
-    }
-
-    const { data: ticket, error: ticketError } = await supabaseAdmin
+    let ticketQuery = supabaseAdmin
       .from('tickets')
       .select(`
         id,
         ticket_number,
         description,
         project_id,
+        client_id,
         status,
         projects (
           name,
@@ -69,11 +59,45 @@ export async function POST(req: Request) {
         )
       `)
       .eq('id', ticket_id)
-      .single()
+
+    if (headerClientId) {
+      ticketQuery = ticketQuery.eq('client_id', headerClientId)
+    }
+
+    const { data: ticket, error: ticketError } = await ticketQuery.single()
 
     if (ticketError || !ticket) {
       return NextResponse.json(
         { error: 'Ticket not found' },
+        { status: 404 }
+      )
+    }
+
+    const clientId = headerClientId || (ticket as { client_id?: string | null }).client_id
+    if (!clientId) {
+      return NextResponse.json({ error: 'חסר client_id' }, { status: 400 })
+    }
+
+    const { data: clientRow } = await supabaseAdmin
+      .from('clients')
+      .select('name, sms_sender_name')
+      .eq('id', clientId)
+      .maybeSingle()
+
+    const clientName = (clientRow as { name?: string | null } | null)?.name || 'המערכת'
+    const smsSenderName =
+      (clientRow as { sms_sender_name?: string | null } | null)?.sms_sender_name || 'במקור'
+
+    const { data: worker, error: workerError } = await supabaseAdmin
+      .from('workers')
+      .select('id, full_name, phone, role, is_active')
+      .eq('id', worker_id)
+      .eq('client_id', clientId)
+      .single()
+
+    if (workerError || !worker) {
+      return NextResponse.json(
+        { error: 'Worker not found' },
         { status: 404 }
       )
     }
@@ -86,6 +110,7 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', ticket_id)
+      .eq('client_id', clientId)
       .select()
       .single()
 
@@ -127,8 +152,8 @@ export async function POST(req: Request) {
         console.log('📱 Sending worker notification to:', worker.phone)
 
         // CURRENT CHANNEL: SMS for worker notifications
-          const smsMessage = `תקלה חדשה הוקצתה לך\nפרויקט: ${projectName}\nתקלה: #${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא פירוט'}\nכניסה למערכת:\nhttps://bamakor.vercel.app/tickets\nBamakor`
-        const smsSent = await sendWorkerSMS(worker.phone, smsMessage)
+        const smsMessage = `תקלה חדשה הוקצתה לך\nפרויקט: ${projectName}\nתקלה: #${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא פירוט'}\nכניסה למערכת:\nhttps://bamakor.vercel.app/tickets\n${clientName}`
+        const smsSent = await sendWorkerSMS(worker.phone, smsMessage, smsSenderName)
 
         if (smsSent) {
           console.log('✅ worker_sms_sent: Worker notification sent successfully via SMS to:', worker.phone)

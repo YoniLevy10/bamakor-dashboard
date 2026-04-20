@@ -265,11 +265,23 @@ export default function WorkersPage() {
             .update(payload)
             .eq('id', editingWorker.id)
           if (error) throw error
-          toast.success('Worker updated')
+          toast.success('העובד עודכן')
         } else {
-          const { error } = await supabase.from('workers').insert(payload)
-          if (error) throw error
-          toast.success('Worker created')
+          const res = await fetch('/api/create-worker', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              client_id: clientId,
+              full_name: payload.full_name,
+              phone: payload.phone,
+              email: payload.email,
+              role: payload.role,
+              is_active: payload.is_active,
+            }),
+          })
+          const json = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error((json as { error?: string }).error || 'יצירת עובד נכשלה')
+          toast.success('העובד נוצר')
         }
 
         await loadWorkers()

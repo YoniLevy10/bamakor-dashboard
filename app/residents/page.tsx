@@ -158,11 +158,7 @@ export default function ResidentsPage() {
             </div>
           ) : residentsTableMissing ? (
             <div style={styles.friendlyEmpty}>
-              <p style={styles.friendlyEmptyTitle}>טבלת דיירים עדיין לא מוגדרת</p>
-              <p style={styles.friendlyEmptyText}>
-                הריצו את מיגרציית ה-SQL ב-Supabase (קובץ `supabase/migrations/003_residents_table.sql`) כדי ליצור את
-                הטבלה `residents`. לאחר מכן רעננו את הדף.
-              </p>
+              <p style={styles.friendlyEmptyTitle}>טבלת הדיירים עדיין לא הוגדרה במערכת.</p>
             </div>
           ) : (
             <div style={styles.tableWrap}>

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { fetchWithTimeout } from '@/lib/fetch-timeout'
 
 export async function POST(req: Request) {
   try {
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -35,6 +36,9 @@ export async function POST(req: Request) {
         ],
       }),
     })
+    if (!res) {
+      return NextResponse.json({ error: '⏱️ External API timeout' }, { status: 504 })
+    }
 
     const data = (await res.json()) as {
       content?: Array<{ type: string; text?: string }>

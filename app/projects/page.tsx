@@ -255,8 +255,21 @@ export default function ProjectsPage() {
           if (error) throw error
           toast.success('הפרויקט עודכן')
         } else {
-          const { error } = await supabase.from('projects').insert(payload)
-          if (error) throw error
+          const res = await fetch('/api/create-project', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              client_id: clientId,
+              name: payload.name,
+              project_code: payload.project_code,
+              address: payload.address,
+              qr_identifier: payload.qr_identifier,
+              is_active: payload.is_active,
+              assigned_worker_id: payload.assigned_worker_id,
+            }),
+          })
+          const json = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error((json as { error?: string }).error || 'יצירת פרויקט נכשלה')
           toast.success('הפרויקט נוצר')
         }
 

@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '@/lib/fetch-timeout'
+
 type WhatsAppTemplateComponent = {
   type: string
   parameters?: Array<{
@@ -12,7 +14,7 @@ export async function sendRawWhatsAppPayloadWithCredentials(
   accessToken: string,
   payload: Record<string, unknown>
 ) {
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
     {
       method: 'POST',
@@ -26,6 +28,7 @@ export async function sendRawWhatsAppPayloadWithCredentials(
       }),
     }
   )
+  if (!response) return null
 
   const data = await response.json()
 
@@ -51,9 +54,14 @@ export async function sendWhatsAppTextMessageWithCredentials(
   })
 }
 
-async function sendRawWhatsAppPayload(payload: Record<string, unknown>) {
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
+type WhatsAppCredentials = {
+  phoneNumberId?: string
+  accessToken?: string
+}
+
+async function sendRawWhatsAppPayload(payload: Record<string, unknown>, creds?: WhatsAppCredentials) {
+  const accessToken = creds?.accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN
+  const phoneNumberId = creds?.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID
 
   if (!accessToken) {
     throw new Error('Missing WHATSAPP_ACCESS_TOKEN')
@@ -63,7 +71,7 @@ async function sendRawWhatsAppPayload(payload: Record<string, unknown>) {
     throw new Error('Missing WHATSAPP_PHONE_NUMBER_ID')
   }
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
     {
       method: 'POST',
@@ -77,6 +85,7 @@ async function sendRawWhatsAppPayload(payload: Record<string, unknown>) {
       }),
     }
   )
+  if (!response) return null
 
   const data = await response.json()
 
@@ -87,7 +96,11 @@ async function sendRawWhatsAppPayload(payload: Record<string, unknown>) {
   return data
 }
 
-export async function sendWhatsAppTextMessage(to: string, body: string) {
+export async function sendWhatsAppTextMessage(
+  to: string,
+  body: string,
+  creds?: WhatsAppCredentials
+) {
   console.log('📤 Sending WhatsApp text message to:', to)
 
   return sendRawWhatsAppPayload({
@@ -96,7 +109,7 @@ export async function sendWhatsAppTextMessage(to: string, body: string) {
     text: {
       body,
     },
-  })
+  }, creds)
 }
 
 export async function sendWhatsAppTemplateMessage(

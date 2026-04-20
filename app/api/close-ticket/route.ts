@@ -34,11 +34,14 @@ export async function POST(req: Request) {
       )
     }
 
-    const { data: ticket, error: ticketError } = await supabaseAdmin
+    const headerClientId = req.headers.get('x-client-id')
+    let ticketQuery = supabaseAdmin
       .from('tickets')
-      .select('id, ticket_number, status, reporter_phone')
+      .select('id, ticket_number, status, reporter_phone, project_id, client_id, projects (name)')
       .eq('id', ticket_id)
-      .single()
+    if (headerClientId) ticketQuery = ticketQuery.eq('client_id', headerClientId)
+
+    const { data: ticket, error: ticketError } = await ticketQuery.single()
 
     if (ticketError || !ticket) {
       console.warn('Ticket not found:', ticket_id)
@@ -57,6 +60,11 @@ export async function POST(req: Request) {
       )
     }
 
+    const clientId = headerClientId || (ticket as { client_id?: string | null }).client_id
+    if (!clientId) {
+      return NextResponse.json({ error: 'חסר client_id' }, { status: 400 })
+    }
+
     const { data: updatedTicket, error: updateError } = await supabaseAdmin
       .from('tickets')
       .update({
@@ -65,6 +73,7 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', ticket_id)
+      .eq('client_id', clientId)
       .select()
       .single()
 
@@ -82,12 +91,38 @@ export async function POST(req: Request) {
     
     logger.info('TICKET_API', 'Ticket closed successfully', { requestId, ticket_id })
 
-    const reporterPhone = (ticket as { reporter_phone?: string | null }).reporter_phone
+    type TicketWithProject = {
+      reporter_phone?: string | null
+      projects?: { name?: string | null } | { name?: string | null }[] | null
+    }
+    const trow = ticket as TicketWithProject
+    const reporterPhone = trow.reporter_phone
+    const proj = trow.projects
+    const projectName = Array.isArray(proj) ? proj[0]?.name : proj?.name
+
     if (reporterPhone) {
       try {
+        const building = projectName || 'הבניין'
+
+        const { data: waClient } = clientId
+          ? await supabaseAdmin
+              .from('clients')
+              .select('whatsapp_phone_number_id, whatsapp_access_token')
+              .eq('id', clientId)
+              .maybeSingle()
+          : { data: null }
+
+        const residentWhatsAppCreds = {
+          phoneNumberId: (waClient as { whatsapp_phone_number_id?: string | null } | null)
+            ?.whatsapp_phone_number_id || undefined,
+          accessToken: (waClient as { whatsapp_access_token?: string | null } | null)
+            ?.whatsapp_access_token || undefined,
+        }
+
         await sendWhatsAppTextMessage(
           reporterPhone,
-          '✅ התקלה שדיווחת טופלה וסגורה. תודה! אם יש בעיה נוספת, ניתן לפנות בכל עת.'
+          `✅ שלום! התקלה שדיווחת בבניין ${building} טופלה וסגורה.\n\nאם יש בעיה נוספת, ניתן לפנות אלינו בכל עת 🙏`,
+          residentWhatsAppCreds
         )
         logger.info('TICKET_API', 'Resident WhatsApp sent on close', { requestId, ticket_id })
       } catch (waErr) {
@@ -106,6 +141,7 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq('active_ticket_id', ticket_id)
+      .eq('client_id', clientId)
 
     if (sessionError) {
       console.error('⚠️ Failed to clear session:', sessionError)

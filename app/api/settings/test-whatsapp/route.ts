@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const admin = getSupabaseAdmin()
     const { data: client, error } = await admin
       .from('clients')
-      .select('whatsapp_phone_number_id, whatsapp_access_token, manager_phone')
+      .select('name, whatsapp_phone_number_id, whatsapp_access_token, manager_phone')
       .eq('id', clientId)
       .single()
 
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
       phoneNumberId,
       accessToken,
       waTo,
-      '✅ בדיקת חיבור מהמערכת — Bamakor'
+      `✅ בדיקת חיבור מהמערכת — ${(client as { name?: string | null }).name || 'המערכת'}`
     )
 
     return NextResponse.json({ success: true })
