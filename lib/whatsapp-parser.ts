@@ -2,8 +2,64 @@ export type ParsedWhatsAppMessage = {
   from: string
   messageType: string
   textBody: string
+  messageId?: string
   mediaId?: string
   mediaType?: 'image' | 'audio' | 'video' | 'document'
+}
+
+/**
+ * Heuristic: does this message look like a building / address lookup (not a greeting)?
+ * Used to decide whether to fuzzy-search projects by free text.
+ */
+export function isAddressLikeText(text: string): boolean {
+  const t = text.trim()
+  if (t.length < 4) return false
+
+  if (/\d/.test(t)) return true
+
+  const addressCues = [
+    'רחוב',
+    'רח׳',
+    'כתובת',
+    'בניין',
+    'בנין',
+    'בניי', // common typo
+    'דירה',
+    'קומה',
+    'כניסה',
+    'שדרה',
+    'שד׳',
+    'מגרש',
+    'יישוב',
+    'שכונה',
+    'פינת',
+    'מספר',
+  ]
+  if (addressCues.some((cue) => t.includes(cue))) return true
+
+  // Street-style without digits: e.g. "הרצל כהן" / "שד׳ רוטשילד תל אביב" (no house number)
+  const hebrewWord = /[\u0590-\u05FF]{2,}/
+  const words = t.split(/\s+/).filter(Boolean)
+  if (
+    words.length >= 2 &&
+    t.length >= 12 &&
+    words.every((w) => hebrewWord.test(w) || /^[\s,.-]+$/.test(w))
+  ) {
+    return true
+  }
+
+  return false
+}
+
+/** Meta Cloud API: receiving phone number ID (identifies which Bamakor tenant / WhatsApp line). */
+export function extractWhatsAppPhoneNumberId(body: unknown): string | null {
+  const bodyRecord = body as Record<string, unknown>
+  const entry = (bodyRecord.entry as unknown[])?.[0] as Record<string, unknown>
+  const change = (entry?.changes as unknown[])?.[0] as Record<string, unknown>
+  const value = change?.value as Record<string, unknown>
+  const metadata = value?.metadata as Record<string, unknown>
+  const id = metadata?.phone_number_id
+  return typeof id === 'string' && id.length > 0 ? id : null
 }
 
 export function parseIncomingWhatsAppMessage(body: unknown): ParsedWhatsAppMessage | null {
@@ -15,10 +71,12 @@ export function parseIncomingWhatsAppMessage(body: unknown): ParsedWhatsAppMessa
 
   if (!message) return null
 
+  const mid = message?.id
   const result: ParsedWhatsAppMessage = {
     from: String(message?.from || ''),
     messageType: String(message?.type || ''),
     textBody: String((message?.text as Record<string, unknown>)?.body || '').trim(),
+    messageId: typeof mid === 'string' && mid.length > 0 ? mid : undefined,
   }
 
   // Extract media information if present

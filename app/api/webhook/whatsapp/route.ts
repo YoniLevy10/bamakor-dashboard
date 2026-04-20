@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { parseIncomingWhatsAppMessage } from '@/lib/whatsapp-parser'
+import {
+  parseIncomingWhatsAppMessage,
+  isAddressLikeText,
+  extractWhatsAppPhoneNumberId,
+} from '@/lib/whatsapp-parser'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
-import { sendManagerSMS } from '@/lib/sms-send'
+import { sendManagerSMS, sendWorkerSMS, getManagerPhoneFromEnv } from '@/lib/sms-send'
 import {
   downloadWhatsAppMedia,
   uploadWhatsAppMediaToStorage,
@@ -37,7 +41,11 @@ function parseStartCode(text: string) {
 }
 
 // Search for projects by free-text building/address
-async function searchProjectsByBuilding(searchText: string, supabaseAdmin: SupabaseClient) {
+async function searchProjectsByBuilding(
+  searchText: string,
+  supabaseAdmin: SupabaseClient,
+  clientId: string
+) {
   const trimmed = searchText.trim()
 
   // Require minimum 2 characters to search
@@ -50,6 +58,7 @@ async function searchProjectsByBuilding(searchText: string, supabaseAdmin: Supab
   const { data: projects, error } = await supabaseAdmin
     .from('projects')
     .select('id, name, project_code, address')
+    .eq('client_id', clientId)
     .order('project_code', { ascending: true })
 
   if (error) {
@@ -73,12 +82,14 @@ async function searchProjectsByBuilding(searchText: string, supabaseAdmin: Supab
 async function createPendingSelection(
   phoneNumber: string,
   candidateProjects: ProjectRow[],
-  supabaseAdmin: SupabaseClient
+  supabaseAdmin: SupabaseClient,
+  clientId: string
 ) {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
 
   const { error } = await supabaseAdmin.from('pending_selections').insert({
     phone_number: phoneNumber,
+    client_id: clientId,
     candidate_projects: candidateProjects,
     created_at: new Date().toISOString(),
     expires_at: expiresAt,
@@ -93,11 +104,16 @@ async function createPendingSelection(
 }
 
 // Get pending selection for a phone number
-async function getPendingSelection(phoneNumber: string, supabaseAdmin: SupabaseClient) {
+async function getPendingSelection(
+  phoneNumber: string,
+  supabaseAdmin: SupabaseClient,
+  clientId: string
+) {
   const { data, error } = await supabaseAdmin
     .from('pending_selections')
     .select('id, candidate_projects, created_at, expires_at')
     .eq('phone_number', phoneNumber)
+    .eq('client_id', clientId)
     .maybeSingle()
 
   if (error) {
@@ -112,7 +128,7 @@ async function getPendingSelection(phoneNumber: string, supabaseAdmin: SupabaseC
   // Check if expired
   if (new Date(data.expires_at) < new Date()) {
     console.log('⏰ Pending selection expired, clearing it')
-    await clearPendingSelection(phoneNumber, supabaseAdmin)
+    await clearPendingSelection(phoneNumber, supabaseAdmin, clientId)
     return null
   }
 
@@ -120,11 +136,16 @@ async function getPendingSelection(phoneNumber: string, supabaseAdmin: SupabaseC
 }
 
 // Clear pending selection for a phone number
-async function clearPendingSelection(phoneNumber: string, supabaseAdmin: SupabaseClient) {
+async function clearPendingSelection(
+  phoneNumber: string,
+  supabaseAdmin: SupabaseClient,
+  clientId: string
+) {
   const { error } = await supabaseAdmin
     .from('pending_selections')
     .delete()
     .eq('phone_number', phoneNumber)
+    .eq('client_id', clientId)
 
   if (error) {
     console.error('⚠️ Error clearing pending selection:', error)
@@ -141,33 +162,6 @@ function isNumericSelection(text: string): number | null {
   }
 
   return null
-}
-
-function isAddressLikeText(text: string): boolean {
-  const t = text.trim()
-  if (t.length < 4) return false
-
-  // If it contains digits, it's likely a street+number or building identifier.
-  if (/\d/.test(t)) return true
-
-  // Hebrew cues that usually indicate an address/building lookup.
-  // Keep this conservative to avoid "aggressive" fuzzy searching on random greetings.
-  const addressCues = [
-    'רחוב',
-    'רח׳',
-    'כתובת',
-    'בניין',
-    'בנין',
-    'דירה',
-    'קומה',
-    'כניסה',
-    'שדרה',
-    'שד׳',
-  ]
-  if (addressCues.some((cue) => t.includes(cue))) return true
-
-  // Very short generic messages (e.g. "היי", "שלום") should not trigger search.
-  return false
 }
 
 function logWhatsAppRuntimePath(
@@ -195,7 +189,7 @@ function logWhatsAppRuntimePath(
 // Sessions without tickets expire after 20 minutes (incomplete flow)
 // Sessions with active tickets expire after 30 minutes (follow-up context)
 // This does NOT close actual tickets - only clears temporary session state
-async function expireInactiveSessions(supabaseAdmin: SupabaseClient) {
+async function expireInactiveSessions(supabaseAdmin: SupabaseClient, clientId: string) {
   const now = new Date()
   
   // Threshold 1: Sessions without tickets (incomplete flow) - 20 minutes
@@ -212,6 +206,7 @@ async function expireInactiveSessions(supabaseAdmin: SupabaseClient) {
         is_active: false,
         updated_at: now.toISOString(),
       })
+      .eq('client_id', clientId)
       .eq('is_active', true)
       .is('active_ticket_id', null)
       .lt('last_activity_at', incompleteThreshold.toISOString())
@@ -230,6 +225,7 @@ async function expireInactiveSessions(supabaseAdmin: SupabaseClient) {
         active_ticket_id: null,
         updated_at: now.toISOString(),
       })
+      .eq('client_id', clientId)
       .eq('is_active', true)
       .not('active_ticket_id', 'is', null)
       .lt('last_activity_at', followUpThreshold.toISOString())
@@ -252,11 +248,71 @@ type SessionRow = {
   is_active: boolean
 }
 
-async function getActiveSession(from: string, supabaseAdmin: SupabaseClient): Promise<SessionRow | null> {
+/** Reuse last known building (project_id) for this phone — no new QR scan */
+async function restoreSessionFromLastProjectPhone(
+  phoneNumber: string,
+  supabaseAdmin: SupabaseClient,
+  clientId: string
+): Promise<{ ok: boolean; projectName?: string }> {
+  const { data: last, error } = await supabaseAdmin
+    .from('sessions')
+    .select('project_id')
+    .eq('phone_number', phoneNumber)
+    .eq('client_id', clientId)
+    .not('project_id', 'is', null)
+    .order('last_activity_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !last?.project_id) return { ok: false }
+
+  await supabaseAdmin
+    .from('sessions')
+    .update({
+      is_active: false,
+      active_ticket_id: null,
+      last_activity_at: new Date().toISOString(),
+    })
+    .eq('phone_number', phoneNumber)
+    .eq('client_id', clientId)
+    .eq('is_active', true)
+
+  const { error: insertError } = await supabaseAdmin.from('sessions').insert({
+    phone_number: phoneNumber,
+    client_id: clientId,
+    project_id: last.project_id,
+    is_active: true,
+    active_ticket_id: null,
+    last_activity_at: new Date().toISOString(),
+  })
+
+  if (insertError) {
+    console.error('❌ restoreSessionFromLastProjectPhone insert failed:', insertError)
+    return { ok: false }
+  }
+
+  const { data: proj } = await supabaseAdmin
+    .from('projects')
+    .select('name')
+    .eq('id', last.project_id)
+    .eq('client_id', clientId)
+    .maybeSingle()
+
+  const projectName = (proj as { name?: string } | null)?.name || 'הבניין'
+  console.log('✅ Restored WhatsApp session from last project for phone', phoneNumber)
+  return { ok: true, projectName }
+}
+
+async function getActiveSession(
+  from: string,
+  supabaseAdmin: SupabaseClient,
+  clientId: string
+): Promise<SessionRow | null> {
   const { data, error } = await supabaseAdmin
     .from('sessions')
     .select('id, phone_number, project_id, active_ticket_id, is_active')
     .eq('phone_number', from)
+    .eq('client_id', clientId)
     .eq('is_active', true)
     .order('last_activity_at', { ascending: false })
     .limit(1)
@@ -270,12 +326,17 @@ async function getActiveSession(from: string, supabaseAdmin: SupabaseClient): Pr
   return (data as SessionRow | null) || null
 }
 
-async function resetSessionCompletely(from: string, supabaseAdmin: SupabaseClient, reason: string) {
+async function resetSessionCompletely(
+  from: string,
+  supabaseAdmin: SupabaseClient,
+  clientId: string,
+  reason: string
+) {
   const nowIso = new Date().toISOString()
   console.log('🧼 SESSION_RESET: Clearing WhatsApp session state', { from, reason })
 
   // 1) Clear any pending multi-match selection state (prevents being stuck on "reply 1/2/3")
-  await clearPendingSelection(from, supabaseAdmin)
+  await clearPendingSelection(from, supabaseAdmin, clientId)
 
   // 2) Deactivate all active sessions for this phone (prevents old project/ticket context leaking)
   const { error } = await supabaseAdmin
@@ -287,6 +348,7 @@ async function resetSessionCompletely(from: string, supabaseAdmin: SupabaseClien
       updated_at: nowIso,
     })
     .eq('phone_number', from)
+    .eq('client_id', clientId)
     .eq('is_active', true)
 
   if (error) {
@@ -309,7 +371,11 @@ async function getTicketStatus(ticketId: string, supabaseAdmin: SupabaseClient):
   return (data as { status?: string } | null)?.status || null
 }
 
-async function findRecentTicketForPhone(from: string, supabaseAdmin: SupabaseClient): Promise<{ id: string; status: string; created_at: string } | null> {
+async function findRecentTicketForPhone(
+  from: string,
+  supabaseAdmin: SupabaseClient,
+  clientId: string
+): Promise<{ id: string; status: string; created_at: string } | null> {
   // Product rule: sessions reset after ticket creation, but user may send an image immediately after.
   // So we allow attaching an image to the most recent ticket for this phone within a short window.
   const windowMinutes = 10
@@ -319,6 +385,7 @@ async function findRecentTicketForPhone(from: string, supabaseAdmin: SupabaseCli
     .from('tickets')
     .select('id, status, created_at')
     .eq('reporter_phone', from)
+    .eq('client_id', clientId)
     .gte('created_at', sinceIso)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -355,6 +422,24 @@ async function logIncomingFreeTextToTicket(
     console.error('⚠️ Unexpected error inserting USER_MESSAGE log (non-blocking):', e)
   }
 }
+
+async function resolveClientIdFromWhatsAppPhoneNumberId(
+  supabaseAdmin: SupabaseClient,
+  phoneNumberId: string
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('clients')
+    .select('id')
+    .eq('whatsapp_phone_number_id', phoneNumberId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('❌ Client lookup by whatsapp_phone_number_id failed:', error)
+    return null
+  }
+  return (data as { id?: string } | null)?.id ?? null
+}
+
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
   const mode = searchParams.get('hub.mode')
@@ -395,9 +480,6 @@ export async function POST(req: NextRequest) {
     console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
     logger.debug('WEBHOOK', 'Full webhook payload', { requestId, payload: body })
 
-    // Expire temporary WhatsApp session state if inactive
-    await expireInactiveSessions(supabaseAdmin)
-
     const parsedMessage = parseIncomingWhatsAppMessage(body)
 
     if (!parsedMessage) {
@@ -405,6 +487,55 @@ export async function POST(req: NextRequest) {
       logger.debug('WEBHOOK', 'No incoming message in payload', { requestId })
       return NextResponse.json({ received: true }, { status: 200 })
     }
+
+    if (parsedMessage.messageId) {
+      const { error: dupErr } = await supabaseAdmin.from('processed_webhooks').insert({
+        message_id: parsedMessage.messageId,
+      })
+      if (dupErr && dupErr.code === '23505') {
+        console.log('⚠️ Duplicate webhook, skipping:', parsedMessage.messageId)
+        return NextResponse.json({ received: true }, { status: 200 })
+      }
+      if (dupErr) {
+        console.error('⚠️ processed_webhooks insert (non-blocking):', dupErr)
+      }
+    }
+
+    const phoneNumberId = extractWhatsAppPhoneNumberId(body)
+    if (!phoneNumberId) {
+      console.error('❌ Missing WhatsApp phone_number_id in webhook metadata')
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
+    const webhookClientId = await resolveClientIdFromWhatsAppPhoneNumberId(supabaseAdmin, phoneNumberId)
+    if (!webhookClientId) {
+      console.error('❌ Unknown WhatsApp phone number ID:', phoneNumberId)
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
+    const { data: waClient, error: waClientErr } = await supabaseAdmin
+      .from('clients')
+      .select('id, name, sms_sender_name, whatsapp_phone_number_id, whatsapp_access_token')
+      .eq('id', webhookClientId)
+      .maybeSingle()
+
+    if (waClientErr) {
+      console.error('❌ Failed to load client WhatsApp credentials:', waClientErr)
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
+    const residentWhatsAppCreds = {
+      phoneNumberId: (waClient as { whatsapp_phone_number_id?: string | null } | null)
+        ?.whatsapp_phone_number_id || undefined,
+      accessToken: (waClient as { whatsapp_access_token?: string | null } | null)
+        ?.whatsapp_access_token || undefined,
+    }
+
+    const clientName = (waClient as { name?: string | null } | null)?.name || 'המערכת'
+    const smsSenderName = (waClient as { sms_sender_name?: string | null } | null)?.sms_sender_name || 'במקור'
+
+    // Expire temporary WhatsApp session state if inactive (scoped to this tenant)
+    await expireInactiveSessions(supabaseAdmin, webhookClientId)
 
     const { from, messageType, textBody, mediaId, mediaType } = parsedMessage
 
@@ -429,7 +560,8 @@ export async function POST(req: NextRequest) {
       try {
         await sendWhatsAppTextMessage(
           from,
-          '🎙️ קיבלנו הודעת קול, אך לא נוכל לעבד אותה.\n\nבשביל לדווח תקלה:\n1️⃣ כתבו את התקלה בטקסט\n2️⃣ או שלחו תמונה של התקלה\n\nרוצים להתחיל? סרקו את קוד ה-QR בבניין או כתבו את כתובת הבניין.'
+          '🎙️ קיבלנו הודעת קול, אך לא נוכל לעבד אותה.\n\nבשביל לדווח תקלה:\n1️⃣ כתבו את התקלה בטקסט\n2️⃣ או שלחו תמונה של התקלה\n\nרוצים להתחיל? סרקו את קוד ה-QR בבניין או כתבו את כתובת הבניין.',
+          residentWhatsAppCreds
         )
       } catch (sendError) {
         console.error('⚠️ Failed to send voice-message guidance:', sendError)
@@ -447,6 +579,7 @@ export async function POST(req: NextRequest) {
         .from('sessions')
         .select('id, phone_number, project_id, active_ticket_id, is_active')
         .eq('phone_number', from)
+        .eq('client_id', webhookClientId)
         .eq('is_active', true)
         .order('last_activity_at', { ascending: false })
         .limit(1)
@@ -511,7 +644,8 @@ export async function POST(req: NextRequest) {
               try {
                 await sendWhatsAppTextMessage(
                   from,
-                  '✅ התמונה התקבלה בהצלחה וצורפה לתקלה. צוות הטכנאים יטפל בבקשתך בהקדם.'
+                  '✅ התמונה התקבלה בהצלחה וצורפה לתקלה. צוות הטכנאים יטפל בבקשתך בהקדם.',
+                  residentWhatsAppCreds
                 )
                 console.log(`✅ PIPELINE_SUCCESS: Step 4 USER_MSG - Confirmation message sent`)
               } catch (sendError) {
@@ -522,7 +656,7 @@ export async function POST(req: NextRequest) {
               }
 
               // Product rule: after image confirmation, reset to default state
-              await resetSessionCompletely(from, supabaseAdmin, 'image_processed_success')
+              await resetSessionCompletely(from, supabaseAdmin, webhookClientId, 'image_processed_success')
               return NextResponse.json(
                 {
                   received: true,
@@ -558,7 +692,8 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            '⚠️ לא הצלחנו להוסיף את התמונה, אך התקלה שלך תקבלה.\n\nנעדכן כשיהיה טיפול.'
+            '⚠️ לא הצלחנו להוסיף את התמונה, אך התקלה שלך תקבלה.\n\nנעדכן כשיהיה טיפול.',
+            residentWhatsAppCreds
           )
         } catch (sendError) {
           console.error('⚠️ PIPELINE_WARNING: Failed to send fallback message', {
@@ -568,7 +703,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Product rule: reset to default state after image attempt
-        await resetSessionCompletely(from, supabaseAdmin, 'image_processed_failure')
+        await resetSessionCompletely(from, supabaseAdmin, webhookClientId, 'image_processed_failure')
         return NextResponse.json(
           {
             received: true,
@@ -582,7 +717,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Case B: No session/ticket context - attach to most recent ticket for this phone (short window)
-      const recentTicket = await findRecentTicketForPhone(from, supabaseAdmin)
+      const recentTicket = await findRecentTicketForPhone(from, supabaseAdmin, webhookClientId)
       if (recentTicket && recentTicket.status !== 'CLOSED') {
         const ticketId = recentTicket.id
         let failureReason = ''
@@ -621,13 +756,14 @@ export async function POST(req: NextRequest) {
               try {
                 await sendWhatsAppTextMessage(
                   from,
-                  '✅ התמונה התקבלה בהצלחה וצורפה לתקלה. צוות הטכנאים יטפל בבקשתך בהקדם.'
+                  '✅ התמונה התקבלה בהצלחה וצורפה לתקלה. צוות הטכנאים יטפל בבקשתך בהקדם.',
+                  residentWhatsAppCreds
                 )
               } catch (sendError) {
                 console.error('⚠️ PIPELINE_WARNING: Failed to send confirmation (recent ticket attach)', sendError)
               }
 
-              await resetSessionCompletely(from, supabaseAdmin, 'recent_ticket_image_processed_success')
+              await resetSessionCompletely(from, supabaseAdmin, webhookClientId, 'recent_ticket_image_processed_success')
 
               return NextResponse.json(
                 { received: true, type: 'image_attached_to_recent_ticket', ticketId, status: 'SUCCESS' },
@@ -645,13 +781,14 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            '⚠️ לא הצלחנו להוסיף את התמונה, אך התקלה שלך התקבלה.\n\nאם תרצו, נסו לשלוח את התמונה שוב או פנו למנהלת הבניין.'
+            '⚠️ לא הצלחנו להוסיף את התמונה, אך התקלה שלך התקבלה.\n\nאם תרצו, נסו לשלוח את התמונה שוב או פנו למנהלת הבניין.',
+            residentWhatsAppCreds
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send recent-ticket fallback message:', sendError)
         }
 
-        await resetSessionCompletely(from, supabaseAdmin, 'recent_ticket_image_processed_failure')
+        await resetSessionCompletely(from, supabaseAdmin, webhookClientId, 'recent_ticket_image_processed_failure')
 
         return NextResponse.json(
           { received: true, type: 'image_failed_recent_ticket', ticketId, status: 'PARTIAL_FAILURE', failureReason },
@@ -665,7 +802,8 @@ export async function POST(req: NextRequest) {
       try {
         await sendWhatsAppTextMessage(
           from,
-          '🖼️ קיבלנו את התמונה!\n\nכדי לצרף אותה לתקלה, צריך קודם:\n1️⃣ סרקו QR בבניין\n2️⃣ כתבו תיאור התקלה\n3️⃣ אז שלחו תמונה\n\nהשתדלו!'
+          '🖼️ קיבלנו את התמונה!\n\nכדי לצרף אותה לתקלה, צריך קודם:\n1️⃣ סרקו QR בבניין\n2️⃣ כתבו תיאור התקלה\n3️⃣ אז שלחו תמונה\n\nהשתדלו!',
+          residentWhatsAppCreds
         )
       } catch (sendError) {
         console.error('⚠️ Failed to send image-context-needed message:', sendError)
@@ -688,7 +826,8 @@ export async function POST(req: NextRequest) {
         const mediaLabel = messageType === 'video' ? 'סרטון' : 'קובץ'
         await sendWhatsAppTextMessage(
           from,
-          `קיבלנו ${mediaLabel} 📎\n\nבשביל דיווח תקלה, אנא שלחו תמונה או כתבו תיאור.\n\nרוצים להתחיל? סרקו את קוד ה-QR בבניין.`
+          `קיבלנו ${mediaLabel} 📎\n\nבשביל דיווח תקלה, אנא שלחו תמונה או כתבו תיאור.\n\nרוצים להתחיל? סרקו את קוד ה-QR בבניין.`,
+          residentWhatsAppCreds
         )
       } catch (sendError) {
         console.error(`⚠️ Failed to send ${messageType}-message guidance:`, sendError)
@@ -719,7 +858,8 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            'פורמט קוד ה-QR לא תקין. אנא סרקו שוב את הקוד או פנו למנהלת הבניין.'
+            'פורמט קוד ה-QR לא תקין. אנא סרקו שוב את הקוד או פנו למנהלת הבניין.',
+            residentWhatsAppCreds
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send invalid-start-code reply:', sendError)
@@ -744,6 +884,7 @@ export async function POST(req: NextRequest) {
         .from('projects')
         .select('id, name, project_code')
         .eq('project_code', projectCode)
+        .eq('client_id', webhookClientId)
         .maybeSingle()
 
       if (projectError) {
@@ -757,7 +898,8 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            '❌ לא הצלחנו לזהות את הפרויקט.\n\nנסו שוב:\n1️⃣ סרקו את QR מחדש\n2️⃣ או כתבו את כתובת הבניין (רחוב ומספר)\n3️⃣ או צרו קשר למנהלת הבניין'
+            '❌ לא הצלחנו לזהות את הפרויקט.\n\nנסו שוב:\n1️⃣ סרקו את QR מחדש\n2️⃣ או כתבו את כתובת הבניין (רחוב ומספר)\n3️⃣ או צרו קשר למנהלת הבניין',
+            residentWhatsAppCreds
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send project-not-found reply:', sendError)
@@ -780,6 +922,7 @@ export async function POST(req: NextRequest) {
           last_activity_at: new Date().toISOString(),
         })
         .eq('phone_number', from)
+        .eq('client_id', webhookClientId)
         .eq('is_active', true)
 
       if (deactivateError) {
@@ -791,6 +934,7 @@ export async function POST(req: NextRequest) {
         .from('sessions')
         .insert({
           phone_number: from,
+          client_id: webhookClientId,
           project_id: project.id,
           is_active: true,
           active_ticket_id: null,
@@ -812,7 +956,8 @@ export async function POST(req: NextRequest) {
 
         await sendWhatsAppTextMessage(
           from,
-          `ברוכים הבאים למערכת דיווח התקלות של Bamakor${buildingText}.\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+          `ברוכים הבאים! פתחנו תקלה חדשה עבורכם ב${project.name}${buildingText}. כתבו בקצרה את הבעיה 📝`,
+          residentWhatsAppCreds
         )
       } catch (sendError) {
         console.error('⚠️ Failed to send start-flow reply:', sendError)
@@ -832,19 +977,25 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // STEP 2: create ticket from active session
-    const { data: session, error: sessionError } = await supabaseAdmin
-      .from('sessions')
-      .select('id, phone_number, project_id, active_ticket_id, is_active')
-      .eq('phone_number', from)
-      .eq('is_active', true)
-      .order('last_activity_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (sessionError) {
-      console.error('❌ Error fetching session:', sessionError)
-      return NextResponse.json({ error: 'Session lookup failed' }, { status: 500 })
+    // STEP 2: active session — or restore last building for this phone (no new QR)
+    let session = await getActiveSession(from, supabaseAdmin, webhookClientId)
+    if (!session) {
+      const pendingEarly = await getPendingSelection(from, supabaseAdmin, webhookClientId)
+      if (!pendingEarly) {
+        const restored = await restoreSessionFromLastProjectPhone(from, supabaseAdmin, webhookClientId)
+        if (restored.ok && restored.projectName) {
+          try {
+            await sendWhatsAppTextMessage(
+              from,
+              `ברוכים הבאים! פתחנו תקלה עבורכם ב${restored.projectName}. כתבו בקצרה את הבעיה 📝`,
+              residentWhatsAppCreds
+            )
+          } catch (e) {
+            console.error('⚠️ Failed to send building-memory welcome:', e)
+          }
+        }
+        session = await getActiveSession(from, supabaseAdmin, webhookClientId)
+      }
     }
 
     if (!session) {
@@ -856,7 +1007,7 @@ export async function POST(req: NextRequest) {
 
       // STEP 2.5: PENDING SELECTION HANDLING (user replies with number 1/2/3)
       const numericSelection = isNumericSelection(textBody)
-      const pendingSelection = await getPendingSelection(from, supabaseAdmin)
+      const pendingSelection = await getPendingSelection(from, supabaseAdmin, webhookClientId)
 
       if (numericSelection && pendingSelection) {
         // User selected a valid number and pending selection exists
@@ -874,12 +1025,14 @@ export async function POST(req: NextRequest) {
             .from('sessions')
             .update({ is_active: false, active_ticket_id: null, last_activity_at: new Date().toISOString() })
             .eq('phone_number', from)
+            .eq('client_id', webhookClientId)
             .eq('is_active', true)
 
           const { data: createdSession, error: sessionCreateError } = await supabaseAdmin
             .from('sessions')
             .insert({
               phone_number: from,
+              client_id: webhookClientId,
               project_id: selectedProject.id,
               is_active: true,
               active_ticket_id: null,
@@ -897,13 +1050,14 @@ export async function POST(req: NextRequest) {
           }
 
           // Clear pending selection
-          await clearPendingSelection(from, supabaseAdmin)
+          await clearPendingSelection(from, supabaseAdmin, webhookClientId)
 
           // Send confirmation
           try {
             await sendWhatsAppTextMessage(
               from,
-              `✅ בחרתם ${selectedProject.name}!\n\nעכשיו כתבו בקצרה את התקלה 📝\n\n💡 טיפ: אפשר גם לצרף תמונה של התקלה — זה יעזור לנו לטפל בה מהר יותר!`
+              `ברוכים הבאים! פתחנו תקלה חדשה עבורכם ב${selectedProject.name}. כתבו בקצרה את הבעיה 📝`,
+              residentWhatsAppCreds
             )
           } catch (sendError) {
             console.error('⚠️ Failed to send selection confirmation:', sendError)
@@ -929,7 +1083,8 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            `אנא השיבו רק עם מספר האפשרות המתאים: 1, 2 או 3.`
+            `אנא השיבו רק עם מספר האפשרות המתאים: 1, 2 או 3.`,
+            residentWhatsAppCreds
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send invalid-selection message:', sendError)
@@ -952,7 +1107,8 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            `⚠️ השיבו רק עם מספר האפשרות: 1, 2 או 3`
+            `⚠️ השיבו רק עם מספר האפשרות: 1, 2 או 3`,
+            residentWhatsAppCreds
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send pending-reminder message:', sendError)
@@ -986,7 +1142,7 @@ export async function POST(req: NextRequest) {
           'לא הצלחנו לזהות את הבניין.\n\n📍 כדי שנוכל לאתר אותו, כתבו את כתובת הבניין (רחוב ומספר)\n\nאו:\n1. סרקו את קוד ה-QR בבניין\n2. פנו למנהלת הבניין לקבלת קוד הגישה'
 
         try {
-          await sendWhatsAppTextMessage(from, fallbackMessage)
+          await sendWhatsAppTextMessage(from, fallbackMessage, residentWhatsAppCreds)
         } catch (sendError) {
           console.error('⚠️ Failed to send no-match message:', sendError)
         }
@@ -1016,7 +1172,7 @@ export async function POST(req: NextRequest) {
         session: null,
       })
 
-      const searchResults = await searchProjectsByBuilding(textBody, supabaseAdmin)
+      const searchResults = await searchProjectsByBuilding(textBody, supabaseAdmin, webhookClientId)
 
       if (searchResults.length === 0) {
         // No matches found - send safe error message
@@ -1025,7 +1181,8 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            'לא הצלחנו לזהות את הבניין.\n\n📍 כדי שנוכל לאתר אותו, כתבו את כתובת הבניין (רחוב ומספר)\n\nאו:\n1. סרקו את קוד ה-QR בבניין\n2. פנו למנהלת הבניין לקבלת קוד הגישה'
+            'לא הצלחנו לזהות את הבניין.\n\n📍 כדי שנוכל לאתר אותו, כתבו את כתובת הבניין (רחוב ומספר)\n\nאו:\n1. סרקו את קוד ה-QR בבניין\n2. פנו למנהלת הבניין לקבלת קוד הגישה',
+            residentWhatsAppCreds
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send no-match message:', sendError)
@@ -1051,12 +1208,14 @@ export async function POST(req: NextRequest) {
           .from('sessions')
           .update({ is_active: false, active_ticket_id: null, last_activity_at: new Date().toISOString() })
           .eq('phone_number', from)
+          .eq('client_id', webhookClientId)
           .eq('is_active', true)
 
         const { data: createdSession, error: sessionCreateError } = await supabaseAdmin
           .from('sessions')
           .insert({
             phone_number: from,
+            client_id: webhookClientId,
             project_id: matchedProject.id,
             is_active: true,
             active_ticket_id: null,
@@ -1077,7 +1236,8 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            `מצאנו את הבניין: ${matchedProject.name}\n\nאנא כתבו בקצרה את התקלה שברצונכם לדווח.`
+            `ברוכים הבאים! פתחנו תקלה חדשה עבורכם ב${matchedProject.name}. כתבו בקצרה את הבעיה 📝`,
+            residentWhatsAppCreds
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send search-match confirmation:', sendError)
@@ -1103,7 +1263,8 @@ export async function POST(req: NextRequest) {
       const pendingCreated = await createPendingSelection(
         from,
         searchResults,
-        supabaseAdmin
+        supabaseAdmin,
+        webhookClientId
       )
 
       if (!pendingCreated) {
@@ -1138,7 +1299,7 @@ export async function POST(req: NextRequest) {
         '\n📌 להמשך, השיבו רק עם מספר האפשרות: 1, 2 או 3'
 
       try {
-        await sendWhatsAppTextMessage(from, matchList)
+        await sendWhatsAppTextMessage(from, matchList, residentWhatsAppCreds)
       } catch (sendError) {
         console.error('⚠️ Failed to send multi-match list:', sendError)
       }
@@ -1167,6 +1328,7 @@ export async function POST(req: NextRequest) {
       .from('projects')
       .select('project_code, qr_identifier')
       .eq('id', session.project_id)
+      .eq('client_id', webhookClientId)
       .maybeSingle()
 
     if (existingProjectError) {
@@ -1183,11 +1345,12 @@ export async function POST(req: NextRequest) {
     const { data: createdTicket, error: ticketError } = await supabaseAdmin
       .from('tickets')
       .insert({
+        client_id: webhookClientId,
         project_id: session.project_id,
         reporter_phone: from,
         description: textBody,
         status: 'NEW',
-        priority: 'NORMAL',
+        priority: 'MEDIUM',
         language: 'he',
         source: 'whatsapp',
         building_number: buildingNumber,
@@ -1225,34 +1388,49 @@ export async function POST(req: NextRequest) {
     try {
       const { data: projectForNotification, error: projectNotificationError } = await supabaseAdmin
         .from('projects')
-        .select('name, manager_phone')
+        .select('name, manager_phone, assigned_worker_id')
         .eq('id', session.project_id)
+        .eq('client_id', webhookClientId)
         .single()
 
       if (projectNotificationError) {
         console.error('⚠️ Failed to fetch project manager phone:', projectNotificationError)
-      } else if (projectForNotification?.manager_phone) {
-        // CURRENT CHANNEL: SMS for manager notifications
-        console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket)')
+      } else if (projectForNotification) {
         const buildingLine = buildingNumber ? `בניין: ${buildingNumber}\n` : ''
-        const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${textBody || 'ללא פירוט'}\nמדווח: ${from}\nכניסה למערכת:\nhttps://bamakor.vercel.app/tickets\nBamakor`
-        
-        const smsSent = await sendManagerSMS(projectForNotification.manager_phone, smsMessage)
-        
-        if (smsSent) {
-          console.log('✅ manager_sms_sent: Manager notification sent successfully via SMS')
-        } else {
-          console.error('❌ manager_sms_failed: Failed to send SMS to manager')
+        const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${textBody || 'ללא פירוט'}\nמדווח: ${from}\nכניסה למערכת:\nhttps://bamakor.vercel.app/tickets\n${clientName}`
+
+        const managerDestination =
+          getManagerPhoneFromEnv() || projectForNotification.manager_phone
+
+        if (managerDestination) {
+          console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket) → manager')
+          const smsSent = await sendManagerSMS(managerDestination, smsMessage, smsSenderName)
+          if (smsSent) {
+            console.log('✅ manager_sms_sent: Manager notification sent successfully via SMS')
+          } else {
+            console.error('❌ manager_sms_failed: Failed to send SMS to manager')
+          }
         }
 
-        // ARCHIVED: Old WhatsApp manager notification (kept for future restoration)
-        /*
-        await sendWhatsAppTextMessage(
-          projectForNotification.manager_phone,
-          `נכנסה תקלה חדשה במערכת.\n\nפרויקט: ${projectForNotification.name}${buildingText}\nפנייה: ${createdTicket.ticket_number}\nתיאור: ${textBody}\nמדווח: ${from}`
-        )
-        console.log('✅ manager_whatsapp_archived: Manager notification was sent via WhatsApp (now archived)')
-        */
+        if (projectForNotification.assigned_worker_id) {
+          const { data: workerRow } = await supabaseAdmin
+            .from('workers')
+            .select('phone, full_name')
+            .eq('id', projectForNotification.assigned_worker_id)
+            .eq('client_id', webhookClientId)
+            .maybeSingle()
+
+          if (workerRow?.phone) {
+            const workerMsg = `תקלה חדשה ב${projectForNotification.name}\n#${createdTicket.ticket_number}\n${textBody || 'ללא פירוט'}\nמדווח: ${from}\nhttps://bamakor.vercel.app/tickets\n${clientName}`
+            console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket) → assigned worker')
+            const wOk = await sendWorkerSMS(workerRow.phone, workerMsg, smsSenderName)
+            if (wOk) {
+              console.log('✅ worker_sms_sent: Assigned worker notified')
+            } else {
+              console.error('❌ worker_sms_failed')
+            }
+          }
+        }
       }
     } catch (notifyManagerError) {
       console.error('⚠️ manager_notification_failed: Error notifying manager:', notifyManagerError)
@@ -1263,7 +1441,8 @@ export async function POST(req: NextRequest) {
 
       await sendWhatsAppTextMessage(
         from,
-        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\n\n💡 טיפ: אפשר גם לשלוח תמונה של התקלה - זה יעזור לנו לטפל בה מהר יותר.\n\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה חדשה נוספת, סרקו שוב את קוד ה-QR.`
+        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\n\n💡 אפשר גם לשלוח תמונה של התקלה — זה יעזור לנו לטפל בה מהר יותר.\n\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה נוספת — כתבו בקצרה את הבעיה (אין צורך לסרוק QR שוב).`,
+        residentWhatsAppCreds
       )
     } catch (sendError) {
       console.error('⚠️ Failed to send ticket-created reply:', sendError)
@@ -1271,7 +1450,7 @@ export async function POST(req: NextRequest) {
 
     // Product rule: if no image is sent, session must reset after ticket creation confirmation.
     // If an image is sent right after, it will attach via recent-ticket lookup (short window).
-    await resetSessionCompletely(from, supabaseAdmin, 'ticket_created_text_flow_reset')
+    await resetSessionCompletely(from, supabaseAdmin, webhookClientId, 'ticket_created_text_flow_reset')
 
     return NextResponse.json(
       {

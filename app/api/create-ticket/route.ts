@@ -170,6 +170,7 @@ export async function POST(req: Request) {
       body = await req.json()
     }
 
+    const headerClientId = req.headers.get('x-client-id')
     const message = body?.message ? String(body.message).trim() : ''
     const phone = body?.phone ? String(body.phone).trim() : ''
     const description = body?.description ? String(body.description).trim() : ''
@@ -191,10 +192,26 @@ export async function POST(req: Request) {
         )
       }
 
+      let effectiveClientId = headerClientId
+      if (!effectiveClientId) {
+        // Backward-compatible fallback for single-tenant dev: if only 1 client exists, use it.
+        const { data: rows } = await supabaseAdmin
+          .from('clients')
+          .select('id')
+          .order('created_at', { ascending: true })
+          .limit(1)
+        const firstId = (rows as { id?: string }[] | null)?.[0]?.id
+        effectiveClientId = firstId || null
+      }
+      if (!effectiveClientId) {
+        return NextResponse.json({ error: 'חסר client_id' }, { status: 400 })
+      }
+
       const { data: project, error: projectError } = await supabaseAdmin
         .from('projects')
         .select('id, name, project_code, client_id')
         .eq('project_code', projectCodeFromBody)
+        .eq('client_id', effectiveClientId)
         .maybeSingle()
 
       if (projectError) {

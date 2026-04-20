@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { useState, type ReactNode, type CSSProperties } from 'react'
+import { type ReactNode, type CSSProperties } from 'react'
 
 // ============================================================================
 // DESIGN TOKENS - Apple-Inspired Premium Design System
@@ -94,12 +94,13 @@ export const theme = {
 // ============================================================================
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: 'grid' },
-  { href: '/tickets', label: 'Tickets', icon: 'ticket' },
-  { href: '/projects', label: 'Projects', icon: 'folder' },
-  { href: '/workers', label: 'Workers', icon: 'users' },
-  { href: '/qr', label: 'QR Codes', icon: 'qr' },
-  { href: '/summary', label: 'Summary', icon: 'chart' },
+  { href: '/', label: 'לוח בקרה', icon: 'grid' },
+  { href: '/tickets', label: 'תקלות', icon: 'ticket' },
+  { href: '/projects', label: 'פרויקטים', icon: 'folder' },
+  { href: '/workers', label: 'עובדים', icon: 'users' },
+  { href: '/residents', label: 'דיירים', icon: 'users' },
+  { href: '/qr', label: 'קודי QR', icon: 'qr' },
+  { href: '/summary', label: 'סיכום', icon: 'chart' },
 ]
 
 function NavIcon({ type, active }: { type: string; active?: boolean }) {
@@ -157,6 +158,12 @@ function NavIcon({ type, active }: { type: string; active?: boolean }) {
         <path d="m19 9-5 5-4-4-3 3" />
       </svg>
     ),
+    settings: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    ),
   }
 
   return <>{icons[type] || null}</>
@@ -180,35 +187,49 @@ export function Sidebar() {
           style={{ borderRadius: theme.radius.md, flexShrink: 0 }}
         />
         <div style={sidebarStyles.brandText}>
-          <div style={sidebarStyles.title}>Bamakor</div>
-          <div style={sidebarStyles.subtitle}>Property Management</div>
+          <div style={sidebarStyles.title}>במקור</div>
+          <div style={sidebarStyles.subtitle}>ניהול אחזקה</div>
         </div>
       </div>
 
-      <nav style={sidebarStyles.nav}>
-        {navItems.map((item) => {
-          const isActive = pathname === item.href
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                ...sidebarStyles.navLink,
-                ...(isActive ? sidebarStyles.navLinkActive : {}),
-              }}
-            >
-              <NavIcon type={item.icon} active={isActive} />
-              <span style={isActive ? { color: theme.colors.primary } : {}}>{item.label}</span>
-            </Link>
-          )
-        })}
-      </nav>
+      <div style={sidebarStyles.navColumn}>
+        <nav style={sidebarStyles.nav}>
+          {navItems.map((item) => {
+            const isActive = pathname === item.href
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                style={{
+                  ...sidebarStyles.navLink,
+                  ...(isActive ? sidebarStyles.navLinkActive : {}),
+                }}
+              >
+                <NavIcon type={item.icon} active={isActive} />
+                <span style={isActive ? { color: theme.colors.primary } : {}}>{item.label}</span>
+              </Link>
+            )
+          })}
+        </nav>
+        <div style={sidebarStyles.settingsNav}>
+          <Link
+            href="/settings"
+            style={{
+              ...sidebarStyles.navLink,
+              ...(pathname === '/settings' ? sidebarStyles.navLinkActive : {}),
+            }}
+          >
+            <NavIcon type="settings" active={pathname === '/settings'} />
+            <span style={pathname === '/settings' ? { color: theme.colors.primary } : {}}>הגדרות</span>
+          </Link>
+        </div>
+      </div>
 
       <div style={sidebarStyles.footer}>
         <div style={sidebarStyles.footerAvatar}>YL</div>
         <div style={sidebarStyles.footerInfo}>
           <div style={sidebarStyles.footerName}>Yoni Levy</div>
-          <div style={sidebarStyles.footerRole}>Administrator</div>
+          <div style={sidebarStyles.footerRole}>מנהל מערכת</div>
         </div>
       </div>
     </aside>
@@ -219,11 +240,11 @@ const sidebarStyles: Record<string, CSSProperties> = {
   container: {
     width: '240px',
     background: theme.colors.surface,
-    borderRight: `1px solid ${theme.colors.border}`,
+    borderInlineEnd: `1px solid ${theme.colors.border}`,
     padding: '24px 12px',
     position: 'fixed',
     top: 0,
-    left: 0,
+    insetInlineStart: 0,
     height: '100vh',
     display: 'flex',
     flexDirection: 'column',
@@ -264,11 +285,22 @@ const sidebarStyles: Record<string, CSSProperties> = {
     color: theme.colors.textMuted,
     marginTop: '1px',
   },
+  navColumn: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
+  },
   nav: {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
     flex: 1,
+  },
+  settingsNav: {
+    marginTop: 'auto',
+    paddingTop: '12px',
+    borderTop: `1px solid ${theme.colors.border}`,
   },
   navLink: {
     display: 'flex',
@@ -376,9 +408,9 @@ export function AppShell({
   isMobile?: boolean
 }) {
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: theme.colors.background }}>
+    <div dir="rtl" style={{ display: 'flex', minHeight: '100vh', background: theme.colors.background }}>
       {!isMobile && <Sidebar />}
-      <main style={{ flex: 1, marginLeft: isMobile ? 0 : '240px', minWidth: 0 }}>
+      <main style={{ flex: 1, marginInlineStart: isMobile ? 0 : '240px', minWidth: 0 }}>
         {children}
       </main>
     </div>
@@ -407,7 +439,7 @@ export function MobileHeader({
         </div>
       </div>
       {onMenuClick && (
-        <button onClick={onMenuClick} style={mobileHeaderStyles.menuButton} aria-label="Open menu">
+        <button onClick={onMenuClick} style={mobileHeaderStyles.menuButton} aria-label="פתיחת תפריט">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="3" x2="21" y1="6" y2="6" />
             <line x1="3" x2="21" y1="12" y2="12" />
@@ -490,7 +522,7 @@ export function MobileMenu({
             />
             <span style={mobileMenuStyles.brandName}>Bamakor</span>
           </div>
-          <button onClick={onClose} style={mobileMenuStyles.closeButton} aria-label="Close menu">
+          <button onClick={onClose} style={mobileMenuStyles.closeButton} aria-label="סגירת תפריט">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 6 6 18" />
               <path d="m6 6 12 12" />
@@ -498,25 +530,40 @@ export function MobileMenu({
           </button>
         </div>
 
-        <nav style={mobileMenuStyles.nav}>
-          {navItems.map((item) => {
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                style={{
-                  ...mobileMenuStyles.navLink,
-                  ...(isActive ? mobileMenuStyles.navLinkActive : {}),
-                }}
-              >
-                <NavIcon type={item.icon} active={isActive} />
-                <span>{item.label}</span>
-              </Link>
-            )
-          })}
-        </nav>
+        <div style={mobileMenuStyles.navColumn}>
+          <nav style={mobileMenuStyles.nav}>
+            {navItems.map((item) => {
+              const isActive = pathname === item.href
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onClose}
+                  style={{
+                    ...mobileMenuStyles.navLink,
+                    ...(isActive ? mobileMenuStyles.navLinkActive : {}),
+                  }}
+                >
+                  <NavIcon type={item.icon} active={isActive} />
+                  <span>{item.label}</span>
+                </Link>
+              )
+            })}
+          </nav>
+          <div style={mobileMenuStyles.settingsNav}>
+            <Link
+              href="/settings"
+              onClick={onClose}
+              style={{
+                ...mobileMenuStyles.navLink,
+                ...(pathname === '/settings' ? mobileMenuStyles.navLinkActive : {}),
+              }}
+            >
+              <NavIcon type="settings" active={pathname === '/settings'} />
+              <span>הגדרות</span>
+            </Link>
+          </div>
+        </div>
       </div>
     </>
   )
@@ -533,7 +580,7 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
   panel: {
     position: 'fixed',
     top: 0,
-    left: 0,
+    insetInlineStart: 0,
     bottom: 0,
     width: '280px',
     background: theme.colors.surface,
@@ -542,6 +589,13 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+  },
+  navColumn: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
+    overflow: 'auto',
   },
   header: {
     display: 'flex',
@@ -589,6 +643,12 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
+    flex: 1,
+  },
+  settingsNav: {
+    marginTop: 'auto',
+    paddingTop: '16px',
+    borderTop: `1px solid ${theme.colors.border}`,
   },
   navLink: {
     display: 'flex',
@@ -622,11 +682,11 @@ export function PageHeader({
 }) {
   return (
     <div style={pageHeaderStyles.container}>
-      <div>
+      {actions && <div style={pageHeaderStyles.actions}>{actions}</div>}
+      <div style={{ flex: 1, minWidth: 0 }}>
         <h1 style={pageHeaderStyles.title}>{title}</h1>
         {subtitle && <p style={pageHeaderStyles.subtitle}>{subtitle}</p>}
       </div>
-      {actions && <div style={pageHeaderStyles.actions}>{actions}</div>}
     </div>
   )
 }
@@ -669,13 +729,11 @@ export function KpiCard({
   label,
   value,
   accent,
-  active,
   onClick,
 }: {
   label: string
   value: string | number
   accent?: 'primary' | 'success' | 'warning' | 'error'
-  active?: boolean
   onClick?: () => void
 }) {
   const accentColors = {
@@ -689,11 +747,11 @@ export function KpiCard({
 
   return (
     <button
+      type="button"
       onClick={onClick}
       style={{
         ...kpiStyles.card,
-        borderLeftColor: accentColor,
-        ...(active ? { background: theme.colors.primaryMuted, borderColor: theme.colors.primary } : {}),
+        borderInlineStartColor: accentColor,
         cursor: onClick ? 'pointer' : 'default',
       }}
     >
@@ -707,10 +765,10 @@ const kpiStyles: Record<string, CSSProperties> = {
   card: {
     background: theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
-    borderLeft: '3px solid',
+    borderInlineStart: '3px solid',
     borderRadius: theme.radius.lg,
     padding: '24px',
-    textAlign: 'left',
+    textAlign: 'start',
     transition: 'all 0.2s ease',
     width: '100%',
   },
@@ -950,7 +1008,7 @@ export function PriorityDot({ priority }: { priority: string }) {
 export function SearchInput({
   value,
   onChange,
-  placeholder = 'Search...',
+  placeholder = 'חיפוש...',
   style,
 }: {
   value: string
@@ -1134,7 +1192,7 @@ export function Drawer({
             <h2 style={drawerStyles.title}>{title}</h2>
             {subtitle && <p style={drawerStyles.subtitle}>{subtitle}</p>}
           </div>
-          <button onClick={onClose} style={drawerStyles.closeButton} aria-label="Close">
+          <button onClick={onClose} style={drawerStyles.closeButton} aria-label="סגירה">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 6 6 18" />
               <path d="m6 6 12 12" />

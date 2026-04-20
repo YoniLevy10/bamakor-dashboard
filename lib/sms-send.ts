@@ -22,11 +22,19 @@
  * Resident communication remains on WhatsApp via Meta/Facebook.
  */
 
+import { fetchWithTimeout } from '@/lib/fetch-timeout'
+
 // 019SMS Configuration
 const SMS_019_ENDPOINT = 'https://019sms.co.il/api'
 const SMS_019_API_TOKEN = process.env.SMS_019_API_TOKEN
 const SMS_019_USERNAME = process.env.SMS_019_USERNAME
 const SMS_019_SENDER = process.env.SMS_019_SENDER || '0559899132'
+
+/** Primary manager SMS destination (שרה / מנהלת) — overrides per-project when set */
+export function getManagerPhoneFromEnv(): string | undefined {
+  const v = process.env.MANAGER_PHONE
+  return v && String(v).trim() ? String(v).trim() : undefined
+}
 
 /**
  * Normalize phone number to 019SMS format
@@ -135,7 +143,8 @@ function buildSMSPayload(username: string, source: string, destination: string, 
  */
 export async function sendWorkerSMS(
   phoneNumber: string,
-  message: string
+  message: string,
+  senderName: string = 'במקור'
 ): Promise<boolean> {
   try {
     if (!phoneNumber) {
@@ -180,13 +189,13 @@ export async function sendWorkerSMS(
 
     console.log('📱 SMS_SEND_START: Sending SMS to worker via 019SMS', {
       normalizedPhone,
-      source: SMS_019_SENDER,
+      source: senderName || SMS_019_SENDER,
       messageLength: message.length,
     })
 
-    const payload = buildSMSPayload(SMS_019_USERNAME, SMS_019_SENDER, normalizedPhone, message)
+    const payload = buildSMSPayload(SMS_019_USERNAME, senderName || SMS_019_SENDER, normalizedPhone, message)
 
-    const response = await fetch(SMS_019_ENDPOINT, {
+    const response = await fetchWithTimeout(SMS_019_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/xml',
@@ -194,6 +203,7 @@ export async function sendWorkerSMS(
       },
       body: payload,
     })
+    if (!response) return false
 
     const responseText = await response.text()
     const { status, message: responseMessage, shipmentId } = parseXMLResponse(responseText)
@@ -243,7 +253,8 @@ export async function sendWorkerSMS(
  */
 export async function sendManagerSMS(
   phoneNumber: string,
-  message: string
+  message: string,
+  senderName: string = 'במקור'
 ): Promise<boolean> {
   try {
     if (!phoneNumber) {
@@ -288,13 +299,13 @@ export async function sendManagerSMS(
 
     console.log('📱 SMS_SEND_START: Sending SMS to manager via 019SMS', {
       normalizedPhone,
-      source: SMS_019_SENDER,
+      source: senderName || SMS_019_SENDER,
       messageLength: message.length,
     })
 
-    const payload = buildSMSPayload(SMS_019_USERNAME, SMS_019_SENDER, normalizedPhone, message)
+    const payload = buildSMSPayload(SMS_019_USERNAME, senderName || SMS_019_SENDER, normalizedPhone, message)
 
-    const response = await fetch(SMS_019_ENDPOINT, {
+    const response = await fetchWithTimeout(SMS_019_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/xml',
@@ -302,6 +313,7 @@ export async function sendManagerSMS(
       },
       body: payload,
     })
+    if (!response) return false
 
     const responseText = await response.text()
     const { status, message: responseMessage, shipmentId } = parseXMLResponse(responseText)

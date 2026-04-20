@@ -1,7 +1,7 @@
 'use client'
 
 import { type CSSProperties } from 'react'
-import { KpiCard, theme } from '../ui'
+import { KpiCard } from '../ui'
 
 interface DashboardStatsProps {
   stats: {
@@ -10,12 +10,11 @@ interface DashboardStatsProps {
     assigned: number
     closed: number
   }
-  activeKpi: 'ALL' | 'NEW' | 'ASSIGNED' | 'CLOSED'
   onKpiChange: (kpi: 'ALL' | 'NEW' | 'ASSIGNED' | 'CLOSED') => void
   isMobile: boolean
 }
 
-export function DashboardStats({ stats, activeKpi, onKpiChange, isMobile }: DashboardStatsProps) {
+export function DashboardStats({ stats, onKpiChange, isMobile }: DashboardStatsProps) {
   return (
     <div
       style={{
@@ -26,25 +25,21 @@ export function DashboardStats({ stats, activeKpi, onKpiChange, isMobile }: Dash
       <KpiCard
         label="Total Tickets"
         value={stats.total}
-        active={activeKpi === 'ALL'}
         onClick={() => onKpiChange('ALL')}
       />
       <KpiCard
         label="Open"
         value={stats.open}
-        active={activeKpi === 'NEW'}
         onClick={() => onKpiChange('NEW')}
       />
       <KpiCard
         label="Assigned"
         value={stats.assigned}
-        active={activeKpi === 'ASSIGNED'}
         onClick={() => onKpiChange('ASSIGNED')}
       />
       <KpiCard
         label="Closed"
         value={stats.closed}
-        active={activeKpi === 'CLOSED'}
         onClick={() => onKpiChange('CLOSED')}
       />
     </div>

@@ -93,6 +93,17 @@ export default function DashboardPage() {
 
   const [activeKpi, setActiveKpi] = useState<'ALL' | 'NEW' | 'IN_PROGRESS' | 'CLOSED'>('ALL')
 
+  type ActivityItem = {
+    id: string
+    type: 'created' | 'updated' | 'closed'
+    ticket_number: number
+    project_label: string
+    description: string
+    time: string
+  }
+
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
+
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
     check()
@@ -108,7 +119,7 @@ export default function DashboardPage() {
     setLoading(true)
     await asyncHandler(
       async () => {
-        const [ticketsResult, projectsResult, workersResult] = await Promise.all([
+        const [ticketsResult, projectsResult, workersResult, logsResult] = await Promise.all([
           supabase
             .from('tickets')
             .select(`
@@ -125,6 +136,21 @@ export default function DashboardPage() {
             .from('workers')
             .select('id, full_name')
             .order('full_name', { ascending: true }),
+          supabase
+            .from('ticket_logs')
+            .select(
+              `
+              id, action_type, created_at,
+              tickets (
+                ticket_number,
+                description,
+                status,
+                projects (name, project_code)
+              )
+            `
+            )
+            .order('created_at', { ascending: false })
+            .limit(5),
         ])
 
         if (ticketsResult.error) throw ticketsResult.error
@@ -154,11 +180,75 @@ export default function DashboardPage() {
           map[worker.id] = worker.full_name
         })
         setWorkersMap(map)
+
+        const fromLogs = buildActivityFromLogs(logsResult.data, logsResult.error)
+        if (fromLogs.length > 0) {
+          setRecentActivity(fromLogs)
+        } else {
+          setRecentActivity(
+            formatted.slice(0, 5).map((ticket) => ({
+              id: ticket.id,
+              type:
+                ticket.status === 'CLOSED' ? 'closed' : ticket.status === 'NEW' ? 'created' : 'updated',
+              ticket_number: ticket.ticket_number,
+              project_label: ticket.project_name || ticket.project_code || '',
+              description: ticket.description,
+              time: formatRelativeTime(ticket.created_at),
+            }))
+          )
+        }
         return true
       },
       { context: 'Failed to load dashboard data', showErrorToast: true }
     )
     setLoading(false)
+  }
+
+  function buildActivityFromLogs(
+    data: unknown,
+    err: { message?: string } | null
+  ): ActivityItem[] {
+    if (err || !Array.isArray(data)) return []
+    const items: ActivityItem[] = []
+    for (const row of data) {
+      const log = row as {
+        id: string
+        action_type?: string | null
+        created_at?: string
+        tickets?:
+          | {
+              ticket_number?: number
+              description?: string | null
+              status?: string
+              projects?: { name?: string; project_code?: string } | { name?: string; project_code?: string }[]
+            }
+          | Array<{
+              ticket_number?: number
+              description?: string | null
+              status?: string
+              projects?: { name?: string; project_code?: string } | { name?: string; project_code?: string }[]
+            }>
+      }
+      const rawT = log.tickets
+      const ticket = Array.isArray(rawT) ? rawT[0] : rawT
+      if (!ticket || !log.created_at) continue
+      const proj = ticket.projects
+      const p = Array.isArray(proj) ? proj[0] : proj
+      const project_label = p?.name || p?.project_code || ''
+      const at = (log.action_type || '').toUpperCase()
+      let type: ActivityItem['type'] = 'updated'
+      if (at.includes('CLOSE') || ticket.status === 'CLOSED') type = 'closed'
+      else if (at.includes('CREAT') || at.includes('OPEN') || at.includes('NEW')) type = 'created'
+      items.push({
+        id: log.id,
+        type,
+        ticket_number: ticket.ticket_number ?? 0,
+        project_label,
+        description: ticket.description || '',
+        time: formatRelativeTime(log.created_at),
+      })
+    }
+    return items
   }
 
   const stats = useMemo(() => {
@@ -187,17 +277,6 @@ export default function DashboardPage() {
     }).filter(p => p.total > 0).sort((a, b) => b.open - a.open).slice(0, 6)
   }, [projects, tickets])
 
-  const recentActivity = useMemo(() => {
-    return tickets.slice(0, 5).map((ticket) => ({
-      id: ticket.id,
-      type: ticket.status === 'CLOSED' ? 'closed' : ticket.status === 'NEW' ? 'created' : 'updated',
-      ticket_number: ticket.ticket_number,
-      project_code: ticket.project_code,
-      description: ticket.description,
-      time: formatRelativeTime(ticket.created_at),
-    }))
-  }, [tickets])
-
   function formatRelativeTime(dateString: string) {
     const date = new Date(dateString)
     const now = new Date()
@@ -205,22 +284,22 @@ export default function DashboardPage() {
     const diffMins = Math.floor(diffMs / 60000)
     const diffHours = Math.floor(diffMins / 60)
     const diffDays = Math.floor(diffHours / 24)
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays < 7) return `${diffDays}d ago`
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    if (diffMins < 1) return 'עכשיו'
+    if (diffMins < 60) return `לפני ${diffMins} דק׳`
+    if (diffHours < 24) return `לפני ${diffHours} שע׳`
+    if (diffDays < 7) return `לפני ${diffDays} ימים`
+    return date.toLocaleDateString('he-IL', { month: 'short', day: 'numeric' })
   }
 
   function getGreeting() {
     const hour = new Date().getHours()
-    if (hour < 12) return 'Good morning'
-    if (hour < 18) return 'Good afternoon'
-    return 'Good evening'
+    if (hour < 12) return 'בוקר טוב'
+    if (hour < 18) return 'צהריים טובים'
+    return 'ערב טוב'
   }
 
   function formatDate() {
-    return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    return new Date().toLocaleDateString('he-IL', { weekday: 'long', month: 'long', day: 'numeric' })
   }
 
   function getImageUrl(attachment: AttachmentRow): string {
@@ -311,7 +390,7 @@ export default function DashboardPage() {
         }
         const { error } = await supabase.from('tickets').update(payload).eq('id', selectedTicket.id)
         if (error) throw error
-        toast.success('Ticket saved')
+        toast.success('נשמר')
         await loadData()
         return true
       },
@@ -334,7 +413,7 @@ export default function DashboardPage() {
           const result = await response.json()
           throw new Error(result.error || 'Failed to close ticket')
         }
-        toast.success('Ticket closed')
+        toast.success('התקלה נסגרה')
         await loadData()
         closeDrawer()
         return true
@@ -347,7 +426,7 @@ export default function DashboardPage() {
   async function handleCreateTicket(e: React.FormEvent) {
     e.preventDefault()
     if (!addTicketProjectCode || !addTicketDescription.trim()) {
-      setAddTicketError('Please fill in all required fields')
+      setAddTicketError('נא למלא את כל השדות הנדרשים')
       return
     }
     setAddingTicket(true)
@@ -365,7 +444,7 @@ export default function DashboardPage() {
         throw new Error(result.error || 'Failed to create ticket')
       }
       const result = await response.json()
-      toast.success(`Ticket #${result.ticketNumber} created`)
+      toast.success(`תקלה #${result.ticketNumber} נוצרה`)
       setAddTicketProjectCode('')
       setAddTicketDescription('')
       setAddTicketReporterName('')
@@ -386,7 +465,7 @@ export default function DashboardPage() {
     <AppShell isMobile={isMobile}>
       {isMobile && (
         <MobileHeader
-          title="Dashboard"
+          title="לוח בקרה"
           subtitle={formatDate()}
           onMenuClick={() => setMenuOpen(true)}
         />
@@ -396,20 +475,22 @@ export default function DashboardPage() {
 
       <div style={styles.content}>
         <div style={styles.hero}>
-          <div style={styles.heroText}>
-            <h1 style={styles.heroTitle}>{getGreeting()}</h1>
-            <p style={styles.heroDate}>{formatDate()}</p>
-            {openTicketsCount > 0 && (
-              <p style={styles.heroStatus}>
-                <span style={styles.statusDot} />
-                {openTicketsCount} open ticket{openTicketsCount !== 1 ? 's' : ''} need attention
-              </p>
-            )}
-          </div>
-          <div style={styles.heroActions}>
-            <Button variant="primary" size="lg" onClick={() => setShowAddTicketModal(true)}>
-              New Ticket
-            </Button>
+          <div style={styles.heroTop}>
+            <div style={styles.heroActions}>
+              <Button variant="primary" size="lg" onClick={() => setShowAddTicketModal(true)}>
+                תקלה חדשה
+              </Button>
+            </div>
+            <div style={styles.heroText}>
+              <h1 style={styles.heroTitle}>{getGreeting()}</h1>
+              <p style={styles.heroDate}>{formatDate()}</p>
+              {openTicketsCount > 0 && (
+                <p style={styles.heroStatus}>
+                  <span style={styles.statusDot} />
+                  {openTicketsCount} תקלות פתוחות דורשות טיפול
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -423,34 +504,41 @@ export default function DashboardPage() {
               ...styles.kpiGrid,
               gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             }}>
-              <KpiCard label="Total Tickets" value={stats.total} accent="primary" active={activeKpi === 'ALL'} onClick={() => setActiveKpi('ALL')} />
-              <KpiCard label="Open" value={stats.open} accent="warning" active={activeKpi === 'NEW'} onClick={() => setActiveKpi('NEW')} />
-              <KpiCard label="In Progress" value={stats.inProgress} accent="primary" active={activeKpi === 'IN_PROGRESS'} onClick={() => setActiveKpi('IN_PROGRESS')} />
-              <KpiCard label="Resolved" value={stats.closed} accent="success" active={activeKpi === 'CLOSED'} onClick={() => setActiveKpi('CLOSED')} />
+              <KpiCard label="סה״כ תקלות" value={stats.total} accent="primary" onClick={() => setActiveKpi('ALL')} />
+              <KpiCard label="פתוחות" value={stats.open} accent="warning" onClick={() => setActiveKpi('NEW')} />
+              <KpiCard label="בטיפול" value={stats.inProgress} accent="primary" onClick={() => setActiveKpi('IN_PROGRESS')} />
+              <KpiCard label="נסגרו" value={stats.closed} accent="success" onClick={() => setActiveKpi('CLOSED')} />
             </div>
 
             <div style={{ ...styles.mainGrid, gridTemplateColumns: isMobile ? '1fr' : '1fr 340px' }}>
-              <Card title="Project Status" subtitle="Active projects with pending work">
+              <Card
+                title="סטטוס פרויקטים"
+                subtitle="בניינים עם עבודה פתוחה"
+                actions={
+                  <Link href="/projects" style={styles.viewAllLink}>
+                    הצג הכל ←
+                  </Link>
+                }
+              >
                 <div style={styles.projectList}>
                   {projectStats.length === 0 ? (
-                    <p style={styles.emptyText}>No projects with tickets yet</p>
+                    <p style={styles.emptyText}>אין עדיין פרויקטים עם תקלות</p>
                   ) : (
                     projectStats.map((project) => (
                       <Link href={`/tickets?project=${encodeURIComponent(project.project_code)}`} key={project.id} style={styles.projectCard}>
                         <div style={styles.projectHeader}>
                           <div>
                             <div style={styles.projectName}>{project.name}</div>
-                            <div style={styles.projectCode}>{project.project_code}</div>
                           </div>
                           <div style={styles.projectStats}>
-                            <span style={styles.projectTicketCount}>{project.open} open</span>
+                            <span style={styles.projectTicketCount}>{project.open} פתוחות</span>
                           </div>
                         </div>
                         <div style={styles.progressBarContainer}>
                           <div style={styles.progressBarBg}>
                             <div style={{ ...styles.progressBarFill, width: `${project.progress}%` }} />
                           </div>
-                          <span style={styles.progressLabel}>{project.progress}% complete</span>
+                          <span style={styles.progressLabel}>{project.progress}% הושלמו</span>
                         </div>
                       </Link>
                     ))
@@ -458,7 +546,7 @@ export default function DashboardPage() {
                 </div>
               </Card>
 
-              <Card title="Recent Activity" subtitle="Latest ticket updates">
+              <Card title="פעילות אחרונה" subtitle="עדכוני תקלות אחרונים">
                 <div style={styles.activityList}>
                   {recentActivity.map((activity) => (
                     <div key={activity.id} style={styles.activityItem}>
@@ -481,8 +569,8 @@ export default function DashboardPage() {
                       </div>
                       <div style={styles.activityContent}>
                         <div style={styles.activityTitle}>
-                          Ticket #{activity.ticket_number}
-                          <span style={styles.activityBadge}>{activity.project_code}</span>
+                          תקלה #{activity.ticket_number}
+                          <span style={styles.activityBadge}>{activity.project_label}</span>
                         </div>
                         <div style={styles.activityDesc}>
                           {activity.description?.slice(0, 50)}{(activity.description?.length || 0) > 50 ? '...' : ''}
@@ -496,9 +584,9 @@ export default function DashboardPage() {
             </div>
 
             <Card
-              title="Recent Tickets"
-              subtitle={activeKpi === 'ALL' ? 'All tickets' : `Filtered by ${activeKpi.toLowerCase()}`}
-              actions={<Link href="/tickets" style={styles.viewAllLink}>View all</Link>}
+              title="תקלות אחרונות"
+              subtitle={activeKpi === 'ALL' ? 'כל התקלות' : `מסונן לפי ${activeKpi}`}
+              actions={<Link href="/tickets" style={styles.viewAllLink}>הצג הכל</Link>}
               noPadding
             >
               <div style={styles.tableContainer}>
@@ -506,18 +594,18 @@ export default function DashboardPage() {
                   <thead>
                     <tr>
                       <th style={styles.th}>#</th>
-                      <th style={styles.th}>Project</th>
-                      <th style={styles.th}>Description</th>
-                      <th style={styles.th}>Status</th>
-                      <th style={styles.th}>Assigned</th>
-                      <th style={styles.th}>Age</th>
+                      <th style={styles.th}>בניין</th>
+                      <th style={styles.th}>תיאור</th>
+                      <th style={styles.th}>סטטוס</th>
+                      <th style={styles.th}>משויך</th>
+                      <th style={styles.th}>גיל</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredTickets.map((ticket) => (
                       <tr key={ticket.id} style={styles.tr} onClick={() => openTicket(ticket)}>
                         <td style={styles.td}><span style={styles.ticketNumber}>{ticket.ticket_number}</span></td>
-                        <td style={styles.td}><span style={styles.projectBadge}>{ticket.project_code}</span></td>
+                        <td style={styles.td}><span style={styles.projectBadge}>{ticket.project_name || ticket.project_code}</span></td>
                         <td style={{ ...styles.td, maxWidth: '300px' }}>
                           <span style={styles.descriptionText}>
                             {ticket.description?.slice(0, 60)}{(ticket.description?.length || 0) > 60 ? '...' : ''}
@@ -526,7 +614,7 @@ export default function DashboardPage() {
                         <td style={styles.td}><StatusBadge status={ticket.status} size="sm" /></td>
                         <td style={styles.td}>
                           <span style={styles.workerName}>
-                            {ticket.assigned_worker_id ? workersMap[ticket.assigned_worker_id] || 'Unknown' : '-'}
+                            {ticket.assigned_worker_id ? workersMap[ticket.assigned_worker_id] || 'לא ידוע' : '—'}
                           </span>
                         </td>
                         <td style={styles.td}><span style={styles.ageText}>{formatRelativeTime(ticket.created_at)}</span></td>
@@ -592,8 +680,16 @@ export default function DashboardPage() {
 
 const styles: Record<string, CSSProperties> = {
   content: { padding: '32px 40px', maxWidth: '1400px', margin: '0 auto' },
-  hero: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px', flexWrap: 'wrap', gap: '24px' },
-  heroText: {},
+  hero: { marginBottom: '40px' },
+  heroTop: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    gap: '20px',
+    flexWrap: 'wrap',
+  },
+  heroText: { flex: 1, minWidth: 0 },
   heroTitle: { fontSize: '34px', fontWeight: 700, color: theme.colors.textPrimary, margin: 0, letterSpacing: '-0.02em' },
   heroDate: { fontSize: '17px', color: theme.colors.textMuted, margin: '8px 0 0' },
   heroStatus: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', color: theme.colors.textSecondary, margin: '16px 0 0' },
@@ -624,7 +720,7 @@ const styles: Record<string, CSSProperties> = {
   viewAllLink: { fontSize: '14px', fontWeight: 500, color: theme.colors.primary, textDecoration: 'none' },
   tableContainer: { overflowX: 'auto' },
   table: { width: '100%', borderCollapse: 'collapse' },
-  th: { textAlign: 'left', padding: '14px 20px', fontSize: '12px', fontWeight: 600, color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: `1px solid ${theme.colors.border}`, background: theme.colors.muted },
+  th: { textAlign: 'start', padding: '14px 20px', fontSize: '12px', fontWeight: 600, color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: `1px solid ${theme.colors.border}`, background: theme.colors.muted },
   tr: { cursor: 'pointer', transition: 'background 0.15s ease' },
   td: { padding: '16px 20px', fontSize: '14px', color: theme.colors.textPrimary, borderBottom: `1px solid ${theme.colors.border}`, verticalAlign: 'middle' },
   ticketNumber: { fontWeight: 600, fontVariantNumeric: 'tabular-nums' },

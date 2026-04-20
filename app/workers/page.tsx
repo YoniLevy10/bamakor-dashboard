@@ -85,17 +85,6 @@ export default function WorkersPage() {
   const [workerTickets, setWorkerTickets] = useState<TicketRow[]>([])
   const [loadingWorkerTickets, setLoadingWorkerTickets] = useState(false)
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
-
-  useEffect(() => {
-    initializePage()
-  }, [])
-
   async function loadClientId() {
     const { data, error } = await supabase
       .from('clients')
@@ -136,6 +125,18 @@ export default function WorkersPage() {
     )
     setLoading(false)
   }
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 900)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial page data
+    void initializePage()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- mount only
 
   function openCreateDrawer() {
     setEditingWorker(null)
@@ -264,11 +265,23 @@ export default function WorkersPage() {
             .update(payload)
             .eq('id', editingWorker.id)
           if (error) throw error
-          toast.success('Worker updated')
+          toast.success('העובד עודכן')
         } else {
-          const { error } = await supabase.from('workers').insert(payload)
-          if (error) throw error
-          toast.success('Worker created')
+          const res = await fetch('/api/create-worker', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              client_id: clientId,
+              full_name: payload.full_name,
+              phone: payload.phone,
+              email: payload.email,
+              role: payload.role,
+              is_active: payload.is_active,
+            }),
+          })
+          const json = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error((json as { error?: string }).error || 'יצירת עובד נכשלה')
+          toast.success('העובד נוצר')
         }
 
         await loadWorkers()
@@ -323,6 +336,9 @@ export default function WorkersPage() {
 
   const filteredWorkers = useMemo(() => {
     return workers.filter((worker) => {
+      const roleLower = (worker.role || '').trim().toLowerCase()
+      if (roleLower === 'test') return false
+
       const q = searchTerm.trim().toLowerCase()
       const matchesSearch = !q ||
         worker.full_name.toLowerCase().includes(q) ||
@@ -346,8 +362,8 @@ export default function WorkersPage() {
     <AppShell isMobile={isMobile}>
       {isMobile && (
         <MobileHeader
-          title="Workers"
-          subtitle={`${filteredWorkers.length} team members`}
+          title="עובדים"
+          subtitle={`${filteredWorkers.length} עובדים`}
           onMenuClick={() => setMenuOpen(true)}
         />
       )}
@@ -357,11 +373,11 @@ export default function WorkersPage() {
       <div style={styles.content}>
         {!isMobile && (
           <PageHeader
-            title="Workers"
-            subtitle="Manage your maintenance team"
+            title="עובדים"
+            subtitle="ניהול צוות אחזקה"
             actions={
               <Button variant="primary" onClick={openCreateDrawer}>
-                New Worker
+                עובד חדש
               </Button>
             }
           />
@@ -372,9 +388,9 @@ export default function WorkersPage() {
           ...styles.kpiGrid,
           gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)',
         }}>
-          <KpiCard label="Total Workers" value={stats.total} accent="primary" />
-          <KpiCard label="Active" value={stats.active} accent="success" />
-          <KpiCard label="Inactive" value={stats.inactive} />
+          <KpiCard label="סה״כ עובדים" value={stats.total} accent="primary" />
+          <KpiCard label="פעילים" value={stats.active} accent="success" />
+          <KpiCard label="לא פעילים" value={stats.inactive} />
         </div>
 
         {/* Filters + Grid */}
@@ -386,16 +402,16 @@ export default function WorkersPage() {
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder="Search workers..."
+              placeholder="חיפוש עובדים..."
               style={{ flex: 1, maxWidth: isMobile ? '100%' : '320px' }}
             />
             <Select
               value={statusFilter}
               onChange={(value) => setStatusFilter(value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
               options={[
-                { label: 'All Status', value: 'ALL' },
-                { label: 'Active', value: 'ACTIVE' },
-                { label: 'Inactive', value: 'INACTIVE' },
+                { label: 'כל הסטטוסים', value: 'ALL' },
+                { label: 'פעיל', value: 'ACTIVE' },
+                { label: 'לא פעיל', value: 'INACTIVE' },
               ]}
               style={{ minWidth: '140px' }}
             />
@@ -407,11 +423,11 @@ export default function WorkersPage() {
             </div>
           ) : filteredWorkers.length === 0 ? (
             <EmptyState
-              title="No workers found"
-              description="Try adjusting your filters or add a new team member."
+              title="לא נמצאו עובדים"
+              description="נסו לשנות מסננים או להוסיף עובד חדש."
               action={
                 <Button variant="primary" onClick={openCreateDrawer}>
-                  Add Worker
+                  הוספת עובד
                 </Button>
               }
             />
@@ -433,7 +449,7 @@ export default function WorkersPage() {
                     </div>
                     <div style={styles.workerInfo}>
                       <div style={styles.workerName}>{worker.full_name}</div>
-                      <div style={styles.workerRole}>{worker.role || 'No role set'}</div>
+                      <div style={styles.workerRole}>{worker.role || 'ללא תפקיד'}</div>
                     </div>
                     <StatusBadge status={worker.is_active ? 'ACTIVE' : 'INACTIVE'} size="sm" />
                   </div>
@@ -458,10 +474,10 @@ export default function WorkersPage() {
 
                   <div style={styles.workerActions} onClick={(e) => e.stopPropagation()}>
                     <Button variant="secondary" size="sm" onClick={() => openEditDrawer(worker)}>
-                      Edit
+                      עריכה
                     </Button>
                     <Button variant="secondary" size="sm" onClick={() => toggleWorkerStatus(worker)}>
-                      {worker.is_active ? 'Deactivate' : 'Activate'}
+                      {worker.is_active ? 'השבתה' : 'הפעלה'}
                     </Button>
                   </div>
                 </div>
@@ -475,49 +491,49 @@ export default function WorkersPage() {
       <Drawer
         open={drawerOpen}
         onClose={closeDrawer}
-        title={editingWorker ? 'Edit Worker' : 'New Worker'}
-        subtitle={editingWorker ? 'Update worker details' : 'Add a new team member'}
+        title={editingWorker ? 'עריכת עובד' : 'עובד חדש'}
+        subtitle={editingWorker ? 'עדכון פרטי עובד' : 'הוספת חבר צוות'}
         isMobile={isMobile}
       >
         <div style={styles.drawerContent}>
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Full Name *</label>
+            <label style={styles.formLabel}>שם מלא *</label>
             <input
               value={form.full_name}
               onChange={(e) => updateForm('full_name', e.target.value)}
-              placeholder="Enter full name"
+              placeholder="שם מלא"
               style={styles.input}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Phone *</label>
+            <label style={styles.formLabel}>טלפון *</label>
             <input
               type="tel"
               value={form.phone}
               onChange={(e) => updateForm('phone', e.target.value)}
-              placeholder="Enter phone number"
+              placeholder="מספר טלפון"
               style={styles.input}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Email</label>
+            <label style={styles.formLabel}>אימייל</label>
             <input
               type="email"
               value={form.email}
               onChange={(e) => updateForm('email', e.target.value)}
-              placeholder="Enter email address"
+              placeholder="כתובת אימייל"
               style={styles.input}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Role</label>
+            <label style={styles.formLabel}>תפקיד</label>
             <input
               value={form.role}
               onChange={(e) => updateForm('role', e.target.value)}
-              placeholder="e.g. Technician, Plumber, Electrician"
+              placeholder="למשל: טכנאי, אינסטלטור"
               style={styles.input}
             />
           </div>
@@ -530,16 +546,16 @@ export default function WorkersPage() {
                 onChange={(e) => updateForm('is_active', e.target.checked)}
                 style={styles.checkbox}
               />
-              <span>Active</span>
+              <span>פעיל</span>
             </label>
           </div>
 
           <div style={styles.drawerActions}>
             <Button variant="secondary" onClick={closeDrawer}>
-              Cancel
+              ביטול
             </Button>
             <Button variant="primary" onClick={saveWorker} loading={saving}>
-              {editingWorker ? 'Update' : 'Create'}
+              {editingWorker ? 'עדכון' : 'יצירה'}
             </Button>
           </div>
 
@@ -550,7 +566,7 @@ export default function WorkersPage() {
                 onClick={() => deleteWorker(editingWorker)}
                 style={{ width: '100%' }}
               >
-                Delete Worker
+                מחיקת עובד
               </Button>
             </div>
           )}
@@ -562,35 +578,35 @@ export default function WorkersPage() {
         open={detailDrawerOpen}
         onClose={closeDetailDrawer}
         title={selectedWorker?.full_name || ''}
-        subtitle={selectedWorker?.role || 'Team Member'}
+        subtitle={selectedWorker?.role || 'חבר צוות'}
         isMobile={isMobile}
       >
         {selectedWorker && (
           <div style={styles.drawerContent}>
             <div style={styles.detailSection}>
               <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Status</span>
+                <span style={styles.detailLabel}>סטטוס</span>
                 <StatusBadge status={selectedWorker.is_active ? 'ACTIVE' : 'INACTIVE'} />
               </div>
               <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Phone</span>
+                <span style={styles.detailLabel}>טלפון</span>
                 <span style={styles.detailValue}>{selectedWorker.phone}</span>
               </div>
               <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Email</span>
+                <span style={styles.detailLabel}>אימייל</span>
                 <span style={styles.detailValue}>{selectedWorker.email || '-'}</span>
               </div>
             </div>
 
             <div style={styles.ticketsSection}>
               <div style={styles.ticketsSectionHeader}>
-                <h4 style={styles.ticketsSectionTitle}>Assigned Tickets</h4>
+                <h4 style={styles.ticketsSectionTitle}>תקלות משויכות</h4>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => window.location.href = `/tickets?worker=${encodeURIComponent(selectedWorker.id)}`}
                 >
-                  View All
+                  הצג הכל
                 </Button>
               </div>
 
@@ -599,7 +615,7 @@ export default function WorkersPage() {
                   <LoadingSpinner size="sm" />
                 </div>
               ) : workerTickets.length === 0 ? (
-                <p style={styles.emptyText}>No assigned tickets</p>
+                <p style={styles.emptyText}>אין תקלות משויכות</p>
               ) : (
                 <div style={styles.ticketList}>
                   {workerTickets.slice(0, 5).map((ticket) => (
@@ -617,7 +633,7 @@ export default function WorkersPage() {
 
             <div style={styles.drawerActions}>
               <Button variant="secondary" onClick={() => openEditDrawer(selectedWorker)}>
-                Edit Worker
+                עריכת עובד
               </Button>
             </div>
           </div>

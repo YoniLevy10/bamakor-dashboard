@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '@/lib/fetch-timeout'
+
 type WhatsAppTemplateComponent = {
   type: string
   parameters?: Array<{
@@ -6,19 +8,13 @@ type WhatsAppTemplateComponent = {
   }>
 }
 
-async function sendRawWhatsAppPayload(payload: Record<string, unknown>) {
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
-
-  if (!accessToken) {
-    throw new Error('Missing WHATSAPP_ACCESS_TOKEN')
-  }
-
-  if (!phoneNumberId) {
-    throw new Error('Missing WHATSAPP_PHONE_NUMBER_ID')
-  }
-
-  const response = await fetch(
+/** Send using explicit Meta credentials (e.g. from Supabase `clients` row). */
+export async function sendRawWhatsAppPayloadWithCredentials(
+  phoneNumberId: string,
+  accessToken: string,
+  payload: Record<string, unknown>
+) {
+  const response = await fetchWithTimeout(
     `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
     {
       method: 'POST',
@@ -32,6 +28,7 @@ async function sendRawWhatsAppPayload(payload: Record<string, unknown>) {
       }),
     }
   )
+  if (!response) return null
 
   const data = await response.json()
 
@@ -42,7 +39,68 @@ async function sendRawWhatsAppPayload(payload: Record<string, unknown>) {
   return data
 }
 
-export async function sendWhatsAppTextMessage(to: string, body: string) {
+export async function sendWhatsAppTextMessageWithCredentials(
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  body: string
+) {
+  return sendRawWhatsAppPayloadWithCredentials(phoneNumberId, accessToken, {
+    to,
+    type: 'text',
+    text: {
+      body,
+    },
+  })
+}
+
+type WhatsAppCredentials = {
+  phoneNumberId?: string
+  accessToken?: string
+}
+
+async function sendRawWhatsAppPayload(payload: Record<string, unknown>, creds?: WhatsAppCredentials) {
+  const accessToken = creds?.accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN
+  const phoneNumberId = creds?.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID
+
+  if (!accessToken) {
+    throw new Error('Missing WHATSAPP_ACCESS_TOKEN')
+  }
+
+  if (!phoneNumberId) {
+    throw new Error('Missing WHATSAPP_PHONE_NUMBER_ID')
+  }
+
+  const response = await fetchWithTimeout(
+    `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        ...payload,
+      }),
+    }
+  )
+  if (!response) return null
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(`WhatsApp send failed: ${JSON.stringify(data)}`)
+  }
+
+  return data
+}
+
+export async function sendWhatsAppTextMessage(
+  to: string,
+  body: string,
+  creds?: WhatsAppCredentials
+) {
   console.log('📤 Sending WhatsApp text message to:', to)
 
   return sendRawWhatsAppPayload({
@@ -51,7 +109,7 @@ export async function sendWhatsAppTextMessage(to: string, body: string) {
     text: {
       body,
     },
-  })
+  }, creds)
 }
 
 export async function sendWhatsAppTemplateMessage(

@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { fetchWithTimeout } from '@/lib/fetch-timeout'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -22,7 +23,7 @@ export async function downloadWhatsAppMedia(
     console.log(`📥 STEP_1_START: Fetching media URL from Meta (mediaId: ${mediaId})`)
     let mediaUrlResponse
     try {
-      mediaUrlResponse = await fetch(
+      mediaUrlResponse = await fetchWithTimeout(
         `https://graph.facebook.com/v23.0/${mediaId}`,
         {
           headers: {
@@ -30,6 +31,7 @@ export async function downloadWhatsAppMedia(
           },
         }
       )
+      if (!mediaUrlResponse) return null
     } catch (fetchErr) {
       console.error('❌ DOWNLOAD_FAILURE: Network error during Meta API media URL request', {
         mediaId,
@@ -81,11 +83,12 @@ export async function downloadWhatsAppMedia(
     console.log(`⏳ STEP_2_START: Downloading media from URL`)
     let fileResponse
     try {
-      fileResponse = await fetch(mediaUrl, {
+      fileResponse = await fetchWithTimeout(mediaUrl, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
       })
+      if (!fileResponse) return null
     } catch (fetchErr) {
       console.error('❌ DOWNLOAD_FAILURE: Network error during media file download', {
         mediaId,

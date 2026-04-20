@@ -85,15 +85,15 @@ export function TicketDetailDrawer({
   function formatLogTitle(actionType: string) {
     switch (actionType) {
       case 'TICKET_CREATED':
-        return 'Ticket Created'
+        return 'תקלה נוצרה'
       case 'USER_MESSAGE':
-        return 'User Message'
+        return 'הודעת משתמש'
       case 'ASSIGNED_TO_WORKER':
-        return 'Assigned To Worker'
+        return 'שויך לעובד'
       case 'TICKET_CLOSED':
-        return 'Ticket Closed'
+        return 'תקלה נסגרה'
       case 'AUTO_ASSIGNED':
-        return 'Auto Assigned'
+        return 'שיוך אוטומטי'
       default:
         return actionType
     }
@@ -103,14 +103,14 @@ export function TicketDetailDrawer({
     <Drawer
       open={!!selectedTicket}
       onClose={onClose}
-      title={`Ticket #${selectedTicket?.ticket_number}`}
+      title={`תקלה #${selectedTicket?.ticket_number}`}
       subtitle={selectedTicket?.project_name || selectedTicket?.project_code}
       isMobile={isMobile}
     >
       {selectedTicket && (
         <div style={styles.drawerContent}>
           <div style={styles.drawerSection}>
-            <div style={styles.drawerLabel}>Status</div>
+            <div style={styles.drawerLabel}>סטטוס</div>
             <select
               value={draftStatus}
               onChange={(e) => onStatusChange(e.target.value)}
@@ -125,13 +125,13 @@ export function TicketDetailDrawer({
           </div>
 
           <div style={styles.drawerSection}>
-            <div style={styles.drawerLabel}>Assigned Worker</div>
+            <div style={styles.drawerLabel}>עובד משויך</div>
             <select
               value={draftWorkerId}
               onChange={(e) => onWorkerChange(e.target.value)}
               style={styles.drawerSelect}
             >
-              <option value="">Unassigned</option>
+              <option value="">לא משויך</option>
               {Object.entries(workersMap).map(([id, name]) => (
                 <option key={id} value={id}>
                   {name}
@@ -141,7 +141,7 @@ export function TicketDetailDrawer({
           </div>
 
           <div style={styles.drawerSection}>
-            <div style={styles.drawerLabel}>Description</div>
+            <div style={styles.drawerLabel}>תיאור</div>
             <textarea
               value={draftDescription}
               onChange={(e) => onDescriptionChange(e.target.value)}
@@ -151,7 +151,7 @@ export function TicketDetailDrawer({
           </div>
 
           <div style={styles.drawerSection}>
-            <div style={styles.drawerLabel}>Reporter Phone</div>
+            <div style={styles.drawerLabel}>טלפון מדווח</div>
             <a 
               href={`tel:${selectedTicket.reporter_phone}`}
               style={styles.phoneLink}
@@ -161,9 +161,9 @@ export function TicketDetailDrawer({
           </div>
 
           <div style={styles.drawerSection}>
-            <div style={styles.drawerLabel}>Created</div>
+            <div style={styles.drawerLabel}>נוצר</div>
             <div style={styles.drawerValue}>
-              {new Date(selectedTicket.created_at).toLocaleDateString('en-US', {
+              {new Date(selectedTicket.created_at).toLocaleDateString('he-IL', {
                 day: 'numeric',
                 month: 'long',
                 year: 'numeric',
@@ -176,7 +176,7 @@ export function TicketDetailDrawer({
           {/* Attachments */}
           {selectedTicketAttachments.length > 0 && (
             <div style={styles.drawerSection}>
-              <div style={styles.drawerLabel}>Attachments</div>
+              <div style={styles.drawerLabel}>קבצים מצורפים</div>
               <div style={styles.attachmentGrid}>
                 {selectedTicketAttachments.map((attachment) => (
                   <button
@@ -208,7 +208,7 @@ export function TicketDetailDrawer({
               loading={savingTicket}
               style={{ width: '100%' }}
             >
-              Save Changes
+              שמירה
             </Button>
             {selectedTicket.status !== 'CLOSED' && (
               <Button
@@ -216,18 +216,18 @@ export function TicketDetailDrawer({
                 onClick={onCloseTicket}
                 style={{ width: '100%' }}
               >
-                Close Ticket
+                סגירת תקלה
               </Button>
             )}
           </div>
 
           {/* History */}
           <div style={styles.drawerSection}>
-            <div style={styles.drawerLabel}>History</div>
+            <div style={styles.drawerLabel}>היסטוריה</div>
             {drawerLoading ? (
-              <div style={styles.loadingState}>Loading...</div>
+              <div style={styles.loadingState}>טוען...</div>
             ) : ticketLogs.length === 0 ? (
-              <div style={styles.emptyLogs}>No history available</div>
+              <div style={styles.emptyLogs}>אין היסטוריה</div>
             ) : (
               <div style={styles.logsList}>
                 {ticketLogs.map((log) => (
@@ -235,7 +235,7 @@ export function TicketDetailDrawer({
                     <div style={styles.logHeader}>
                       <span style={styles.logAction}>{formatLogTitle(log.action_type)}</span>
                       <span style={styles.logTime}>
-                        {new Date(log.created_at).toLocaleDateString('en-US', {
+                        {new Date(log.created_at).toLocaleDateString('he-IL', {
                           day: 'numeric',
                           month: 'short',
                           hour: '2-digit',

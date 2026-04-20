@@ -33,12 +33,12 @@ export async function POST(req: Request) {
       )
     }
 
+    const headerClientId = req.headers.get('x-client-id')
+
     // Validate ticket exists
-    const { data: ticket, error: ticketError } = await supabaseAdmin
-      .from('tickets')
-      .select('id')
-      .eq('id', ticket_id)
-      .single()
+    let existsQuery = supabaseAdmin.from('tickets').select('id, client_id').eq('id', ticket_id)
+    if (headerClientId) existsQuery = existsQuery.eq('client_id', headerClientId)
+    const { data: ticket, error: ticketError } = await existsQuery.single()
 
     if (ticketError || !ticket) {
       logger.error('TICKET_API', 'Ticket not found', ticketError, { requestId, ticket_id })
@@ -46,6 +46,11 @@ export async function POST(req: Request) {
         { error: 'Ticket not found' },
         { status: 404 }
       )
+    }
+
+    const clientId = headerClientId || (ticket as { client_id?: string | null }).client_id
+    if (!clientId) {
+      return NextResponse.json({ error: 'חסר client_id' }, { status: 400 })
     }
 
     // Prepare update payload
@@ -70,6 +75,7 @@ export async function POST(req: Request) {
       .from('tickets')
       .update(updatePayload)
       .eq('id', ticket_id)
+      .eq('client_id', clientId)
       .select()
 
     if (updateError) {

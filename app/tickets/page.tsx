@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import {
@@ -69,20 +70,26 @@ type ProjectRow = {
 }
 
 const statusOptions = [
-  { label: 'All Status', value: 'ALL' },
-  { label: 'New', value: 'NEW' },
-  { label: 'Assigned', value: 'ASSIGNED' },
-  { label: 'In Progress', value: 'IN_PROGRESS' },
-  { label: 'Waiting Parts', value: 'WAITING_PARTS' },
-  { label: 'Closed', value: 'CLOSED' },
+  { label: 'כל הסטטוסים', value: 'ALL' },
+  { label: 'חדש', value: 'NEW' },
+  { label: 'משויך', value: 'ASSIGNED' },
+  { label: 'בטיפול', value: 'IN_PROGRESS' },
+  { label: 'ממתין לחלקים', value: 'WAITING_PARTS' },
+  { label: 'סגור', value: 'CLOSED' },
 ]
 
 const priorityOptions = [
-  { label: 'All Priority', value: 'ALL' },
-  { label: 'High', value: 'HIGH' },
-  { label: 'Medium', value: 'MEDIUM' },
-  { label: 'Low', value: 'LOW' },
+  { label: 'כל העדיפויות', value: 'ALL' },
+  { label: 'גבוהה', value: 'HIGH' },
+  { label: 'בינונית', value: 'MEDIUM' },
+  { label: 'נמוכה', value: 'LOW' },
 ]
+
+const TICKETS_LIST_SELECT = `
+  id, ticket_number, project_id, reporter_phone, reporter_name,
+  description, status, priority, assigned_worker_id, created_at, closed_at,
+  projects (name, project_code)
+`.trim()
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([])
@@ -113,6 +120,11 @@ export default function TicketsPage() {
   })
   const [addingTicket, setAddingTicket] = useState(false)
   const [addTicketError, setAddTicketError] = useState('')
+  const [descriptionTranslation, setDescriptionTranslation] = useState('')
+  const [translating, setTranslating] = useState(false)
+  const [mergeCandidates, setMergeCandidates] = useState<TicketRow[]>([])
+  const [mergeLoading, setMergeLoading] = useState(false)
+  const [exportProject, setExportProject] = useState('ALL')
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -156,11 +168,7 @@ export default function TicketsPage() {
         const [ticketsResult, workersResult, projectsResult] = await Promise.all([
           supabase
             .from('tickets')
-            .select(`
-              id, ticket_number, project_id, reporter_phone, reporter_name,
-              description, status, priority, assigned_worker_id, created_at, closed_at,
-              projects (name, project_code)
-            `)
+            .select(TICKETS_LIST_SELECT)
             .order('created_at', { ascending: false }),
           supabase
             .from('workers')
@@ -176,14 +184,16 @@ export default function TicketsPage() {
         if (workersResult.error) throw workersResult.error
         if (projectsResult.error) throw projectsResult.error
 
-        const normalizedTickets: TicketRow[] = (ticketsResult.data as TicketRow[] || []).map((ticket) => {
-          const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
-          return {
-            ...ticket,
-            project_code: project?.project_code || '',
-            project_name: project?.name || '',
+        const normalizedTickets: TicketRow[] = ((ticketsResult.data ?? []) as unknown as TicketRow[]).map(
+          (ticket) => {
+            const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
+            return {
+              ...ticket,
+              project_code: project?.project_code || '',
+              project_name: project?.name || '',
+            }
           }
-        })
+        )
 
         setTickets(normalizedTickets)
         setWorkers((workersResult.data as WorkerRow[]) || [])
@@ -204,13 +214,15 @@ export default function TicketsPage() {
   }, [tickets])
 
   const projectOptions = useMemo(() => {
-    const unique = Array.from(new Set(tickets.map((t) => t.project_code).filter(Boolean))) as string[]
-    return [{ label: 'All Projects', value: 'ALL' }, ...unique.map((p) => ({ label: p, value: p }))]
-  }, [tickets])
+    return [
+      { label: 'כל הפרויקטים', value: 'ALL' },
+      ...projects.map((p) => ({ label: p.name, value: p.project_code })),
+    ]
+  }, [projects])
 
   const workerOptions = useMemo(() => {
     return [
-      { label: 'All Workers', value: 'ALL' },
+      { label: 'כל העובדים', value: 'ALL' },
       ...workers.map((w) => ({ label: w.full_name, value: w.id })),
     ]
   }, [workers])
@@ -236,9 +248,108 @@ export default function TicketsPage() {
   }, [tickets, searchTerm, statusFilter, priorityFilter, projectFilter, workerFilter])
 
   function getWorkerName(workerId?: string | null) {
-    if (!workerId) return 'Unassigned'
+    if (!workerId) return 'לא משויך'
     const worker = workers.find((w) => w.id === workerId)
-    return worker?.full_name || 'Unknown'
+    return worker?.full_name || 'לא ידוע'
+  }
+
+  function exportToExcel() {
+    const list =
+      exportProject === 'ALL'
+        ? filteredTickets
+        : filteredTickets.filter((t) => t.project_code === exportProject)
+
+    const rows = list.map((t) => ({
+      'מספר תקלה': t.ticket_number,
+      תיאור: t.description || '',
+      סטטוס: t.status,
+      'עובד משויך': getWorkerName(t.assigned_worker_id),
+      'תאריך פתיחה': t.created_at ? new Date(t.created_at).toLocaleString('he-IL') : '',
+      'תאריך סגירה': t.closed_at ? new Date(t.closed_at).toLocaleString('he-IL') : '',
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Tickets')
+    const name = exportProject === 'ALL' ? 'tickets-all' : `tickets-${exportProject}`
+    XLSX.writeFile(wb, `${name}.xlsx`)
+    toast.success('קובץ הורד')
+  }
+
+  async function loadMergeCandidates(ticket: TicketRow) {
+    if (!ticket.project_id) return
+    setMergeLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .select(
+          `
+          id, ticket_number, project_id, description, status, created_at,
+          projects (name, project_code)
+        `
+        )
+        .eq('project_id', ticket.project_id)
+        .neq('id', ticket.id)
+        .neq('status', 'CLOSED')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      const normalized: TicketRow[] = (data || []).map((row: TicketRow) => {
+        const project = Array.isArray(row.projects) ? row.projects[0] : row.projects
+        return {
+          ...row,
+          project_code: project?.project_code || '',
+          project_name: project?.name || '',
+        }
+      })
+      setMergeCandidates(normalized)
+    } catch {
+      setMergeCandidates([])
+      toast.error('טעינת תקלות למיזוג נכשלה')
+    }
+    setMergeLoading(false)
+  }
+
+  async function runMerge(targetId: string) {
+    if (!selectedTicket) return
+    setSavingTicket(true)
+    try {
+      const res = await fetch('/api/merge-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_ticket_id: selectedTicket.id,
+          target_ticket_id: targetId,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'מיזוג נכשל')
+      toast.success(`מוזג לתקלה #${json.merged_into_ticket_number}`)
+      closeDrawer()
+      await fetchData()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'מיזוג נכשל')
+    }
+    setSavingTicket(false)
+  }
+
+  async function translateDescription() {
+    if (!selectedTicket?.description?.trim()) return
+    setTranslating(true)
+    setDescriptionTranslation('')
+    try {
+      const res = await fetch('/api/translate-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: selectedTicket.description }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'תרגום נכשל')
+      setDescriptionTranslation(json.translation || '')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'תרגום נכשל')
+    }
+    setTranslating(false)
   }
 
   function getTicketAge(createdAt?: string): string {
@@ -259,6 +370,8 @@ export default function TicketsPage() {
     setDraftStatus(ticket.status)
     setDraftWorkerId(ticket.assigned_worker_id || '')
     setSelectedTicketAttachments([])
+    setDescriptionTranslation('')
+    setMergeCandidates([])
     loadTicketAttachments(ticket.id)
   }
 
@@ -296,6 +409,8 @@ export default function TicketsPage() {
     setDraftStatus('')
     setDraftWorkerId('')
     setSelectedTicketAttachments([])
+    setDescriptionTranslation('')
+    setMergeCandidates([])
   }
 
   async function saveTicketChanges() {
@@ -329,7 +444,7 @@ export default function TicketsPage() {
 
       if (error) throw error
 
-      toast.success('Changes saved')
+      toast.success('השינויים נשמרו')
       await fetchData()
       setSelectedTicket((prev) => prev ? { ...prev, priority: draftPriority, status: draftStatus, assigned_worker_id: draftWorkerId || null } : prev)
     } catch (err) {
@@ -341,11 +456,11 @@ export default function TicketsPage() {
   async function handleCreateTicket(e: React.FormEvent) {
     e.preventDefault()
     if (!addTicketForm.project_code) {
-      setAddTicketError('Please select a project')
+      setAddTicketError('נא לבחור פרויקט')
       return
     }
     if (!addTicketForm.description || addTicketForm.description.trim().length < 3) {
-      setAddTicketError('Description must be at least 3 characters')
+      setAddTicketError('התיאור חייב להכיל לפחות 3 תווים')
       return
     }
 
@@ -367,7 +482,7 @@ export default function TicketsPage() {
       }
 
       const result = await response.json()
-      toast.success(`Ticket #${result.ticketNumber} created successfully`)
+      toast.success(`תקלה #${result.ticketNumber} נוצרה`)
       setAddTicketForm({ project_code: '', description: '', reporter_name: '', reporter_phone: '' })
       setShowAddTicketModal(false)
       await fetchData()
@@ -383,22 +498,30 @@ export default function TicketsPage() {
     <AppShell isMobile={isMobile}>
       {isMobile && (
         <MobileHeader
-          title="Tickets"
-          subtitle={`${filteredTickets.length} tickets`}
+          title="תקלות"
+          subtitle={`${filteredTickets.length} תקלות`}
           onMenuClick={() => setMenuOpen(true)}
         />
       )}
 
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
+      {isMobile && (
+        <div style={{ padding: '12px 20px 0', display: 'flex', justifyContent: 'flex-start' }}>
+          <Button variant="primary" size="md" onClick={() => setShowAddTicketModal(true)}>
+            תקלה חדשה
+          </Button>
+        </div>
+      )}
+
       <div style={styles.content}>
         {!isMobile && (
           <PageHeader
-            title="Tickets"
-            subtitle="Manage and track all maintenance requests"
+            title="תקלות"
+            subtitle="ניהול ומעקב אחר תקלות אחזקה"
             actions={
               <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
-                New Ticket
+                תקלה חדשה
               </Button>
             }
           />
@@ -409,10 +532,10 @@ export default function TicketsPage() {
           ...styles.kpiGrid,
           gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
         }}>
-          <KpiCard label="Total Tickets" value={stats.total} accent="primary" />
-          <KpiCard label="Open" value={stats.open} accent="warning" />
-          <KpiCard label="In Progress" value={stats.assigned} accent="primary" />
-          <KpiCard label="Resolved" value={stats.resolved} accent="success" />
+          <KpiCard label="סה״כ תקלות" value={stats.total} accent="primary" />
+          <KpiCard label="פתוחות" value={stats.open} accent="warning" />
+          <KpiCard label="בטיפול" value={stats.assigned} accent="primary" />
+          <KpiCard label="נסגרו" value={stats.resolved} accent="success" />
         </div>
 
         {/* Filters */}
@@ -424,9 +547,30 @@ export default function TicketsPage() {
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder="Search tickets..."
+              placeholder="חיפוש תקלות..."
               style={{ flex: 1, maxWidth: isMobile ? '100%' : '320px' }}
             />
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <Select
+                value={exportProject}
+                onChange={setExportProject}
+                options={[
+                  { label: 'ייצוא: כל הפרויקטים', value: 'ALL' },
+                  ...projects.map((p) => ({ label: `ייצוא: ${p.name}`, value: p.project_code })),
+                ]}
+                style={{ minWidth: '200px' }}
+              />
+              <Button variant="secondary" size="sm" type="button" onClick={exportToExcel}>
+                ייצא ל-Excel
+              </Button>
+            </div>
             <div style={{
               ...styles.filterGroup,
               flexWrap: isMobile ? 'wrap' : 'nowrap',
@@ -465,11 +609,11 @@ export default function TicketsPage() {
             </div>
           ) : filteredTickets.length === 0 ? (
             <EmptyState
-              title="No tickets found"
-              description="Try adjusting your filters or create a new ticket."
+              title="לא נמצאו תקלות"
+              description="נסו לשנות מסננים או לפתוח תקלה חדשה."
               action={
                 <Button variant="primary" onClick={() => setShowAddTicketModal(true)}>
-                  Create Ticket
+                  תקלה חדשה
                 </Button>
               }
             />
@@ -479,12 +623,12 @@ export default function TicketsPage() {
                 <thead>
                   <tr>
                     <th style={styles.th}>#</th>
-                    <th style={styles.th}>Priority</th>
-                    <th style={styles.th}>Project</th>
-                    <th style={styles.th}>Description</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Assigned To</th>
-                    <th style={styles.th}>Age</th>
+                    <th style={styles.th}>עדיפות</th>
+                    <th style={styles.th}>בניין</th>
+                    <th style={styles.th}>תיאור</th>
+                    <th style={styles.th}>סטטוס</th>
+                    <th style={styles.th}>משויך</th>
+                    <th style={styles.th}>גיל</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -501,7 +645,7 @@ export default function TicketsPage() {
                         <PriorityDot priority={ticket.priority || 'LOW'} />
                       </td>
                       <td style={styles.td}>
-                        <span style={styles.projectBadge}>{ticket.project_code}</span>
+                        <span style={styles.projectBadge}>{ticket.project_name || ticket.project_code}</span>
                       </td>
                       <td style={{ ...styles.td, maxWidth: '350px' }}>
                         <span style={styles.descriptionText}>
@@ -530,26 +674,80 @@ export default function TicketsPage() {
       <Drawer
         open={!!selectedTicket}
         onClose={closeDrawer}
-        title={selectedTicket ? `Ticket #${selectedTicket.ticket_number}` : ''}
+        title={selectedTicket ? `תקלה #${selectedTicket.ticket_number}` : ''}
         subtitle={selectedTicket?.project_name || selectedTicket?.project_code}
         isMobile={isMobile}
       >
         {selectedTicket && (
           <div style={styles.drawerContent}>
             <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Description</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <label style={styles.formLabel}>תיאור</label>
+                <Button variant="secondary" size="sm" type="button" loading={translating} onClick={translateDescription}>
+                  תרגם לעברית
+                </Button>
+              </div>
               <div style={styles.descriptionBox}>{selectedTicket.description || '-'}</div>
+              {descriptionTranslation ? (
+                <div style={{ ...styles.descriptionBox, marginTop: '10px', borderInlineStart: `3px solid ${theme.colors.primary}` }}>
+                  <div style={{ fontSize: '12px', color: theme.colors.textMuted, marginBottom: '6px' }}>תרגום</div>
+                  {descriptionTranslation}
+                </div>
+              ) : null}
             </div>
+
+            {selectedTicket.status !== 'CLOSED' && (
+              <div style={styles.formGroup}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <label style={styles.formLabel}>מיזוג תקלות</label>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    loading={mergeLoading}
+                    onClick={() => loadMergeCandidates(selectedTicket)}
+                  >
+                    טען תקלות פתוחות מאותו בניין
+                  </Button>
+                </div>
+                {mergeCandidates.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                    {mergeCandidates.map((c) => (
+                      <div
+                        key={c.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '10px 12px',
+                          background: theme.colors.muted,
+                          borderRadius: theme.radius.md,
+                        }}
+                      >
+                        <span style={{ fontSize: '14px' }}>
+                          #{c.ticket_number} — {(c.description || '').slice(0, 60)}
+                          {(c.description?.length || 0) > 60 ? '…' : ''}
+                        </span>
+                        <Button variant="primary" size="sm" type="button" onClick={() => runMerge(c.id)} loading={savingTicket}>
+                          מזג לכאן
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={styles.formRow}>
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Reporter</label>
+                <label style={styles.formLabel}>מדווח</label>
                 <div style={styles.formValue}>
                   {selectedTicket.reporter_name || selectedTicket.reporter_phone || '-'}
                 </div>
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Created</label>
+                <label style={styles.formLabel}>נוצר</label>
                 <div style={styles.formValue}>
                   {selectedTicket.created_at ? new Date(selectedTicket.created_at).toLocaleDateString() : '-'}
                 </div>
@@ -557,21 +755,21 @@ export default function TicketsPage() {
             </div>
 
             <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Priority</label>
+              <label style={styles.formLabel}>עדיפות</label>
               <Select
                 value={draftPriority}
                 onChange={setDraftPriority}
                 options={[
-                  { label: 'Low', value: 'LOW' },
-                  { label: 'Medium', value: 'MEDIUM' },
-                  { label: 'High', value: 'HIGH' },
+                  { label: 'נמוכה', value: 'LOW' },
+                  { label: 'בינונית', value: 'MEDIUM' },
+                  { label: 'גבוהה', value: 'HIGH' },
                 ]}
                 style={{ width: '100%' }}
               />
             </div>
 
             <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Status</label>
+              <label style={styles.formLabel}>סטטוס</label>
               <Select
                 value={draftStatus}
                 onChange={setDraftStatus}
@@ -581,12 +779,12 @@ export default function TicketsPage() {
             </div>
 
             <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Assigned To</label>
+              <label style={styles.formLabel}>משויך לעובד</label>
               <Select
                 value={draftWorkerId}
                 onChange={setDraftWorkerId}
                 options={[
-                  { label: 'Unassigned', value: '' },
+                  { label: 'לא משויך', value: '' },
                   ...workers.map((w) => ({ label: w.full_name, value: w.id })),
                 ]}
                 style={{ width: '100%' }}
@@ -596,7 +794,7 @@ export default function TicketsPage() {
             {/* Attachments */}
             {selectedTicketAttachments.length > 0 && (
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Attachments</label>
+                <label style={styles.formLabel}>קבצים מצורפים</label>
                 <div style={styles.attachmentGrid}>
                   {selectedTicketAttachments.map((attachment) => (
                     <div
@@ -632,10 +830,10 @@ export default function TicketsPage() {
 
             <div style={styles.drawerActions}>
               <Button variant="secondary" onClick={closeDrawer}>
-                Cancel
+                ביטול
               </Button>
               <Button variant="primary" onClick={saveTicketChanges} loading={savingTicket}>
-                Save Changes
+                שמירה
               </Button>
             </div>
           </div>
@@ -646,53 +844,53 @@ export default function TicketsPage() {
       <Drawer
         open={showAddTicketModal}
         onClose={() => setShowAddTicketModal(false)}
-        title="Create New Ticket"
-        subtitle="Submit a new maintenance request"
+        title="תקלה חדשה"
+        subtitle="פתיחת פניית אחזקה"
         isMobile={isMobile}
       >
         <form onSubmit={handleCreateTicket} style={styles.drawerContent}>
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Project *</label>
+            <label style={styles.formLabel}>פרויקט *</label>
             <Select
               value={addTicketForm.project_code}
               onChange={(value) => setAddTicketForm((prev) => ({ ...prev, project_code: value }))}
               options={[
-                { label: 'Select a project', value: '' },
-                ...projects.map((p) => ({ label: `${p.project_code} - ${p.name}`, value: p.project_code })),
+                { label: 'בחרו פרויקט', value: '' },
+                ...projects.map((p) => ({ label: p.name, value: p.project_code })),
               ]}
               style={{ width: '100%' }}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Description *</label>
+            <label style={styles.formLabel}>תיאור *</label>
             <textarea
               value={addTicketForm.description}
               onChange={(e) => setAddTicketForm((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder="Describe the issue..."
+              placeholder="תיאור התקלה..."
               style={styles.textarea}
               rows={4}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Reporter Name</label>
+            <label style={styles.formLabel}>שם מדווח</label>
             <input
               type="text"
               value={addTicketForm.reporter_name}
               onChange={(e) => setAddTicketForm((prev) => ({ ...prev, reporter_name: e.target.value }))}
-              placeholder="Optional"
+              placeholder="אופציונלי"
               style={styles.input}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Reporter Phone</label>
+            <label style={styles.formLabel}>טלפון מדווח</label>
             <input
               type="tel"
               value={addTicketForm.reporter_phone}
               onChange={(e) => setAddTicketForm((prev) => ({ ...prev, reporter_phone: e.target.value }))}
-              placeholder="Optional"
+              placeholder="אופציונלי"
               style={styles.input}
             />
           </div>
@@ -703,10 +901,10 @@ export default function TicketsPage() {
 
           <div style={styles.drawerActions}>
             <Button variant="secondary" type="button" onClick={() => setShowAddTicketModal(false)}>
-              Cancel
+              ביטול
             </Button>
             <Button variant="primary" type="submit" loading={addingTicket}>
-              Create Ticket
+              יצירת תקלה
             </Button>
           </div>
         </form>
@@ -802,7 +1000,7 @@ const styles: Record<string, CSSProperties> = {
     borderCollapse: 'collapse',
   },
   th: {
-    textAlign: 'left',
+    textAlign: 'start',
     padding: '14px 20px',
     fontSize: '12px',
     fontWeight: 600,

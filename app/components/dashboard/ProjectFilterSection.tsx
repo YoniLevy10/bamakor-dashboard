@@ -26,8 +26,8 @@ export function ProjectFilterSection({
 }: ProjectFilterSectionProps) {
   return (
     <Card
-      title="Projects"
-      subtitle="Filter tickets by project"
+      title="סינון לפי בניין"
+      subtitle="בחרו פרויקט להצגת תקלות"
       style={{ marginBottom: '20px' }}
     >
       <div style={styles.header}>
