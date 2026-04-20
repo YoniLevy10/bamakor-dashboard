@@ -137,7 +137,7 @@ export function AddTicketModal({
           {error && <div style={styles.formError}>{error}</div>}
 
           <div style={styles.modalActions}>
-            <Button variant="secondary" onClick={onClose}>
+            <Button variant="secondary" type="button" onClick={onClose}>
               ביטול
             </Button>
             <Button

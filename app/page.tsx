@@ -467,6 +467,7 @@ export default function DashboardPage() {
         <MobileHeader
           title="לוח בקרה"
           subtitle={formatDate()}
+          subtitleSuppressHydrationWarning
           onMenuClick={() => setMenuOpen(true)}
         />
       )}
@@ -482,8 +483,12 @@ export default function DashboardPage() {
               </Button>
             </div>
             <div style={styles.heroText}>
-              <h1 style={styles.heroTitle}>{getGreeting()}</h1>
-              <p style={styles.heroDate}>{formatDate()}</p>
+              <h1 style={styles.heroTitle} suppressHydrationWarning>
+                {getGreeting()}
+              </h1>
+              <p style={styles.heroDate} suppressHydrationWarning>
+                {formatDate()}
+              </p>
               {openTicketsCount > 0 && (
                 <p style={styles.heroStatus}>
                   <span style={styles.statusDot} />

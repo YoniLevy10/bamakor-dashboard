@@ -234,6 +234,7 @@ export default function SummaryPage() {
         <MobileHeader
           title="סיכום"
           subtitle={formatDate()}
+          subtitleSuppressHydrationWarning
           onMenuClick={() => setMenuOpen(true)}
         />
       )}
