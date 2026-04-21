@@ -1,4 +1,5 @@
 -- Residents: multi-tenant directory (aligns with app/residents CRUD)
+-- Sole definition of table `residents` (older 001_feature_columns no longer creates this table).
 -- Safe to re-run: uses IF NOT EXISTS / IF NOT EXISTS column checks via separate statements.
 
 CREATE TABLE IF NOT EXISTS residents (

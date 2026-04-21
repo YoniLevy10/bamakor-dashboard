@@ -1,6 +1,4 @@
-CREATE INDEX IF NOT EXISTS idx_sessions_phone_client ON sessions (phone_number, client_id)
-WHERE
-  is_active = true;
+-- sessions(partial): duplicate of idx_sessions_phone_client_active from 004_webhook_client_scope.sql — omitted here.
 
 CREATE INDEX IF NOT EXISTS idx_tickets_client_status ON tickets (client_id, status);
 

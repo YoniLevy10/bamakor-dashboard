@@ -14,16 +14,4 @@ ALTER TABLE tickets
 
 CREATE INDEX IF NOT EXISTS idx_tickets_merged_into ON tickets (merged_into_ticket_id);
 
--- #10 Residents directory (optional; UI uses when present)
-CREATE TABLE IF NOT EXISTS residents (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
-  project_id UUID NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
-  full_name TEXT NOT NULL,
-  phone TEXT NOT NULL,
-  apartment_number TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW (),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW ()
-);
-
-CREATE INDEX IF NOT EXISTS idx_residents_project_id ON residents (project_id);
-CREATE INDEX IF NOT EXISTS idx_residents_phone ON residents (phone);
+-- Residents table: see 003_residents_table.sql (single definition; avoids duplicate/conflicting CREATE with 001).
