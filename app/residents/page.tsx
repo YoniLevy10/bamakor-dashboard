@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast } from '@/lib/error-handler'
+import { AddResidentModal, type ResidentProjectRow } from '../components/residents/AddResidentModal'
 import {
   AppShell,
   MobileHeader,
@@ -15,14 +16,14 @@ import {
   theme,
 } from '../components/ui'
 
-type ProjectRow = { id: string; name: string; project_code: string }
-
 type ResidentRow = {
   id: string
   project_id: string
+  client_id?: string | null
   full_name: string
   phone: string | null
   apartment_number: string | null
+  notes?: string | null
 }
 
 function isResidentsTableMissingError(err: { message?: string } | null): boolean {
@@ -37,7 +38,7 @@ function isResidentsTableMissingError(err: { message?: string } | null): boolean
 }
 
 export default function ResidentsPage() {
-  const [projects, setProjects] = useState<ProjectRow[]>([])
+  const [projects, setProjects] = useState<ResidentProjectRow[]>([])
   const [residents, setResidents] = useState<ResidentRow[]>([])
   const [residentsTableMissing, setResidentsTableMissing] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -46,17 +47,29 @@ export default function ResidentsPage() {
   const [isMobile, setIsMobile] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
 
+  const [addOpen, setAddOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [addError, setAddError] = useState('')
+  const [addProjectId, setAddProjectId] = useState('')
+  const [addFullName, setAddFullName] = useState('')
+  const [addPhone, setAddPhone] = useState('')
+  const [addApartment, setAddApartment] = useState('')
+  const [addNotes, setAddNotes] = useState('')
+
   async function load() {
     setLoading(true)
     setResidentsTableMissing(false)
     try {
-      const pRes = await supabase.from('projects').select('id, name, project_code').order('name')
+      const pRes = await supabase
+        .from('projects')
+        .select('id, name, project_code, client_id')
+        .order('name')
       if (pRes.error) throw pRes.error
-      setProjects((pRes.data as ProjectRow[]) || [])
+      setProjects((pRes.data as ResidentProjectRow[]) || [])
 
       const rRes = await supabase
         .from('residents')
-        .select('id, project_id, full_name, phone, apartment_number')
+        .select('id, project_id, client_id, full_name, phone, apartment_number, notes')
         .order('full_name')
 
       if (rRes.error) {
@@ -73,6 +86,65 @@ export default function ResidentsPage() {
       toast.error(e instanceof Error ? e.message : 'טעינת נתונים נכשלה')
     }
     setLoading(false)
+  }
+
+  function openAdd() {
+    setAddError('')
+    setAddFullName('')
+    setAddPhone('')
+    setAddApartment('')
+    setAddNotes('')
+    setAddProjectId(projectFilter !== 'ALL' ? projectFilter : '')
+    setAddOpen(true)
+  }
+
+  async function submitAdd(e: React.FormEvent) {
+    e.preventDefault()
+    if (residentsTableMissing) return
+
+    const projectId = addProjectId
+    const fullName = addFullName.trim()
+    if (!projectId) {
+      setAddError('בחרו בניין')
+      return
+    }
+    if (!fullName) {
+      setAddError('שם מלא הוא שדה חובה')
+      return
+    }
+
+    const project = projects.find((p) => p.id === projectId)
+    const clientId = project?.client_id ?? null
+
+    setSaving(true)
+    setAddError('')
+    try {
+      const insertRes = await supabase
+        .from('residents')
+        .insert({
+          project_id: projectId,
+          client_id: clientId,
+          full_name: fullName,
+          phone: addPhone.trim() || null,
+          apartment_number: addApartment.trim() || null,
+          notes: addNotes.trim() || null,
+        })
+        .select('id, project_id, client_id, full_name, phone, apartment_number, notes')
+        .single()
+
+      if (insertRes.error) {
+        setAddError(insertRes.error.message || 'שמירת דייר נכשלה')
+        return
+      }
+
+      setResidents((prev) => [insertRes.data as ResidentRow, ...prev])
+      setAddOpen(false)
+      toast.success('דייר נוסף בהצלחה')
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'שמירת דייר נכשלה')
+    } finally {
+      setSaving(false)
+    }
   }
 
   useEffect(() => {
@@ -124,6 +196,11 @@ export default function ResidentsPage() {
           <PageHeader
             title="דיירים"
             subtitle="ניהול שמות דיירים לפי בניין (לאחר הרצת מיגרציה ב-Supabase)"
+            actions={
+              <Button variant="primary" size="sm" onClick={openAdd} disabled={residentsTableMissing}>
+                הוספת דייר
+              </Button>
+            }
           />
         )}
 
@@ -149,6 +226,9 @@ export default function ResidentsPage() {
             </select>
             <Button variant="secondary" size="sm" onClick={() => load()}>
               רענון
+            </Button>
+            <Button variant="primary" size="sm" onClick={openAdd} disabled={residentsTableMissing}>
+              הוספת דייר
             </Button>
           </div>
 
@@ -189,6 +269,25 @@ export default function ResidentsPage() {
           )}
         </Card>
       </div>
+
+      <AddResidentModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        projects={projects}
+        projectId={addProjectId}
+        fullName={addFullName}
+        phone={addPhone}
+        apartmentNumber={addApartment}
+        notes={addNotes}
+        error={addError}
+        loading={saving}
+        onProjectIdChange={setAddProjectId}
+        onFullNameChange={setAddFullName}
+        onPhoneChange={setAddPhone}
+        onApartmentNumberChange={setAddApartment}
+        onNotesChange={setAddNotes}
+        onSubmit={submitAdd}
+      />
     </AppShell>
   )
 }

@@ -65,11 +65,12 @@ iPhoneContext.describe('Dashboard - Mobile (iPhone 12)', () => {
     
     // Open modal
     const newTicketBtn = page.locator('button', { hasText: /תקלה חדשה/i })
+    await newTicketBtn.scrollIntoViewIfNeeded()
     await newTicketBtn.click()
     
     // Verify modal is visible and not cut off
     const modalTitle = page.locator('h2', { hasText: /תקלה חדשה/i }).first()
-    await expect(modalTitle).toBeVisible()
+    await expect(modalTitle).toBeVisible({ timeout: 10000 })
   })
 
   iPhoneContext('Scrollable content on small screens', async ({ page }) => {

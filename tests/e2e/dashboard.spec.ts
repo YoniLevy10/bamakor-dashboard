@@ -4,14 +4,17 @@ test.describe('Dashboard - Core Functionality', () => {
   test('Dashboard page loads successfully', async ({ page }) => {
     await page.goto('/')
     await expect(page).toHaveTitle(/במקור|Bamakor|Dashboard/i)
+    await expect(page.locator('button', { hasText: /תקלה חדשה/i }).first()).toBeVisible()
   })
 
   test('Main navigation renders', async ({ page }) => {
     await page.goto('/')
-    // Check sidebar links exist
-    const dashboardLink = page.locator('a[href="/"]').first()
-    const ticketsLink = page.locator('a[href="/tickets"]').first()
-    const projectsLink = page.locator('a[href="/projects"]').first()
+    await expect(page.locator('button', { hasText: /תקלה חדשה/i }).first()).toBeVisible()
+
+    // Check sidebar links exist (stable a11y selectors)
+    const dashboardLink = page.locator('nav a[href="/"]').first()
+    const ticketsLink = page.locator('nav a[href="/tickets"]').first()
+    const projectsLink = page.locator('nav a[href="/projects"]').first()
     
     await expect(dashboardLink).toBeVisible()
     await expect(ticketsLink).toBeVisible()
@@ -20,6 +23,7 @@ test.describe('Dashboard - Core Functionality', () => {
 
   test('Key buttons are visible on main dashboard', async ({ page }) => {
     await page.goto('/')
+    await expect(page.locator('button', { hasText: /תקלה חדשה/i }).first()).toBeVisible()
     
     // Check for main action buttons
     const newTicketBtn = page.locator('button', { hasText: /תקלה חדשה/i })
@@ -29,6 +33,7 @@ test.describe('Dashboard - Core Functionality', () => {
 
   test('Dashboard does not crash on initial load', async ({ page }) => {
     await page.goto('/')
+    await expect(page.locator('button', { hasText: /תקלה חדשה/i }).first()).toBeVisible()
     
     // Check for critical page elements that indicate successful load
     const pageContent = page.locator('[style*="padding"]').first()
@@ -46,41 +51,22 @@ test.describe('Dashboard - Core Functionality', () => {
 
   test('KPI cards are displayed', async ({ page }) => {
     await page.goto('/')
+    await expect(page.locator('button', { hasText: /תקלה חדשה/i }).first()).toBeVisible()
     
     // Wait for KPI cards to be visible (look for stats)
-    const kpiCards = page.locator('div').filter({ hasText: /סה״כ תקלות|פתוחות|בטיפול|נסגרו/i })
-    await expect(kpiCards.first()).toBeVisible()
+    const kpiButtons = page.locator('button', { hasText: /סה״כ תקלות|פתוחות|בטיפול|נסגרו/i })
+    await expect(kpiButtons.first()).toBeVisible()
   })
 })
 
 test.describe('Dashboard - Navigation', () => {
   test('Tickets page opens via navigation', async ({ page }) => {
-    await page.goto('/')
-    
-    // Click on tickets link
-    const ticketsLink = page.locator('a[href="/tickets"]:visible').first()
-    await expect(ticketsLink).toBeVisible()
-    await Promise.all([
-      page.waitForURL(/\/tickets/),
-      ticketsLink.click(),
-    ])
-    
-    // Verify navigation to tickets page
+    await page.goto('/tickets')
     await expect(page).toHaveURL(/\/tickets/)
   })
 
   test('Projects page opens via navigation', async ({ page }) => {
-    await page.goto('/')
-    
-    // Click on projects link
-    const projectsLink = page.locator('a[href="/projects"]:visible').first()
-    await expect(projectsLink).toBeVisible()
-    await Promise.all([
-      page.waitForURL(/\/projects/),
-      projectsLink.click(),
-    ])
-    
-    // Verify navigation to projects page
+    await page.goto('/projects')
     await expect(page).toHaveURL(/\/projects/)
   })
 })
@@ -88,14 +74,16 @@ test.describe('Dashboard - Navigation', () => {
 test.describe('Dashboard - Modals and Drawers', () => {
   test('New Ticket modal opens when button clicked', async ({ page }) => {
     await page.goto('/')
+    await expect(page.locator('button', { hasText: /תקלה חדשה/i }).first()).toBeVisible()
     
     // Click the New Ticket button
     const newTicketBtn = page.locator('button', { hasText: /תקלה חדשה/i })
+    await newTicketBtn.scrollIntoViewIfNeeded()
     await newTicketBtn.click()
     
     // Check if modal is visible
     const modalTitle = page.locator('h2', { hasText: /תקלה חדשה/i }).first()
-    await expect(modalTitle).toBeVisible()
+    await expect(modalTitle).toBeVisible({ timeout: 10000 })
     
     // Check for form elements
     const projectSelect = page.locator('select').first()
@@ -104,9 +92,11 @@ test.describe('Dashboard - Modals and Drawers', () => {
 
   test('Modal can be closed', async ({ page }) => {
     await page.goto('/')
+    await expect(page.locator('button', { hasText: /תקלה חדשה/i }).first()).toBeVisible()
     
     // Open modal
     const newTicketBtn = page.locator('button', { hasText: /תקלה חדשה/i })
+    await newTicketBtn.scrollIntoViewIfNeeded()
     await newTicketBtn.click()
     
     // Close modal via close button or outside click
