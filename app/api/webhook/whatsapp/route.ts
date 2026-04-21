@@ -7,16 +7,8 @@ import {
   isAddressLikeText,
   extractWhatsAppPhoneNumberId,
 } from '@/lib/whatsapp-parser'
-import {
-  isGreetingSmallTalk,
-  isUrgentAngryMessage,
-  isStatusQuestion,
-  parseApartmentDetailOnly,
-  looksLikePhoneOrNameLine,
-  isPrimarilyEnglishText,
-  isEmojiOnlyOrShortAck,
-  statusLabelHe,
-} from '@/lib/whatsapp-intent'
+import { webhookDedupeMessageId } from '@/lib/whatsapp-webhook-dedupe'
+import { isUrgentAngryMessage } from '@/lib/whatsapp-intent'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
 import { sendManagerSMS, sendWorkerSMS, getManagerPhoneFromEnv } from '@/lib/sms-send'
 import {
@@ -272,61 +264,6 @@ type SessionRow = {
   pending_apartment_detail?: string | null
 }
 
-/** Reuse last known building (project_id) for this phone — no new QR scan */
-async function restoreSessionFromLastProjectPhone(
-  phoneNumber: string,
-  supabaseAdmin: SupabaseClient,
-  clientId: string
-): Promise<{ ok: boolean; projectName?: string }> {
-  const { data: last, error } = await supabaseAdmin
-    .from('sessions')
-    .select('project_id')
-    .eq('phone_number', phoneNumber)
-    .eq('client_id', clientId)
-    .not('project_id', 'is', null)
-    .order('last_activity_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error || !last?.project_id) return { ok: false }
-
-  await supabaseAdmin
-    .from('sessions')
-    .update({
-      is_active: false,
-      active_ticket_id: null,
-      last_activity_at: new Date().toISOString(),
-    })
-    .eq('phone_number', phoneNumber)
-    .eq('client_id', clientId)
-    .eq('is_active', true)
-
-  const { error: insertError } = await supabaseAdmin.from('sessions').insert({
-    phone_number: phoneNumber,
-    client_id: clientId,
-    project_id: last.project_id,
-    is_active: true,
-    active_ticket_id: null,
-    last_activity_at: new Date().toISOString(),
-  })
-
-  if (insertError) {
-    console.error('❌ restoreSessionFromLastProjectPhone insert failed:', insertError)
-    return { ok: false }
-  }
-
-  const { data: proj } = await supabaseAdmin
-    .from('projects')
-    .select('name')
-    .eq('id', last.project_id)
-    .eq('client_id', clientId)
-    .maybeSingle()
-
-  const projectName = (proj as { name?: string } | null)?.name || 'הבניין'
-  console.log('✅ Restored WhatsApp session from last project for phone', phoneNumber)
-  return { ok: true, projectName }
-}
-
 async function getActiveSession(
   from: string,
   supabaseAdmin: SupabaseClient,
@@ -512,25 +449,6 @@ async function logIncomingFreeTextToTicket(
   }
 }
 
-async function findLastOpenTicketForStatusReply(
-  from: string,
-  clientId: string,
-  supabaseAdmin: SupabaseClient
-): Promise<{ ticket_number: number; status: string; created_at: string } | null> {
-  const { data, error } = await supabaseAdmin
-    .from('tickets')
-    .select('ticket_number, status, created_at')
-    .eq('reporter_phone', from)
-    .eq('client_id', clientId)
-    .neq('status', 'CLOSED')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error || !data) return null
-  return data as { ticket_number: number; status: string; created_at: string }
-}
-
 /** Same reporter + project, non-closed ticket opened within the last N minutes (duplicate follow-up guard). */
 async function findOpenTicketForReporterInWindow(
   from: string,
@@ -619,17 +537,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
-    if (parsedMessage.messageId) {
-      const { error: dupErr } = await supabaseAdmin.from('processed_webhooks').insert({
-        message_id: parsedMessage.messageId,
-      })
-      if (dupErr && dupErr.code === '23505') {
-        console.log('⚠️ Duplicate webhook, skipping:', parsedMessage.messageId)
-        return NextResponse.json({ received: true }, { status: 200 })
-      }
-      if (dupErr) {
-        console.error('⚠️ processed_webhooks insert (non-blocking):', dupErr)
-      }
+    const dedupeMessageId = webhookDedupeMessageId(parsedMessage)
+    const { error: dupErr } = await supabaseAdmin.from('processed_webhooks').insert({
+      message_id: dedupeMessageId,
+    })
+    if (dupErr && dupErr.code === '23505') {
+      console.log('⚠️ Duplicate webhook, skipping:', dedupeMessageId)
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+    if (dupErr) {
+      console.error('⚠️ processed_webhooks insert (non-blocking):', dupErr)
     }
 
     const phoneNumberId = extractWhatsAppPhoneNumberId(body)
@@ -693,61 +610,25 @@ export async function POST(req: NextRequest) {
       hasMedia: !!mediaId,
     })
 
-    // WhatsApp non-text types (no text body)
-    if (messageType === 'location') {
+    /** מוצג כשאין טקסט תקין — שתי הזרימות: QR או חיפוש בניין ואז תיאור, ואז אופציה לתמונה */
+    const flowHelpMessage =
+      'לדיווח תקלה: כתבו בטקסט את תיאור הבעיה, או סרקו את קוד ה־QR בבניין.\n' +
+      'אחרי שנפתחה פנייה – אפשר לשלוח גם תמונה של התקלה.'
+
+    if (
+      messageType === 'location' ||
+      messageType === 'contacts' ||
+      messageType === 'sticker' ||
+      messageType === 'audio' ||
+      messageType === 'video' ||
+      messageType === 'document'
+    ) {
       try {
-        await sendWhatsAppTextMessage(
-          waRecipient,
-          'קיבלנו מיקום! לדיווח תקלה כתבו תיאור הבעיה בטקסט 📍',
-          residentWhatsAppCreds
-        )
+        await sendWhatsAppTextMessage(waRecipient, flowHelpMessage, residentWhatsAppCreds)
       } catch (sendError) {
-        console.error('⚠️ Failed to send location reply:', sendError)
+        console.error('⚠️ Failed to send non-text flow guidance:', sendError)
       }
-      return NextResponse.json({ received: true, type: 'location_received' }, { status: 200 })
-    }
-
-    if (messageType === 'contacts') {
-      try {
-        await sendWhatsAppTextMessage(
-          waRecipient,
-          'קיבלנו את אנשי הקשר. לדיווח תקלה כתבו את כתובת הבניין או סרקו את קוד ה-QR 📇',
-          residentWhatsAppCreds
-        )
-      } catch (sendError) {
-        console.error('⚠️ Failed to send contacts reply:', sendError)
-      }
-      return NextResponse.json({ received: true, type: 'contacts_received' }, { status: 200 })
-    }
-
-    if (messageType === 'sticker') {
-      const stickerSession = await getActiveSession(from, supabaseAdmin, webhookClientId)
-      const stickerMsg = stickerSession
-        ? 'קיבלנו 🙂 כתבו כשתוכלו את תיאור התקלה או פרטים נוספים.'
-        : 'שלחו את שם הרחוב לדיווח תקלה 😊'
-      try {
-        await sendWhatsAppTextMessage(waRecipient, stickerMsg, residentWhatsAppCreds)
-      } catch (sendError) {
-        console.error('⚠️ Failed to send sticker reply:', sendError)
-      }
-      return NextResponse.json({ received: true, type: 'sticker_received' }, { status: 200 })
-    }
-
-    // HANDLE VOICE/AUDIO MESSAGES SAFELY
-    if (messageType === 'audio') {
-      console.log('🎙️ Voice/audio message received - sending fallback guidance')
-
-      try {
-        await sendWhatsAppTextMessage(
-          waRecipient,
-          '🎙️ קיבלנו הודעת קול, אך לא נוכל לעבד אותה.\n\nבשביל לדווח תקלה:\n1️⃣ כתבו את התקלה בטקסט\n2️⃣ או שלחו תמונה של התקלה\n\nרוצים להתחיל? סרקו את קוד ה-QR בבניין או כתבו את כתובת הבניין.',
-          residentWhatsAppCreds
-        )
-      } catch (sendError) {
-        console.error('⚠️ Failed to send voice-message guidance:', sendError)
-      }
-
-      return NextResponse.json({ received: true, type: 'voice_message_fallback' }, { status: 200 })
+      return NextResponse.json({ received: true, type: 'non_text_guidance' }, { status: 200 })
     }
 
     // HANDLE IMAGE MESSAGES
@@ -1011,11 +892,7 @@ export async function POST(req: NextRequest) {
       console.log('📍 Image received but no session context and no recent ticket - guiding user to start')
 
       try {
-        await sendWhatsAppTextMessage(
-          waRecipient,
-          '🖼️ קיבלנו את התמונה!\n\nכדי לצרף אותה לתקלה, צריך קודם:\n1️⃣ סרקו QR בבניין\n2️⃣ כתבו תיאור התקלה\n3️⃣ אז שלחו תמונה\n\nהשתדלו!',
-          residentWhatsAppCreds
-        )
+        await sendWhatsAppTextMessage(waRecipient, flowHelpMessage, residentWhatsAppCreds)
       } catch (sendError) {
         console.error('⚠️ Failed to send image-context-needed message:', sendError)
       }
@@ -1029,40 +906,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // HANDLE OTHER MEDIA TYPES (video, document) - NOT SUPPORTED YET
-    if (messageType === 'video' || messageType === 'document') {
-      console.log(`📽️ Media message received (${messageType}) - sending fallback`)
-
-      try {
-        const mediaLabel = messageType === 'video' ? 'סרטון' : 'קובץ'
-        await sendWhatsAppTextMessage(
-          waRecipient,
-          `קיבלנו ${mediaLabel} 📎\n\nבשביל דיווח תקלה, אנא שלחו תמונה או כתבו תיאור.\n\nרוצים להתחיל? סרקו את קוד ה-QR בבניין.`,
-          residentWhatsAppCreds
-        )
-      } catch (sendError) {
-        console.error(`⚠️ Failed to send ${messageType}-message guidance:`, sendError)
-      }
-
-      return NextResponse.json(
-        {
-          received: true,
-          type: 'unsupported_media_type',
-          mediaType,
-        },
-        { status: 200 }
-      )
-    }
-
-    // If no text body and no valid media, ignore (except reaction ack)
     if (!textBody) {
       if (messageType === 'reaction') {
         try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            'קיבלנו את התגובה 🙂 לדיווח תקלה כתבו את הפרטים כאן.',
-            residentWhatsAppCreds
-          )
+          await sendWhatsAppTextMessage(waRecipient, flowHelpMessage, residentWhatsAppCreds)
         } catch (sendError) {
           console.error('⚠️ Failed to send reaction reply:', sendError)
         }
@@ -1202,170 +1049,8 @@ export async function POST(req: NextRequest) {
 
     let ticketPriority: 'HIGH' | 'MEDIUM' = 'MEDIUM'
 
-    if (isStatusQuestion(textBody)) {
-      const st = await findLastOpenTicketForStatusReply(from, webhookClientId, supabaseAdmin)
-      if (st) {
-        const label = statusLabelHe(st.status)
-        const when = new Date(st.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })
-        try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            `תקלה #${st.ticket_number} בסטטוס: ${label}\nנוצרה ב־${when}. אנחנו על זה! 🔧`,
-            residentWhatsAppCreds
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send status reply:', sendError)
-        }
-      } else {
-        try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            'כרגע אין פנייה פתוחה ממספר זה.\nכדי לפתוח תקלה חדשה כתבו את שם הרחוב או סרקו את קוד ה-QR 🔧',
-            residentWhatsAppCreds
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send status empty reply:', sendError)
-        }
-      }
-      return NextResponse.json({ received: true, type: 'status_query' }, { status: 200 })
-    }
-
-    // STEP 2: active session — or restore last building for this phone (no new QR)
+    // סשן פעיל = אחרי סריקת QR או אחרי בחירת בניין בחיפוש (1/2/3 / התאמה אוטומטית)
     let session = await getActiveSession(from, supabaseAdmin, webhookClientId)
-
-    if (!session) {
-      if (isGreetingSmallTalk(textBody)) {
-        try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            'שלום! כדי לדווח תקלה, כתבו את שם הרחוב של הבניין או סרקו את קוד ה-QR 😊',
-            residentWhatsAppCreds
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send greeting reply:', sendError)
-        }
-        return NextResponse.json({ received: true, type: 'greeting' }, { status: 200 })
-      }
-      if (isPrimarilyEnglishText(textBody)) {
-        try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            'Hello! To report an issue, please write your building address or scan the QR code 😊',
-            residentWhatsAppCreds
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send English fallback:', sendError)
-        }
-        return NextResponse.json({ received: true, type: 'english_fallback' }, { status: 200 })
-      }
-      if (looksLikePhoneOrNameLine(textBody)) {
-        try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            'תודה! כדי לדווח תקלה, כתבו את שם הרחוב של הבניין 😊',
-            residentWhatsAppCreds
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send phone/name reply:', sendError)
-        }
-        return NextResponse.json({ received: true, type: 'phone_or_name' }, { status: 200 })
-      }
-      if (isEmojiOnlyOrShortAck(textBody)) {
-        try {
-          await sendWhatsAppTextMessage(waRecipient, 'שלחו את שם הרחוב לדיווח תקלה 😊', residentWhatsAppCreds)
-        } catch (sendError) {
-          console.error('⚠️ Failed to send emoji-only reply:', sendError)
-        }
-        return NextResponse.json({ received: true, type: 'emoji_only' }, { status: 200 })
-      }
-      if (isUrgentAngryMessage(textBody) && !isAddressLikeText(textBody)) {
-        try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            'קיבלנו! זו נראית תקלה דחופה.\nכתבו את שם הבניין ונטפל מיד 🚨',
-            residentWhatsAppCreds
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send urgent no-context reply:', sendError)
-        }
-        return NextResponse.json({ received: true, type: 'urgent_no_context' }, { status: 200 })
-      }
-    } else {
-      if (isGreetingSmallTalk(textBody)) {
-        try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            'שלום! כשתוכלו, כתבו בקצרה את תיאור התקלה כאן בצ׳אט 📝',
-            residentWhatsAppCreds
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send greeting-with-session reply:', sendError)
-        }
-        await supabaseAdmin
-          .from('sessions')
-          .update({ last_activity_at: new Date().toISOString() })
-          .eq('id', session.id)
-        return NextResponse.json({ received: true, type: 'greeting_with_session' }, { status: 200 })
-      }
-      if (isEmojiOnlyOrShortAck(textBody)) {
-        try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            'קיבלנו 🙂 נמשיך לטפל — כתבו עוד פרטים אם צריך.',
-            residentWhatsAppCreds
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send emoji-ack reply:', sendError)
-        }
-        await supabaseAdmin
-          .from('sessions')
-          .update({ last_activity_at: new Date().toISOString() })
-          .eq('id', session.id)
-        return NextResponse.json({ received: true, type: 'emoji_ack_with_session' }, { status: 200 })
-      }
-      const apartmentOnly = parseApartmentDetailOnly(textBody)
-      if (apartmentOnly && session.project_id) {
-        const { error: aptErr } = await supabaseAdmin
-          .from('sessions')
-          .update({
-            pending_apartment_detail: apartmentOnly,
-            last_activity_at: new Date().toISOString(),
-          })
-          .eq('id', session.id)
-        if (aptErr) {
-          console.error('⚠️ Failed to save pending apartment on session:', aptErr)
-        }
-        try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            'קיבלנו את פרט הדירה/קומה ✅ נצרף אותו לפנייה כשתשלחו את תיאור התקלה.',
-            residentWhatsAppCreds
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send apartment-saved reply:', sendError)
-        }
-        return NextResponse.json({ received: true, type: 'apartment_saved' }, { status: 200 })
-      }
-    }
-
-    if (!session) {
-      const pendingEarly = await getPendingSelection(from, supabaseAdmin, webhookClientId)
-      if (!pendingEarly) {
-        const restored = await restoreSessionFromLastProjectPhone(from, supabaseAdmin, webhookClientId)
-        if (restored.ok && restored.projectName) {
-          try {
-            await sendWhatsAppTextMessage(
-              waRecipient,
-              `ברוכים הבאים! פתחנו תקלה עבורכם ב${restored.projectName}. כתבו בקצרה את הבעיה 📝`,
-              residentWhatsAppCreds
-            )
-          } catch (e) {
-            console.error('⚠️ Failed to send building-memory welcome:', e)
-          }
-        }
-        session = await getActiveSession(from, supabaseAdmin, webhookClientId)
-      }
-    }
 
     if (!session) {
       logWhatsAppRuntimePath('NO_SESSION_PATH_ENTERED', {
@@ -1497,22 +1182,6 @@ export async function POST(req: NextRequest) {
             { status: 200 }
           )
         }
-      }
-
-      // NO PENDING SELECTION (or cleared above):
-      // Product rule: do NOT run fuzzy building search for unrelated free-text after reset.
-      // Only attempt building search if the message looks like an address/building lookup.
-      if (parseApartmentDetailOnly(textBody)) {
-        try {
-          await sendWhatsAppTextMessage(
-            waRecipient,
-            'כדי לדווח תקלה כתבו את שם הרחוב של הבניין',
-            residentWhatsAppCreds
-          )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send apartment-without-session reply:', sendError)
-        }
-        return NextResponse.json({ received: true, type: 'apartment_without_session' }, { status: 200 })
       }
 
       const addressLike = isAddressLikeText(textBody)
@@ -1770,18 +1439,7 @@ export async function POST(req: NextRequest) {
       buildingNumber = parsedStart?.buildingNumber || null
     }
 
-    let ticketDescription = textBody
-    const { data: sessionForApt } = await supabaseAdmin
-      .from('sessions')
-      .select('pending_apartment_detail')
-      .eq('id', session.id)
-      .maybeSingle()
-    const aptFromSession = (sessionForApt as { pending_apartment_detail?: string | null } | null)
-      ?.pending_apartment_detail
-      ?.trim()
-    if (aptFromSession) {
-      ticketDescription = `${textBody}\n${aptFromSession}`
-    }
+    const ticketDescription = textBody
 
     const { data: createdTicket, error: ticketError } = await supabaseAdmin
       .from('tickets')
@@ -1905,7 +1563,7 @@ export async function POST(req: NextRequest) {
 
       await sendWhatsAppTextMessage(
         waRecipient,
-        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\n\n💡 אפשר גם לשלוח תמונה של התקלה — זה יעזור לנו לטפל בה מהר יותר.\n\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה נוספת — כתבו בקצרה את הבעיה (אין צורך לסרוק QR שוב).${pendingNote}`,
+        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\n\n💡 אפשר גם לשלוח תמונה של התקלה — זה יעזור לנו לטפל בה מהר יותר.\n\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה נוספת: סרקו שוב את קוד ה־QR בבניין או כתבו רחוב ומספר בניין.${pendingNote}`,
         residentWhatsAppCreds
       )
     } catch (sendError) {
