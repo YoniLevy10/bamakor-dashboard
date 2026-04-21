@@ -9,6 +9,7 @@
 import { Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import {
   AppShell,
@@ -88,32 +89,11 @@ function SettingsPageInner() {
     [origin]
   )
 
-  async function resolveBamakorClientId(): Promise<string> {
-    const envClientId = process.env.NEXT_PUBLIC_BAMAKOR_CLIENT_ID
-    if (envClientId) return envClientId
-
-    // Dev-only fallback (keeps single-tenant DX when env isn't set)
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('NEXT_PUBLIC_BAMAKOR_CLIENT_ID is not set')
-    }
-
-    const { data: rows, error } = await supabase
-      .from('clients')
-      .select('id')
-      .order('created_at', { ascending: true })
-      .limit(1)
-
-    if (error) throw error
-    const firstId = (rows as Array<{ id?: string }> | null)?.[0]?.id
-    if (!firstId) throw new Error('לא נמצא רשומת לקוח')
-    return firstId
-  }
-
   async function load() {
     setLoading(true)
     await asyncHandler(
       async () => {
-        const resolvedClientId = await resolveBamakorClientId()
+        const resolvedClientId = await resolveBamakorClientIdForBrowser()
 
         const { data: row, error: cErr } = await supabase
           .from('clients')
@@ -211,7 +191,7 @@ function SettingsPageInner() {
         const res = await fetch('/api/settings/test-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ client_id: clientId }),
+          body: JSON.stringify({}),
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error || 'בדיקה נכשלה')

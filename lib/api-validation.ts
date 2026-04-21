@@ -50,7 +50,7 @@ export type ValidationSchema = Record<string, ValidationRule>;
 export const ValidationSchemas = {
   ticket: {
     create: {
-      client_id: { type: 'string', required: true, pattern: /^[a-f0-9-]{36}$/ },
+      client_id: { type: 'string', required: false, pattern: /^[a-f0-9-]{36}$/ },
       project_id: { type: 'string', required: true, pattern: /^[a-f0-9-]{36}$/ },
       title: { type: 'string', required: true, minLength: 3, maxLength: 255 },
       description: { type: 'string', required: true, minLength: 10 },
@@ -67,7 +67,7 @@ export const ValidationSchemas = {
   },
   project: {
     create: {
-      client_id: { type: 'string', required: true, pattern: /^[a-f0-9-]{36}$/ },
+      client_id: { type: 'string', required: false, pattern: /^[a-f0-9-]{36}$/ },
       project_code: { type: 'string', required: true, minLength: 2, maxLength: 20, pattern: /^[A-Z0-9_]+$/ },
       name: { type: 'string', required: true, minLength: 3, maxLength: 100 },
       description: { type: 'string', required: false, maxLength: 500 },
@@ -271,7 +271,7 @@ export async function parseRequest(request: NextRequest): Promise<[unknown, stri
     }
 
     const body = await request.json();
-    const clientId = request.headers.get('x-client-id') || 'unknown';
+    const clientId = 'single-tenant';
 
     return [body, requestId, clientId];
   } catch {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
+import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import { validateRequired, validatePhoneNumber, validateEmail } from '@/lib/validators'
 import {
@@ -84,25 +85,9 @@ export default function WorkersPage() {
   const [loadingWorkerTickets, setLoadingWorkerTickets] = useState(false)
 
   async function loadClientId() {
-    const envClientId = process.env.NEXT_PUBLIC_BAMAKOR_CLIENT_ID
-    if (!envClientId) {
-      // Dev-only fallback to keep single-tenant DX when env isn't set
-      if (process.env.NODE_ENV === 'production') {
-        throw new Error('NEXT_PUBLIC_BAMAKOR_CLIENT_ID is not set')
-      }
-      const { data: rows, error } = await supabase
-        .from('clients')
-        .select('id')
-        .order('created_at', { ascending: true })
-        .limit(1)
-      if (error) throw error
-      const firstId = (rows as Array<{ id?: string }> | null)?.[0]?.id
-      if (!firstId) throw new Error('No client found')
-      setClientId(firstId)
-      return firstId
-    }
-    setClientId(envClientId)
-    return envClientId
+    const id = await resolveBamakorClientIdForBrowser()
+    setClientId(id)
+    return id
   }
 
   async function loadWorkers(nextClientId?: string) {
@@ -278,7 +263,6 @@ export default function WorkersPage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              client_id: clientId,
               full_name: payload.full_name,
               phone: payload.phone,
               email: payload.email,

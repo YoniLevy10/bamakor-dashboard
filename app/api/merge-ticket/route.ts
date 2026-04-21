@@ -1,16 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { getSingletonClientId } from '@/lib/singleton-client-server'
 
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getSupabaseAdmin()
-    const bamakorClientId = process.env.BAMAKOR_CLIENT_ID
-    if (!bamakorClientId) {
-      return NextResponse.json(
-        { error: 'Server configuration error. BAMAKOR_CLIENT_ID is not set.' },
-        { status: 500 }
-      )
-    }
+    const bamakorClientId = await getSingletonClientId(supabaseAdmin)
     const body = await req.json()
     const sourceTicketId = body?.source_ticket_id as string | undefined
     const targetTicketId = body?.target_ticket_id as string | undefined

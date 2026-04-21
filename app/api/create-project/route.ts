@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { getClientPlanRow, effectiveMaxBuildings } from '@/lib/plan-limits'
 
 export async function POST(req: Request) {
   try {
     const supabase = getSupabaseAdmin()
     const body = await req.json()
-    const clientId = body?.client_id as string | undefined
-    if (!clientId) {
-      return NextResponse.json({ error: 'חסר client_id' }, { status: 400 })
-    }
+    const clientId = await getSingletonClientId(supabase)
 
     const { data: client, error: cErr } = await getClientPlanRow(supabase, clientId)
     if (cErr || !client) {

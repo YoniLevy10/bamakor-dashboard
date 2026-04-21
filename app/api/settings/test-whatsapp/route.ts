@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { sendWhatsAppTextMessageWithCredentials } from '@/lib/whatsapp-send'
 
 /**
@@ -7,14 +8,13 @@ import { sendWhatsAppTextMessageWithCredentials } from '@/lib/whatsapp-send'
  */
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
-    const clientId = body?.client_id as string | undefined
-
-    if (!clientId) {
-      return NextResponse.json({ error: 'חסר client_id' }, { status: 400 })
-    }
-
+    const body = await req.json().catch(() => ({}))
     const admin = getSupabaseAdmin()
+    const clientId =
+      typeof (body as { client_id?: unknown })?.client_id === 'string' &&
+      (body as { client_id: string }).client_id.trim()
+        ? (body as { client_id: string }).client_id.trim()
+        : await getSingletonClientId(admin)
     const { data: client, error } = await admin
       .from('clients')
       .select('name, whatsapp_phone_number_id, whatsapp_access_token, manager_phone')

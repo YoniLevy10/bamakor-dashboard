@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 
 export async function POST(req: Request) {
@@ -10,14 +11,6 @@ export async function POST(req: Request) {
   logger.info('TICKET_API', 'Update ticket request received', { requestId })
   
   try {
-    const bamakorClientId = process.env.BAMAKOR_CLIENT_ID
-    if (!bamakorClientId) {
-      return NextResponse.json(
-        { error: 'Server configuration error. BAMAKOR_CLIENT_ID is not set.' },
-        { status: 500 }
-      )
-    }
-
     let supabaseAdmin
     try {
       supabaseAdmin = getSupabaseAdmin()
@@ -29,7 +22,9 @@ export async function POST(req: Request) {
         { status: 500 }
       )
     }
-    
+
+    const bamakorClientId = await getSingletonClientId(supabaseAdmin)
+
     const body = await req.json()
     const { ticket_id, priority, status } = body
 

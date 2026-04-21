@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
+import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import { validateRequired } from '@/lib/validators'
 import {
@@ -80,25 +81,9 @@ export default function ProjectsPage() {
   const [loadingTickets, setLoadingTickets] = useState(false)
 
   async function loadClientId() {
-    const envClientId = process.env.NEXT_PUBLIC_BAMAKOR_CLIENT_ID
-    if (!envClientId) {
-      // Dev-only fallback to keep single-tenant DX when env isn't set
-      if (process.env.NODE_ENV === 'production') {
-        throw new Error('NEXT_PUBLIC_BAMAKOR_CLIENT_ID is not set')
-      }
-      const { data: rows, error } = await supabase
-        .from('clients')
-        .select('id')
-        .order('created_at', { ascending: true })
-        .limit(1)
-      if (error) throw error
-      const firstId = (rows as Array<{ id?: string }> | null)?.[0]?.id
-      if (!firstId) throw new Error('No client found')
-      setClientId(firstId)
-      return firstId
-    }
-    setClientId(envClientId)
-    return envClientId
+    const id = await resolveBamakorClientIdForBrowser()
+    setClientId(id)
+    return id
   }
 
   async function loadProjects(nextClientId?: string) {
@@ -271,7 +256,6 @@ export default function ProjectsPage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              client_id: clientId,
               name: payload.name,
               project_code: payload.project_code,
               address: payload.address,

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { getSingletonClientId } from '@/lib/singleton-client-server'
 
 type ImportRow = {
   full_name?: unknown
@@ -20,15 +21,8 @@ function normalizeProjectCode(v: unknown): string {
 
 export async function POST(req: Request) {
   try {
-    const bamakorClientId = process.env.BAMAKOR_CLIENT_ID
-    if (!bamakorClientId) {
-      return NextResponse.json(
-        { error: 'Server configuration error. BAMAKOR_CLIENT_ID is not set.' },
-        { status: 500 }
-      )
-    }
-
     const supabase = getSupabaseAdmin()
+    const bamakorClientId = await getSingletonClientId(supabase)
     const body = (await req.json()) as { rows?: ImportRow[] } | null
     const rows = body?.rows
     if (!Array.isArray(rows) || rows.length === 0) {

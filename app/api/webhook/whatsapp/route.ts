@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { getSingletonClientId } from '@/lib/singleton-client-server'
 import {
   parseIncomingWhatsAppMessage,
   isAddressLikeText,
@@ -21,7 +22,6 @@ import { getLogger } from '@/lib/logging'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
 const logger = getLogger()
-const BAMAKOR_CLIENT_ID = process.env.BAMAKOR_CLIENT_ID || ''
 
 type ProjectRow = {
   id: string
@@ -424,26 +424,6 @@ async function logIncomingFreeTextToTicket(
   }
 }
 
-async function resolveClientIdFromWhatsAppPhoneNumberId(
-  supabaseAdmin: SupabaseClient,
-  phoneNumberId: string
-): Promise<string | null> {
-  // Single-tenant (Bamakor): always use configured client id.
-  if (BAMAKOR_CLIENT_ID) return BAMAKOR_CLIENT_ID
-
-  const { data, error } = await supabaseAdmin
-    .from('clients')
-    .select('id')
-    .eq('whatsapp_phone_number_id', phoneNumberId)
-    .maybeSingle()
-
-  if (error) {
-    console.error('❌ Client lookup by whatsapp_phone_number_id failed:', error)
-    return null
-  }
-  return (data as { id?: string } | null)?.id ?? null
-}
-
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
   const mode = searchParams.get('hub.mode')
@@ -462,15 +442,6 @@ export async function POST(req: NextRequest) {
   logger.info('WEBHOOK', 'WhatsApp webhook POST received', { requestId })
   
   try {
-    if (!BAMAKOR_CLIENT_ID) {
-      return NextResponse.json(
-        { error: 'Server configuration error. BAMAKOR_CLIENT_ID is not set.' },
-        { status: 500 }
-      )
-    }
-
-    const body = await req.json()
-    
     let supabaseAdmin
     try {
       supabaseAdmin = getSupabaseAdmin()
@@ -486,6 +457,10 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       )
     }
+
+    const webhookClientId = await getSingletonClientId(supabaseAdmin)
+
+    const body = await req.json()
 
     console.log('✅ WEBHOOK DB VERSION ACTIVE')
     console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
@@ -517,8 +492,6 @@ export async function POST(req: NextRequest) {
       console.error('❌ Missing WhatsApp phone_number_id in webhook metadata')
       return NextResponse.json({ received: true }, { status: 200 })
     }
-
-    const webhookClientId = BAMAKOR_CLIENT_ID
 
     const { data: waClient, error: waClientErr } = await supabaseAdmin
       .from('clients')

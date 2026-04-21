@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { NextResponse } from 'next/server'
 import { getLogger } from '@/lib/logging'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
@@ -10,14 +11,6 @@ export async function POST(req: Request) {
   logger.info('TICKET_API', 'Close ticket request received', { requestId })
   
   try {
-    const bamakorClientId = process.env.BAMAKOR_CLIENT_ID
-    if (!bamakorClientId) {
-      return NextResponse.json(
-        { error: 'Server configuration error. BAMAKOR_CLIENT_ID is not set.' },
-        { status: 500 }
-      )
-    }
-
     let supabaseAdmin
     try {
       supabaseAdmin = getSupabaseAdmin()
@@ -30,7 +23,9 @@ export async function POST(req: Request) {
         { status: 500 }
       )
     }
-    
+
+    const bamakorClientId = await getSingletonClientId(supabaseAdmin)
+
     const body = await req.json()
     const { ticket_id } = body
 
