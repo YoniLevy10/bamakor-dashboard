@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { normalizeWhatsAppPhoneDigits } from '@/lib/whatsapp-test-phone'
+import { pendingResidentsQueryUnavailable } from '@/lib/supabase-table-errors'
+
+const MIGRATION_HINT =
+  'הריצו ב-Supabase את המיגרציה supabase/migrations/015_pending_resident_join_requests.sql (או supabase db push) כדי ליצור את הטבלה.'
 
 function formatPhoneForResident(digits: string): string {
   const d = normalizeWhatsAppPhoneDigits(digits)
@@ -34,6 +38,13 @@ export async function GET() {
       .order('created_at', { ascending: false })
 
     if (error) {
+      if (pendingResidentsQueryUnavailable(error)) {
+        return NextResponse.json({
+          items: [] as unknown[],
+          tableMissing: true,
+          hint: MIGRATION_HINT,
+        })
+      }
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
@@ -87,6 +98,12 @@ export async function PATCH(req: NextRequest) {
       .eq('client_id', clientId)
       .maybeSingle()
 
+    if (fetchErr && pendingResidentsQueryUnavailable(fetchErr)) {
+      return NextResponse.json(
+        { error: 'טבלת בקשות דיירים עדיין לא קיימת במסד הנתונים.', hint: MIGRATION_HINT, code: 'MIGRATION_REQUIRED' },
+        { status: 503 }
+      )
+    }
     if (fetchErr || !row) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
@@ -108,7 +125,12 @@ export async function PATCH(req: NextRequest) {
         .eq('id', body.id)
         .eq('client_id', clientId)
 
-      if (up) return NextResponse.json({ error: up.message }, { status: 500 })
+      if (up) {
+        if (pendingResidentsQueryUnavailable(up)) {
+          return NextResponse.json({ error: up.message, hint: MIGRATION_HINT, code: 'MIGRATION_REQUIRED' }, { status: 503 })
+        }
+        return NextResponse.json({ error: up.message }, { status: 500 })
+      }
       return NextResponse.json({ ok: true, status: 'rejected' })
     }
 
@@ -139,7 +161,12 @@ export async function PATCH(req: NextRequest) {
       .eq('id', body.id)
       .eq('client_id', clientId)
 
-    if (up) return NextResponse.json({ error: up.message }, { status: 500 })
+    if (up) {
+      if (pendingResidentsQueryUnavailable(up)) {
+        return NextResponse.json({ error: up.message, hint: MIGRATION_HINT, code: 'MIGRATION_REQUIRED' }, { status: 503 })
+      }
+      return NextResponse.json({ error: up.message }, { status: 500 })
+    }
     return NextResponse.json({ ok: true, status: 'approved' })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

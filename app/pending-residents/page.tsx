@@ -38,14 +38,17 @@ export default function PendingResidentsPage() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [names, setNames] = useState<Record<string, string>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [migrationHint, setMigrationHint] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setMigrationHint(null)
     try {
       const res = await fetch('/api/pending-residents')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'טעינה נכשלה')
       setItems((data.items as Item[]) || [])
+      setMigrationHint(data.tableMissing && typeof data.hint === 'string' ? data.hint : null)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'טעינה נכשלה')
       setItems([])
@@ -78,7 +81,10 @@ export default function PendingResidentsPage() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'פעולה נכשלה')
+      if (!res.ok) {
+        const msg = [data.error, data.hint].filter(Boolean).join('\n')
+        throw new Error(msg || 'פעולה נכשלה')
+      }
       toast.success('הדייר נוסף לרשימת הדיירים')
       await load()
     } catch (e) {
@@ -97,7 +103,10 @@ export default function PendingResidentsPage() {
         body: JSON.stringify({ id, action: 'reject' }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'פעולה נכשלה')
+      if (!res.ok) {
+        const msg = [data.error, data.hint].filter(Boolean).join('\n')
+        throw new Error(msg || 'פעולה נכשלה')
+      }
       toast.success('הבקשה סומנה כנדחית')
       await load()
     } catch (e) {
@@ -124,6 +133,20 @@ export default function PendingResidentsPage() {
             title="דיירים לאישור"
             subtitle="כשדייר מדווח על תקלה בוואטסאפ והטלפון שלו לא מופיע ברשימת הדיירים של אותו פרויקט, הבקשה מגיעה לכאן. אחרי אישור (למשל שרה) הדייר יתווסף לדף דיירים."
           />
+        )}
+
+        {migrationHint && (
+          <Card
+            style={{
+              marginBottom: 16,
+              padding: 14,
+              borderColor: theme.colors.warning,
+              background: 'rgba(245, 158, 11, 0.08)',
+            }}
+          >
+            <p style={{ margin: 0, fontWeight: 600, marginBottom: 8 }}>טבלת בקשות דיירים עדיין לא במסד הנתונים</p>
+            <p style={{ margin: 0, fontSize: 14, color: theme.colors.textSecondary, lineHeight: 1.55 }}>{migrationHint}</p>
+          </Card>
         )}
 
         <Card style={{ padding: isMobile ? 14 : 20 }}>

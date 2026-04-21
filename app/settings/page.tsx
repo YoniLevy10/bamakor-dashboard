@@ -97,7 +97,7 @@ function SettingsPageInner() {
 
         const { data: row, error: cErr } = await supabase
           .from('clients')
-          .select('id, manager_phone, default_worker_phone, sms_on_ticket_open, sms_on_ticket_close, whatsapp_phone_number_id, whatsapp_access_token')
+          .select('id, manager_phone, sms_on_ticket_open, sms_on_ticket_close, whatsapp_phone_number_id, whatsapp_access_token')
           .eq('id', resolvedClientId)
           .maybeSingle()
 
@@ -108,7 +108,7 @@ function SettingsPageInner() {
         setClient(row)
 
         setManagerPhone(row.manager_phone || '')
-        setDefaultWorkerPhone(row.default_worker_phone || '')
+        setDefaultWorkerPhone('')
         setSmsOnOpen(row.sms_on_ticket_open !== false)
         setSmsOnClose(row.sms_on_ticket_close !== false)
 
@@ -133,15 +133,25 @@ function SettingsPageInner() {
     setSavingNotifications(true)
     await asyncHandler(
       async () => {
-        const { error } = await supabase
-          .from('clients')
-          .update({
-            manager_phone: managerPhone.trim() || null,
-            default_worker_phone: defaultWorkerPhone.trim() || null,
-            sms_on_ticket_open: smsOnOpen,
-            sms_on_ticket_close: smsOnClose,
-          })
-          .eq('id', clientId)
+        const payloadWithWorker = {
+          manager_phone: managerPhone.trim() || null,
+          default_worker_phone: defaultWorkerPhone.trim() || null,
+          sms_on_ticket_open: smsOnOpen,
+          sms_on_ticket_close: smsOnClose,
+        }
+        const payloadBase = {
+          manager_phone: managerPhone.trim() || null,
+          sms_on_ticket_open: smsOnOpen,
+          sms_on_ticket_close: smsOnClose,
+        }
+        let { error } = await supabase.from('clients').update(payloadWithWorker).eq('id', clientId)
+        const colMissing =
+          error &&
+          (error.code === '42703' ||
+            (error.message || '').toLowerCase().includes('default_worker_phone'))
+        if (error && colMissing) {
+          ;({ error } = await supabase.from('clients').update(payloadBase).eq('id', clientId))
+        }
         if (error) throw error
         toast.success('נשמר')
         await load()
