@@ -92,7 +92,12 @@ function normalizePhoneNumber(phoneNumber: string): string {
   if (normalized.startsWith('972')) {
     normalized = '0' + normalized.substring(3)
   }
-  
+
+  // Israeli mobile stored as 5xxxxxxxx (9 digits, no leading 0)
+  if (/^5\d{8}$/.test(normalized)) {
+    normalized = '0' + normalized
+  }
+
   // Ensure format is 05xxxxxxx or 05xxxxxxxx (8-9 digits after 0)
   // Handle edge cases like 08 or 09 by converting to 05
   if (normalized.startsWith('08') || normalized.startsWith('09')) {
@@ -210,9 +215,9 @@ export async function sendWorkerSMS(
 
     const normalizedPhone = normalizePhoneNumber(phoneNumber)
     if (!normalizedPhone) {
-      console.error('❌ SMS_SEND_FAILURE: phoneNumber could not be normalized to 019SMS format', { 
+      console.error('❌ SMS_SEND_FAILURE: phoneNumber could not be normalized to 019SMS format', {
         originalPhone: phoneNumber,
-        hint: 'Expected format: 5xxxxxxx or 05xxxxxxx'
+        hint: 'Use Israeli mobile: 05xxxxxxxx, 5xxxxxxxx, +9725…, or 9725…',
       })
       return false
     }
@@ -332,9 +337,9 @@ export async function sendManagerSMS(
 
     const normalizedPhone = normalizePhoneNumber(phoneNumber)
     if (!normalizedPhone) {
-      console.error('❌ SMS_SEND_FAILURE: phoneNumber could not be normalized to 019SMS format', { 
+      console.error('❌ SMS_SEND_FAILURE: phoneNumber could not be normalized to 019SMS format', {
         originalPhone: phoneNumber,
-        hint: 'Expected format: 5xxxxxxx or 05xxxxxxx'
+        hint: 'Use Israeli mobile: 05xxxxxxxx, 5xxxxxxxx, +9725…, or 9725…',
       })
       return false
     }

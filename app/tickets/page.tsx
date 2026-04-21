@@ -430,11 +430,22 @@ export default function TicketsPage() {
     try {
       // Handle worker assignment if changed
       if (draftWorkerId && draftWorkerId !== selectedTicket.assigned_worker_id) {
-        await fetch('/api/assign-ticket', {
+        const assignRes = await fetch('/api/assign-ticket', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ticket_id: selectedTicket.id, worker_id: draftWorkerId }),
         })
+        const assignBody = (await assignRes.json().catch(() => ({}))) as {
+          error?: string
+          worker_sms_sent?: boolean | null
+          worker_sms_note?: string
+        }
+        if (!assignRes.ok) {
+          throw new Error(assignBody.error || 'שיוך לעובד נכשל')
+        }
+        if ((assignBody.worker_sms_sent === false || assignBody.worker_sms_sent === null) && assignBody.worker_sms_note) {
+          toast.error(assignBody.worker_sms_note)
+        }
       }
 
       const payload: Record<string, string | null> = {

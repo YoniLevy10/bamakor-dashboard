@@ -327,9 +327,6 @@ export default function WorkersPage() {
 
   const filteredWorkers = useMemo(() => {
     return workers.filter((worker) => {
-      const roleLower = (worker.role || '').trim().toLowerCase()
-      if (roleLower === 'test') return false
-
       const q = searchTerm.trim().toLowerCase()
       const matchesSearch = !q ||
         worker.full_name.toLowerCase().includes(q) ||

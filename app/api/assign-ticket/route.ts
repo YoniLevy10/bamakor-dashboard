@@ -98,6 +98,9 @@ export async function POST(req: Request) {
       )
     }
 
+    let workerSmsSent: boolean | null = null
+    let workerSmsNote: string | undefined
+
     const { data: updatedTicket, error: updateError } = await supabaseAdmin
       .from('tickets')
       .update({
@@ -144,17 +147,19 @@ export async function POST(req: Request) {
 
     if (worker.phone) {
       try {
-        console.log('� NOTIFICATION_CHANNEL: SMS (worker assignment)')
-        console.log('📱 Sending worker notification to:', worker.phone)
+        console.log('NOTIFICATION_CHANNEL: SMS (worker assignment)')
+        console.log('Sending worker notification to:', worker.phone)
 
         // CURRENT CHANNEL: SMS for worker notifications
         const smsMessage = `תקלה חדשה הוקצתה לך\nפרויקט: ${projectName}\nתקלה: #${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא פירוט'}\nכניסה למערכת:\n${getPublicTicketsUrl()}\n${clientName}`
         const smsSent = await sendWorkerSMS(worker.phone, smsMessage, smsSenderName)
-
+        workerSmsSent = smsSent
         if (smsSent) {
-          console.log('✅ worker_sms_sent: Worker notification sent successfully via SMS to:', worker.phone)
+          console.log('worker_sms_sent: Worker SMS OK', worker.phone)
         } else {
-          console.error('❌ worker_sms_failed: Failed to send SMS to worker:', worker.phone)
+          workerSmsNote =
+            'שליחת SMS לעובד נכשלה (019SMS / פורמט מספר / הרשאות). בדקו לוגים ב-Vercel והגדרות SMS_019_*.'
+          console.error('worker_sms_failed:', worker.phone)
         }
 
         // ARCHIVED: Old WhatsApp notification (kept for reference, can be restored later)
@@ -174,15 +179,21 @@ export async function POST(req: Request) {
         console.log('✅ worker_whatsapp_archived: Old WhatsApp channel was here')
         */
       } catch (sendError) {
-        console.error('⚠️ worker_notification_failed: Error sending worker notification:', sendError)
+        workerSmsSent = false
+        workerSmsNote = 'שגיאה בשליחת SMS לעובד.'
+        console.error('worker_notification_failed:', sendError)
       }
     } else {
+      workerSmsSent = null
+      workerSmsNote = 'לעובד אין מספר טלפון במערכת — לא נשלח SMS.'
       console.log('ℹ️ Worker has no phone number, skipping notification')
     }
 
     return NextResponse.json({
       success: true,
       ticket: updatedTicket,
+      worker_sms_sent: workerSmsSent,
+      worker_sms_note: workerSmsNote,
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))

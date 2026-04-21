@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 
-/** Built-in test numbers (digits only, no +). Extend via WHATSAPP_TEST_PHONE_NUMBERS. */
-const BUILTIN_TEST_DIGITS = new Set(['972548102688'])
+/** Optional built-in test numbers; prefer WHATSAPP_TEST_PHONE_NUMBERS in env (no hardcoded numbers). */
+const BUILTIN_TEST_DIGITS = new Set<string>()
 
 export function normalizeWhatsAppPhoneDigits(raw: string): string {
   return String(raw || '').replace(/\D/g, '')
