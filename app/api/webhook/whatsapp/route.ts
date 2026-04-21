@@ -26,6 +26,8 @@ import {
 } from '@/lib/whatsapp-media'
 import { getLogger } from '@/lib/logging'
 import { getPublicTicketsUrl } from '@/lib/public-app-url'
+import { isWhatsAppTestSender, whatsappDbPhoneKey, displayReporterForExternalMessage } from '@/lib/whatsapp-test-phone'
+import { queuePendingResidentApproval } from '@/lib/pending-resident-from-ticket'
 
 // ARCHIVED: Old WhatsApp manager notification
 // This module previously sent WhatsApp messages to project managers
@@ -672,27 +674,30 @@ export async function POST(req: NextRequest) {
     // Expire temporary WhatsApp session state if inactive (scoped to this tenant)
     await expireInactiveSessions(supabaseAdmin, webhookClientId)
 
-    const { from, messageType, textBody, mediaId, mediaType } = parsedMessage
+    const { from: waFrom, messageType, textBody, mediaId, mediaType } = parsedMessage
+    const waRecipient = waFrom
+    const from = whatsappDbPhoneKey(waFrom)
+    const isTestWhatsAppSender = isWhatsAppTestSender(waFrom)
 
-    console.log('📞 From:', from)
+    console.log('📞 From:', isTestWhatsAppSender ? '(מספר בדיקות — לא נשמר במערכת)' : waRecipient)
     console.log('🧩 Message Type:', messageType)
     console.log('💬 Message body:', textBody)
     console.log('📎 Media ID:', mediaId)
     console.log('📎 Media Type:', mediaType)
     
-    logger.info('WEBHOOK', 'Parsed incoming message', { 
-      requestId, 
-      from, 
-      messageType, 
+    logger.info('WEBHOOK', 'Parsed incoming message', {
+      requestId,
+      from: isTestWhatsAppSender ? '(test)' : waRecipient,
+      messageType,
       hasText: !!textBody,
-      hasMedia: !!mediaId 
+      hasMedia: !!mediaId,
     })
 
     // WhatsApp non-text types (no text body)
     if (messageType === 'location') {
       try {
         await sendWhatsAppTextMessage(
-          from,
+          waRecipient,
           'קיבלנו מיקום! לדיווח תקלה כתבו תיאור הבעיה בטקסט 📍',
           residentWhatsAppCreds
         )
@@ -705,7 +710,7 @@ export async function POST(req: NextRequest) {
     if (messageType === 'contacts') {
       try {
         await sendWhatsAppTextMessage(
-          from,
+          waRecipient,
           'קיבלנו את אנשי הקשר. לדיווח תקלה כתבו את כתובת הבניין או סרקו את קוד ה-QR 📇',
           residentWhatsAppCreds
         )
@@ -721,7 +726,7 @@ export async function POST(req: NextRequest) {
         ? 'קיבלנו 🙂 כתבו כשתוכלו את תיאור התקלה או פרטים נוספים.'
         : 'שלחו את שם הרחוב לדיווח תקלה 😊'
       try {
-        await sendWhatsAppTextMessage(from, stickerMsg, residentWhatsAppCreds)
+        await sendWhatsAppTextMessage(waRecipient, stickerMsg, residentWhatsAppCreds)
       } catch (sendError) {
         console.error('⚠️ Failed to send sticker reply:', sendError)
       }
@@ -734,7 +739,7 @@ export async function POST(req: NextRequest) {
 
       try {
         await sendWhatsAppTextMessage(
-          from,
+          waRecipient,
           '🎙️ קיבלנו הודעת קול, אך לא נוכל לעבד אותה.\n\nבשביל לדווח תקלה:\n1️⃣ כתבו את התקלה בטקסט\n2️⃣ או שלחו תמונה של התקלה\n\nרוצים להתחיל? סרקו את קוד ה-QR בבניין או כתבו את כתובת הבניין.',
           residentWhatsAppCreds
         )
@@ -818,7 +823,7 @@ export async function POST(req: NextRequest) {
               console.log(`⏳ PIPELINE_STEP: 4/4 Sending WhatsApp confirmation`)
               try {
                 await sendWhatsAppTextMessage(
-                  from,
+                  waRecipient,
                   '✅ התמונה התקבלה בהצלחה וצורפה לתקלה. צוות הטכנאים יטפל בבקשתך בהקדם.',
                   residentWhatsAppCreds
                 )
@@ -866,7 +871,7 @@ export async function POST(req: NextRequest) {
         })
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             '⚠️ לא הצלחנו להוסיף את התמונה, אך התקלה שלך תקבלה.\n\nנעדכן כשיהיה טיפול.',
             residentWhatsAppCreds
           )
@@ -907,7 +912,7 @@ export async function POST(req: NextRequest) {
         } else {
           try {
             await sendWhatsAppTextMessage(
-              from,
+              waRecipient,
               '🖼️ קיבלנו את התמונה!\n\nכדי לצרף אותה לתקלה, כתבו עכשיו בקצרה את תיאור התקלה בטקסט.',
               residentWhatsAppCreds
             )
@@ -961,7 +966,7 @@ export async function POST(req: NextRequest) {
               console.log(`⏳ PIPELINE_STEP: 4/4 Sending WhatsApp confirmation`)
               try {
                 await sendWhatsAppTextMessage(
-                  from,
+                  waRecipient,
                   '✅ התמונה התקבלה בהצלחה וצורפה לתקלה. צוות הטכנאים יטפל בבקשתך בהקדם.',
                   residentWhatsAppCreds
                 )
@@ -986,7 +991,7 @@ export async function POST(req: NextRequest) {
         console.log(`📤 PIPELINE_FALLBACK: recent-ticket attach failed`, { failureReason, ticketId })
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             '⚠️ לא הצלחנו להוסיף את התמונה, אך התקלה שלך התקבלה.\n\nאם תרצו, נסו לשלוח את התמונה שוב או פנו למנהלת הבניין.',
             residentWhatsAppCreds
           )
@@ -1007,7 +1012,7 @@ export async function POST(req: NextRequest) {
 
       try {
         await sendWhatsAppTextMessage(
-          from,
+          waRecipient,
           '🖼️ קיבלנו את התמונה!\n\nכדי לצרף אותה לתקלה, צריך קודם:\n1️⃣ סרקו QR בבניין\n2️⃣ כתבו תיאור התקלה\n3️⃣ אז שלחו תמונה\n\nהשתדלו!',
           residentWhatsAppCreds
         )
@@ -1031,7 +1036,7 @@ export async function POST(req: NextRequest) {
       try {
         const mediaLabel = messageType === 'video' ? 'סרטון' : 'קובץ'
         await sendWhatsAppTextMessage(
-          from,
+          waRecipient,
           `קיבלנו ${mediaLabel} 📎\n\nבשביל דיווח תקלה, אנא שלחו תמונה או כתבו תיאור.\n\nרוצים להתחיל? סרקו את קוד ה-QR בבניין.`,
           residentWhatsAppCreds
         )
@@ -1054,7 +1059,7 @@ export async function POST(req: NextRequest) {
       if (messageType === 'reaction') {
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'קיבלנו את התגובה 🙂 לדיווח תקלה כתבו את הפרטים כאן.',
             residentWhatsAppCreds
           )
@@ -1075,7 +1080,7 @@ export async function POST(req: NextRequest) {
       if (!parsedStart) {
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'פורמט קוד ה-QR לא תקין. אנא סרקו שוב את הקוד או פנו למנהלת הבניין.',
             residentWhatsAppCreds
           )
@@ -1115,7 +1120,7 @@ export async function POST(req: NextRequest) {
 
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             '❌ לא הצלחנו לזהות את הפרויקט.\n\nנסו שוב:\n1️⃣ סרקו את QR מחדש\n2️⃣ או כתבו את כתובת הבניין (רחוב ומספר)\n3️⃣ או צרו קשר למנהלת הבניין',
             residentWhatsAppCreds
           )
@@ -1173,7 +1178,7 @@ export async function POST(req: NextRequest) {
         const buildingText = buildingNumber ? ` (בניין ${buildingNumber})` : ''
 
         await sendWhatsAppTextMessage(
-          from,
+          waRecipient,
           `ברוכים הבאים! פתחנו תקלה חדשה עבורכם ב${project.name}${buildingText}. כתבו בקצרה את הבעיה 📝`,
           residentWhatsAppCreds
         )
@@ -1204,7 +1209,7 @@ export async function POST(req: NextRequest) {
         const when = new Date(st.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             `תקלה #${st.ticket_number} בסטטוס: ${label}\nנוצרה ב־${when}. אנחנו על זה! 🔧`,
             residentWhatsAppCreds
           )
@@ -1214,7 +1219,7 @@ export async function POST(req: NextRequest) {
       } else {
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'כרגע אין פנייה פתוחה ממספר זה.\nכדי לפתוח תקלה חדשה כתבו את שם הרחוב או סרקו את קוד ה-QR 🔧',
             residentWhatsAppCreds
           )
@@ -1232,7 +1237,7 @@ export async function POST(req: NextRequest) {
       if (isGreetingSmallTalk(textBody)) {
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'שלום! כדי לדווח תקלה, כתבו את שם הרחוב של הבניין או סרקו את קוד ה-QR 😊',
             residentWhatsAppCreds
           )
@@ -1244,7 +1249,7 @@ export async function POST(req: NextRequest) {
       if (isPrimarilyEnglishText(textBody)) {
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'Hello! To report an issue, please write your building address or scan the QR code 😊',
             residentWhatsAppCreds
           )
@@ -1256,7 +1261,7 @@ export async function POST(req: NextRequest) {
       if (looksLikePhoneOrNameLine(textBody)) {
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'תודה! כדי לדווח תקלה, כתבו את שם הרחוב של הבניין 😊',
             residentWhatsAppCreds
           )
@@ -1267,7 +1272,7 @@ export async function POST(req: NextRequest) {
       }
       if (isEmojiOnlyOrShortAck(textBody)) {
         try {
-          await sendWhatsAppTextMessage(from, 'שלחו את שם הרחוב לדיווח תקלה 😊', residentWhatsAppCreds)
+          await sendWhatsAppTextMessage(waRecipient, 'שלחו את שם הרחוב לדיווח תקלה 😊', residentWhatsAppCreds)
         } catch (sendError) {
           console.error('⚠️ Failed to send emoji-only reply:', sendError)
         }
@@ -1276,7 +1281,7 @@ export async function POST(req: NextRequest) {
       if (isUrgentAngryMessage(textBody) && !isAddressLikeText(textBody)) {
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'קיבלנו! זו נראית תקלה דחופה.\nכתבו את שם הבניין ונטפל מיד 🚨',
             residentWhatsAppCreds
           )
@@ -1289,7 +1294,7 @@ export async function POST(req: NextRequest) {
       if (isGreetingSmallTalk(textBody)) {
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'שלום! כשתוכלו, כתבו בקצרה את תיאור התקלה כאן בצ׳אט 📝',
             residentWhatsAppCreds
           )
@@ -1305,7 +1310,7 @@ export async function POST(req: NextRequest) {
       if (isEmojiOnlyOrShortAck(textBody)) {
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'קיבלנו 🙂 נמשיך לטפל — כתבו עוד פרטים אם צריך.',
             residentWhatsAppCreds
           )
@@ -1332,7 +1337,7 @@ export async function POST(req: NextRequest) {
         }
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'קיבלנו את פרט הדירה/קומה ✅ נצרף אותו לפנייה כשתשלחו את תיאור התקלה.',
             residentWhatsAppCreds
           )
@@ -1350,7 +1355,7 @@ export async function POST(req: NextRequest) {
         if (restored.ok && restored.projectName) {
           try {
             await sendWhatsAppTextMessage(
-              from,
+              waRecipient,
               `ברוכים הבאים! פתחנו תקלה עבורכם ב${restored.projectName}. כתבו בקצרה את הבעיה 📝`,
               residentWhatsAppCreds
             )
@@ -1419,7 +1424,7 @@ export async function POST(req: NextRequest) {
           // Send confirmation
           try {
             await sendWhatsAppTextMessage(
-              from,
+              waRecipient,
               `ברוכים הבאים! פתחנו תקלה חדשה עבורכם ב${selectedProject.name}. כתבו בקצרה את הבעיה 📝`,
               residentWhatsAppCreds
             )
@@ -1446,7 +1451,7 @@ export async function POST(req: NextRequest) {
 
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             `אנא השיבו רק עם מספר האפשרות המתאים: 1, 2 או 3.`,
             residentWhatsAppCreds
           )
@@ -1475,7 +1480,7 @@ export async function POST(req: NextRequest) {
 
           try {
             await sendWhatsAppTextMessage(
-              from,
+              waRecipient,
               `⚠️ השיבו רק עם מספר האפשרות: 1, 2 או 3`,
               residentWhatsAppCreds
             )
@@ -1500,7 +1505,7 @@ export async function POST(req: NextRequest) {
       if (parseApartmentDetailOnly(textBody)) {
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'כדי לדווח תקלה כתבו את שם הרחוב של הבניין',
             residentWhatsAppCreds
           )
@@ -1525,7 +1530,7 @@ export async function POST(req: NextRequest) {
           'לא הצלחנו לזהות את הבניין.\n\n📍 כדי שנוכל לאתר אותו, כתבו את כתובת הבניין (רחוב ומספר)\n\nאו:\n1. סרקו את קוד ה-QR בבניין\n2. פנו למנהלת הבניין לקבלת קוד הגישה'
 
         try {
-          await sendWhatsAppTextMessage(from, fallbackMessage, residentWhatsAppCreds)
+          await sendWhatsAppTextMessage(waRecipient, fallbackMessage, residentWhatsAppCreds)
         } catch (sendError) {
           console.error('⚠️ Failed to send no-match message:', sendError)
         }
@@ -1563,7 +1568,7 @@ export async function POST(req: NextRequest) {
 
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'לא הצלחנו לזהות את הבניין.\n\n📍 כדי שנוכל לאתר אותו, כתבו את כתובת הבניין (רחוב ומספר)\n\nאו:\n1. סרקו את קוד ה-QR בבניין\n2. פנו למנהלת הבניין לקבלת קוד הגישה',
             residentWhatsAppCreds
           )
@@ -1618,7 +1623,7 @@ export async function POST(req: NextRequest) {
         // Send confirmation message with project name
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             `ברוכים הבאים! פתחנו תקלה חדשה עבורכם ב${matchedProject.name}. כתבו בקצרה את הבעיה 📝`,
             residentWhatsAppCreds
           )
@@ -1655,7 +1660,7 @@ export async function POST(req: NextRequest) {
 
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             'תקלה טכנית. אנא סרקו את קוד ה-QR בבניין או פנו למנהלת הבניין.',
             residentWhatsAppCreds
           )
@@ -1683,7 +1688,7 @@ export async function POST(req: NextRequest) {
         '\n📌 להמשך, השיבו רק עם מספר האפשרות: 1, 2 או 3'
 
       try {
-        await sendWhatsAppTextMessage(from, matchList, residentWhatsAppCreds)
+        await sendWhatsAppTextMessage(waRecipient, matchList, residentWhatsAppCreds)
       } catch (sendError) {
         console.error('⚠️ Failed to send multi-match list:', sendError)
       }
@@ -1728,7 +1733,7 @@ export async function POST(req: NextRequest) {
           .eq('id', session.id)
         try {
           await sendWhatsAppTextMessage(
-            from,
+            waRecipient,
             `קיבלנו את העדכון והוספנו לפנייה #${dupTicket.ticket_number} ✅`,
             residentWhatsAppCreds
           )
@@ -1809,6 +1814,16 @@ export async function POST(req: NextRequest) {
       console.log('✅ Pending WhatsApp image attached to new ticket', { ticketId: createdTicket.id })
     }
 
+    const pendingForApproval =
+      !!session.project_id &&
+      (await queuePendingResidentApproval({
+        supabase: supabaseAdmin,
+        clientId: webhookClientId,
+        projectId: session.project_id as string,
+        ticketId: createdTicket.id,
+        waFrom: waRecipient,
+      }))
+
     // Immediately reset session after ticket creation confirmation is sent (single-purpose session).
 
     const { error: logError } = await supabaseAdmin
@@ -1843,7 +1858,7 @@ export async function POST(req: NextRequest) {
         console.error('⚠️ Failed to fetch project manager phone:', projectNotificationError)
       } else if (projectForNotification) {
         const buildingLine = buildingNumber ? `בניין: ${buildingNumber}\n` : ''
-        const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${ticketDescription || 'ללא פירוט'}\nמדווח: ${from}\nכניסה למערכת:\n${getPublicTicketsUrl()}\n${clientName}`
+        const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${ticketDescription || 'ללא פירוט'}\nמדווח: ${displayReporterForExternalMessage(waRecipient)}\nכניסה למערכת:\n${getPublicTicketsUrl()}\n${clientName}`
 
         const managerDestination = clientManagerPhone || projectForNotification.manager_phone || getManagerPhoneFromEnv()
 
@@ -1866,7 +1881,7 @@ export async function POST(req: NextRequest) {
             .maybeSingle()
 
           if (workerRow?.phone) {
-            const workerMsg = `תקלה חדשה ב${projectForNotification.name}\n#${createdTicket.ticket_number}\n${ticketDescription || 'ללא פירוט'}\nמדווח: ${from}\n${getPublicTicketsUrl()}\n${clientName}`
+            const workerMsg = `תקלה חדשה ב${projectForNotification.name}\n#${createdTicket.ticket_number}\n${ticketDescription || 'ללא פירוט'}\nמדווח: ${displayReporterForExternalMessage(waRecipient)}\n${getPublicTicketsUrl()}\n${clientName}`
             console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket) → assigned worker')
             const wOk = await sendWorkerSMS(workerRow.phone, workerMsg, smsSenderName)
             if (wOk) {
@@ -1884,9 +1899,13 @@ export async function POST(req: NextRequest) {
     try {
       const buildingText = buildingNumber ? `\nבניין: ${buildingNumber}` : ''
 
+      const pendingNote = pendingForApproval
+        ? '\n\nℹ️ מספר הטלפון שלכם עדיין לא מופיע ברשימת הדיירים של הבניין במערכת — הבקשה נשמרה לאישור המנהלת (שרה). אחרי האישור תופיעו ברשימה.'
+        : ''
+
       await sendWhatsAppTextMessage(
-        from,
-        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\n\n💡 אפשר גם לשלוח תמונה של התקלה — זה יעזור לנו לטפל בה מהר יותר.\n\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה נוספת — כתבו בקצרה את הבעיה (אין צורך לסרוק QR שוב).`,
+        waRecipient,
+        `התקלה התקבלה בהצלחה.${buildingText}\nמספר הפנייה שלך: ${createdTicket.ticket_number}\n\n💡 אפשר גם לשלוח תמונה של התקלה — זה יעזור לנו לטפל בה מהר יותר.\n\nנעדכן כשיהיה טיפול.\nלפתיחת תקלה נוספת — כתבו בקצרה את הבעיה (אין צורך לסרוק QR שוב).${pendingNote}`,
         residentWhatsAppCreds
       )
     } catch (sendError) {

@@ -9,7 +9,8 @@
  * REQUIRED ENVIRONMENT VARIABLES:
  * - SMS_019_API_TOKEN: Bearer token for API authentication
  * - SMS_019_USERNAME: Account username (used in XML payload)
- * - SMS_019_SENDER: Source identifier (max 11 chars, no +, numeric + letters only)
+ * - SMS_019_SENDER: Source identifier (max 11 chars, no +, Latin letters + digits only).
+ *   Hebrew (e.g. sms_sender_name "שרה ניהול") is NOT accepted by 019SMS — we coerce to ASCII or fall back here.
  * 
  * OFFICIAL 019SMS API:
  * - Endpoint: POST https://019sms.co.il/api
@@ -29,6 +30,35 @@ const SMS_019_ENDPOINT = 'https://019sms.co.il/api'
 const SMS_019_API_TOKEN = process.env.SMS_019_API_TOKEN
 const SMS_019_USERNAME = process.env.SMS_019_USERNAME
 const SMS_019_SENDER = process.env.SMS_019_SENDER || '0559899132'
+
+/** 019SMS: source must be Latin alphanumeric, length in a small window (API error 992 if invalid). */
+const SMS_019_SOURCE_MAX = 11
+const SMS_019_SOURCE_MIN = 3
+
+/**
+ * Build a valid <source> for 019SMS: [A-Za-z0-9], max 11 chars, min 3 when possible.
+ * Hebrew / spaces / punctuation are stripped; if the result is too short we use SMS_019_SENDER, then digits fallback.
+ */
+function effective019SmsSource(preferred: string | undefined | null): string {
+  const ascii = String(preferred ?? '')
+    .trim()
+    .replace(/[^A-Za-z0-9]/g, '')
+    .slice(0, SMS_019_SOURCE_MAX)
+  if (ascii.length >= SMS_019_SOURCE_MIN) return ascii
+
+  const fromEnv = String(SMS_019_SENDER || '')
+    .trim()
+    .replace(/[^A-Za-z0-9]/g, '')
+    .slice(0, SMS_019_SOURCE_MAX)
+  if (fromEnv.length >= SMS_019_SOURCE_MIN) return fromEnv
+
+  const digits = String(SMS_019_SENDER || '0559899132')
+    .replace(/\D/g, '')
+    .slice(0, SMS_019_SOURCE_MAX)
+  if (digits.length >= SMS_019_SOURCE_MIN) return digits
+
+  return 'Bmk'
+}
 
 /** Primary manager SMS destination (שרה / מנהלת) — overrides per-project when set */
 export function getManagerPhoneFromEnv(): string | undefined {
@@ -144,7 +174,7 @@ function buildSMSPayload(username: string, source: string, destination: string, 
 export async function sendWorkerSMS(
   phoneNumber: string,
   message: string,
-  senderName: string = 'במקור'
+  senderName?: string | null
 ): Promise<boolean> {
   try {
     if (!phoneNumber) {
@@ -187,13 +217,25 @@ export async function sendWorkerSMS(
       return false
     }
 
+    const source = effective019SmsSource(senderName ?? SMS_019_SENDER)
+    const strippedPreferred = String(senderName ?? '')
+      .trim()
+      .replace(/[^A-Za-z0-9]/g, '')
+      .slice(0, SMS_019_SOURCE_MAX)
+    if (String(senderName ?? '').trim() && strippedPreferred !== source) {
+      console.log('📱 SMS_SOURCE_COERCED: 019SMS source must be Latin letters/digits (3–11); using effective value', {
+        requested: senderName,
+        effective: source,
+      })
+    }
+
     console.log('📱 SMS_SEND_START: Sending SMS to worker via 019SMS', {
       normalizedPhone,
-      source: senderName || SMS_019_SENDER,
+      source,
       messageLength: message.length,
     })
 
-    const payload = buildSMSPayload(SMS_019_USERNAME, senderName || SMS_019_SENDER, normalizedPhone, message)
+    const payload = buildSMSPayload(SMS_019_USERNAME, source, normalizedPhone, message)
 
     const response = await fetchWithTimeout(SMS_019_ENDPOINT, {
       method: 'POST',
@@ -229,7 +271,7 @@ export async function sendWorkerSMS(
     console.log('✅ SMS_WORKER_SENT: SMS sent successfully to worker via 019SMS', {
       normalizedPhone,
       shipmentId,
-      source: SMS_019_SENDER,
+      source,
     })
 
     return true
@@ -254,7 +296,7 @@ export async function sendWorkerSMS(
 export async function sendManagerSMS(
   phoneNumber: string,
   message: string,
-  senderName: string = 'במקור'
+  senderName?: string | null
 ): Promise<boolean> {
   try {
     if (!phoneNumber) {
@@ -297,13 +339,25 @@ export async function sendManagerSMS(
       return false
     }
 
+    const source = effective019SmsSource(senderName ?? SMS_019_SENDER)
+    const strippedPreferred = String(senderName ?? '')
+      .trim()
+      .replace(/[^A-Za-z0-9]/g, '')
+      .slice(0, SMS_019_SOURCE_MAX)
+    if (String(senderName ?? '').trim() && strippedPreferred !== source) {
+      console.log('📱 SMS_SOURCE_COERCED: 019SMS source must be Latin letters/digits (3–11); using effective value', {
+        requested: senderName,
+        effective: source,
+      })
+    }
+
     console.log('📱 SMS_SEND_START: Sending SMS to manager via 019SMS', {
       normalizedPhone,
-      source: senderName || SMS_019_SENDER,
+      source,
       messageLength: message.length,
     })
 
-    const payload = buildSMSPayload(SMS_019_USERNAME, senderName || SMS_019_SENDER, normalizedPhone, message)
+    const payload = buildSMSPayload(SMS_019_USERNAME, source, normalizedPhone, message)
 
     const response = await fetchWithTimeout(SMS_019_ENDPOINT, {
       method: 'POST',
@@ -339,7 +393,7 @@ export async function sendManagerSMS(
     console.log('✅ SMS_MANAGER_SENT: SMS sent successfully to manager via 019SMS', {
       normalizedPhone,
       shipmentId,
-      source: SMS_019_SENDER,
+      source,
     })
 
     return true

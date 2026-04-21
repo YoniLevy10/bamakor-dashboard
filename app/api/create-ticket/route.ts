@@ -3,6 +3,8 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { getLogger, getAuditLogger } from '@/lib/logging'
+import { whatsappDbPhoneKey } from '@/lib/whatsapp-test-phone'
+import { queuePendingResidentApproval } from '@/lib/pending-resident-from-ticket'
 
 function parseStartCode(message: string) {
   const match = message.trim().toUpperCase().match(/^START_(BMK\d+)(?:_(.+))?$/i)
@@ -219,13 +221,15 @@ export async function POST(req: Request) {
         )
       }
 
+      const storedReporterPhone = reporterPhone ? whatsappDbPhoneKey(reporterPhone) : null
+
       const { data: createdTicket, error: ticketError } = await supabaseAdmin
         .from('tickets')
         .insert({
           project_id: project.id,
           client_id: project.client_id,
           reporter_name: reporterName,
-          reporter_phone: reporterPhone,
+          reporter_phone: storedReporterPhone,
           description,
           status: 'NEW',
           priority: 'MEDIUM',
@@ -278,6 +282,16 @@ export async function POST(req: Request) {
         console.error('⚠️ Ticket log insert failed (non-blocking):', logError)
       }
 
+      if (reporterPhone) {
+        await queuePendingResidentApproval({
+          supabase: supabaseAdmin,
+          clientId: project.client_id as string,
+          projectId: project.id as string,
+          ticketId: createdTicket.id,
+          waFrom: reporterPhone,
+        })
+      }
+
       // Handle file attachments if present
       let imageUploadWarning: string | undefined
       if (files.length > 0) {
@@ -304,10 +318,12 @@ export async function POST(req: Request) {
       )
     }
 
+    const phoneDbKey = whatsappDbPhoneKey(phone)
+
     const { data: existingSession, error: sessionLookupError } = await supabaseAdmin
       .from('sessions')
       .select('id, phone_number, project_id, active_ticket_id, is_active')
-      .eq('phone_number', phone)
+      .eq('phone_number', phoneDbKey)
       .eq('is_active', true)
       .maybeSingle()
 
@@ -343,12 +359,12 @@ export async function POST(req: Request) {
           ticket_id: existingSession.active_ticket_id,
           action_type: 'USER_MESSAGE',
           new_value: followUpText,
-          performed_by: phone,
+          performed_by: phoneDbKey,
           notes: 'Incoming follow-up message from user',
           created_by: 'system',
           meta: {
             source: 'whatsapp_followup',
-            phone,
+            phone: phoneDbKey,
           },
         })
 
@@ -420,7 +436,7 @@ export async function POST(req: Request) {
       .insert({
         project_id: project.id,
         client_id: project.client_id,
-        reporter_phone: phone,
+        reporter_phone: phoneDbKey,
         reporter_name: reporterName,
         description: initialDescription,
         status: 'NEW',
@@ -448,18 +464,26 @@ export async function POST(req: Request) {
 
     // Log audit trail
     audit.logTicketCreated(project.client_id, createdTicket.id, 'whatsapp')
-    logger.info('TICKET_API', 'Ticket created from WhatsApp', { 
-      requestId, 
-      ticketId: createdTicket.id, 
+    logger.info('TICKET_API', 'Ticket created from WhatsApp', {
+      requestId,
+      ticketId: createdTicket.id,
       ticketNumber: createdTicket.ticket_number,
-      phone,
-      clientId: project.client_id 
+      phone: phoneDbKey,
+      clientId: project.client_id,
+    })
+
+    await queuePendingResidentApproval({
+      supabase: supabaseAdmin,
+      clientId: project.client_id as string,
+      projectId: project.id as string,
+      ticketId: createdTicket.id,
+      waFrom: phone,
     })
 
     const { data: createdSession, error: createSessionError } = await supabaseAdmin
       .from('sessions')
       .insert({
-        phone_number: phone,
+        phone_number: phoneDbKey,
         project_id: project.id,
         active_ticket_id: createdTicket.id,
         is_active: true,
@@ -484,12 +508,12 @@ export async function POST(req: Request) {
         ticket_id: createdTicket.id,
         action_type: 'TICKET_CREATED',
         new_value: initialDescription,
-        performed_by: phone,
+        performed_by: phoneDbKey,
         notes: 'Initial ticket creation from user',
         created_by: 'system',
         meta: {
           source: 'whatsapp',
-          phone,
+          phone: phoneDbKey,
           project_code: project.project_code,
           building_number: buildingNumber,
         },

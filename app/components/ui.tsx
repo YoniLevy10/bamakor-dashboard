@@ -99,6 +99,7 @@ const navItems = [
   { href: '/projects', label: 'פרויקטים', icon: 'folder' },
   { href: '/workers', label: 'עובדים', icon: 'users' },
   { href: '/residents', label: 'דיירים', icon: 'users' },
+  { href: '/pending-residents', label: 'דיירים לאישור', icon: 'clock' },
   { href: '/qr', label: 'קודי QR', icon: 'qr' },
   { href: '/summary', label: 'סיכום', icon: 'chart' },
 ]
@@ -156,6 +157,12 @@ function NavIcon({ type, active }: { type: string; active?: boolean }) {
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 3v18h18" />
         <path d="m19 9-5 5-4-4-3 3" />
+      </svg>
+    ),
+    clock: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v6l3 2" />
       </svg>
     ),
     settings: (
