@@ -13,7 +13,8 @@ export type ParsedWhatsAppMessage = {
  */
 export function isAddressLikeText(text: string): boolean {
   const t = text.trim()
-  if (t.length < 4) return false
+  // Allow short building hints (e.g. "חלץ") so search can offer numbered picks
+  if (t.length < 2) return false
 
   if (/\d/.test(t)) return true
 
@@ -36,6 +37,11 @@ export function isAddressLikeText(text: string): boolean {
     'מספר',
   ]
   if (addressCues.some((cue) => t.includes(cue))) return true
+
+  // Short Hebrew-only token (e.g. building nickname "חלץ") — eligible for project text search
+  if (/^[\u0590-\u05FF]{3,40}$/.test(t)) {
+    return true
+  }
 
   // Street-style without digits: e.g. "הרצל כהן" / "שד׳ רוטשילד תל אביב" (no house number)
   const hebrewWord = /[\u0590-\u05FF]{2,}/

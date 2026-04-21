@@ -210,6 +210,7 @@ async function expireInactiveSessions(supabaseAdmin: SupabaseClient, clientId: s
       .from('sessions')
       .update({
         is_active: false,
+        pending_whatsapp_media_id: null,
         updated_at: now.toISOString(),
       })
       .eq('client_id', clientId)
@@ -229,6 +230,7 @@ async function expireInactiveSessions(supabaseAdmin: SupabaseClient, clientId: s
       .update({
         is_active: false,
         active_ticket_id: null,
+        pending_whatsapp_media_id: null,
         updated_at: now.toISOString(),
       })
       .eq('client_id', clientId)
@@ -350,6 +352,7 @@ async function resetSessionCompletely(
     .update({
       is_active: false,
       active_ticket_id: null,
+      pending_whatsapp_media_id: null,
       last_activity_at: nowIso,
       updated_at: nowIso,
     })
@@ -404,6 +407,69 @@ async function findRecentTicketForPhone(
 
   if (!data?.id || !data?.created_at || !data?.status) return null
   return data as { id: string; status: string; created_at: string }
+}
+
+/** If the user sent an image before the first text in this session, attach it to the new ticket. */
+async function attachPendingWhatsAppImageToTicketIfAny(
+  from: string,
+  clientId: string,
+  ticketId: string,
+  supabaseAdmin: SupabaseClient
+): Promise<boolean> {
+  const { data: openSession, error } = await supabaseAdmin
+    .from('sessions')
+    .select('id, pending_whatsapp_media_id')
+    .eq('phone_number', from)
+    .eq('client_id', clientId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (error) {
+    console.error('⚠️ pending image: could not load session', { from, error })
+    return false
+  }
+
+  const pendingId = (openSession as { pending_whatsapp_media_id?: string | null } | null)
+    ?.pending_whatsapp_media_id
+  const sessionId = (openSession as { id?: string } | null)?.id
+  if (!pendingId || !sessionId) return false
+
+  await supabaseAdmin
+    .from('sessions')
+    .update({
+      pending_whatsapp_media_id: null,
+      last_activity_at: new Date().toISOString(),
+    })
+    .eq('id', sessionId)
+
+  const mediaData = await downloadWhatsAppMedia(pendingId, 'image')
+  if (!mediaData) {
+    console.error('⚠️ pending image: download failed', { pendingId, ticketId })
+    return false
+  }
+
+  const uploadResult = await uploadWhatsAppMediaToStorage(
+    ticketId,
+    mediaData.buffer,
+    mediaData.fileName,
+    mediaData.mimeType
+  )
+  if (!uploadResult) {
+    console.error('⚠️ pending image: storage upload failed', { ticketId })
+    return false
+  }
+
+  const ok = await createAttachmentRecord(
+    supabaseAdmin,
+    ticketId,
+    mediaData.fileName,
+    uploadResult.filePath,
+    uploadResult.fileSize,
+    mediaData.mimeType,
+    pendingId,
+    'whatsapp_image'
+  )
+  return !!ok
 }
 
 async function logIncomingFreeTextToTicket(
@@ -574,7 +640,7 @@ export async function POST(req: NextRequest) {
       // Check if user has an active session/ticket context
       const { data: session, error: sessionError } = await supabaseAdmin
         .from('sessions')
-        .select('id, phone_number, project_id, active_ticket_id, is_active')
+        .select('id, phone_number, project_id, active_ticket_id, is_active, pending_whatsapp_media_id')
         .eq('phone_number', from)
         .eq('client_id', webhookClientId)
         .eq('is_active', true)
@@ -709,6 +775,37 @@ export async function POST(req: NextRequest) {
             status: 'PARTIAL_FAILURE',
             failureReason,
           },
+          { status: 200 }
+        )
+      }
+
+      // Case A5: Building known (session) but ticket not created yet — keep image until first text opens ticket
+      if (session?.project_id && !session.active_ticket_id && session.id) {
+        console.log(`📍 Open session (no ticket row yet) — stashing image for first text: ${session.id}`)
+        const { error: stashErr } = await supabaseAdmin
+          .from('sessions')
+          .update({
+            pending_whatsapp_media_id: mediaId,
+            last_activity_at: new Date().toISOString(),
+          })
+          .eq('id', session.id)
+
+        if (stashErr) {
+          console.error('❌ Failed to stash pending WhatsApp image on session:', stashErr)
+        } else {
+          try {
+            await sendWhatsAppTextMessage(
+              from,
+              '🖼️ קיבלנו את התמונה!\n\nכדי לצרף אותה לתקלה, כתבו עכשיו בקצרה את תיאור התקלה בטקסט.',
+              residentWhatsAppCreds
+            )
+          } catch (sendError) {
+            console.error('⚠️ Failed to send image-before-text guidance:', sendError)
+          }
+        }
+
+        return NextResponse.json(
+          { received: true, type: 'image_queued_before_description', sessionId: session.id },
           { status: 200 }
         )
       }
@@ -1004,7 +1101,7 @@ export async function POST(req: NextRequest) {
 
       // STEP 2.5: PENDING SELECTION HANDLING (user replies with number 1/2/3)
       const numericSelection = isNumericSelection(textBody)
-      const pendingSelection = await getPendingSelection(from, supabaseAdmin, webhookClientId)
+      let pendingSelection = await getPendingSelection(from, supabaseAdmin, webhookClientId)
 
       if (numericSelection && pendingSelection) {
         // User selected a valid number and pending selection exists
@@ -1097,31 +1194,37 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      // If there's a pending selection but message is NOT numeric, send reminder
+      // Pending selection + non-numeric: either refine search (address-like) or remind to pick 1/2/3
       if (pendingSelection && !numericSelection) {
-        console.log('⚠️ Pending selection exists but message is not numeric')
+        if (isAddressLikeText(textBody)) {
+          console.log('ℹ️ Pending selection cleared — user sent a new address-like query; re-searching')
+          await clearPendingSelection(from, supabaseAdmin, webhookClientId)
+          pendingSelection = null
+        } else {
+          console.log('⚠️ Pending selection exists but message is not numeric')
 
-        try {
-          await sendWhatsAppTextMessage(
-            from,
-            `⚠️ השיבו רק עם מספר האפשרות: 1, 2 או 3`,
-            residentWhatsAppCreds
+          try {
+            await sendWhatsAppTextMessage(
+              from,
+              `⚠️ השיבו רק עם מספר האפשרות: 1, 2 או 3`,
+              residentWhatsAppCreds
+            )
+          } catch (sendError) {
+            console.error('⚠️ Failed to send pending-reminder message:', sendError)
+          }
+
+          return NextResponse.json(
+            {
+              received: true,
+              type: 'pending_reminder',
+              from,
+            },
+            { status: 200 }
           )
-        } catch (sendError) {
-          console.error('⚠️ Failed to send pending-reminder message:', sendError)
         }
-
-        return NextResponse.json(
-          {
-            received: true,
-            type: 'pending_reminder',
-            from,
-          },
-          { status: 200 }
-        )
       }
 
-      // NO PENDING SELECTION:
+      // NO PENDING SELECTION (or cleared above):
       // Product rule: do NOT run fuzzy building search for unrelated free-text after reset.
       // Only attempt building search if the message looks like an address/building lookup.
       const addressLike = isAddressLikeText(textBody)
@@ -1359,6 +1462,16 @@ export async function POST(req: NextRequest) {
     if (ticketError) {
       console.error('❌ Error creating ticket:', ticketError)
       return NextResponse.json({ error: 'Ticket creation failed' }, { status: 500 })
+    }
+
+    const pendingImageAttached = await attachPendingWhatsAppImageToTicketIfAny(
+      from,
+      webhookClientId,
+      createdTicket.id,
+      supabaseAdmin
+    )
+    if (pendingImageAttached) {
+      console.log('✅ Pending WhatsApp image attached to new ticket', { ticketId: createdTicket.id })
     }
 
     // Immediately reset session after ticket creation confirmation is sent (single-purpose session).
