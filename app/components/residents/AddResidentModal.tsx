@@ -16,6 +16,8 @@ type AddResidentModalProps = {
   notes: string
   error: string
   loading: boolean
+  /** 'edit' — כותרת וכפתור שמירה לעדכון דייר קיים */
+  variant?: 'add' | 'edit'
   onProjectIdChange: (value: string) => void
   onFullNameChange: (value: string) => void
   onPhoneChange: (value: string) => void
@@ -35,6 +37,7 @@ export function AddResidentModal({
   notes,
   error,
   loading,
+  variant = 'add',
   onProjectIdChange,
   onFullNameChange,
   onPhoneChange,
@@ -43,6 +46,8 @@ export function AddResidentModal({
   onSubmit,
 }: AddResidentModalProps) {
   if (!open) return null
+
+  const isEdit = variant === 'edit'
 
   function sanitizePhoneKeystroke(raw: string) {
     const trimmed = raw.replace(/\s|-/g, '')
@@ -56,7 +61,7 @@ export function AddResidentModal({
       <div style={styles.modalOverlay} onClick={onClose} />
       <div style={styles.modal}>
         <div style={styles.modalHeader}>
-          <h2 style={styles.modalTitle}>הוספת דייר</h2>
+          <h2 style={styles.modalTitle}>{isEdit ? 'עריכת דייר' : 'הוספת דייר'}</h2>
           <button onClick={onClose} style={styles.modalClose} aria-label="סגירה">
             <svg
               width="18"
@@ -144,7 +149,7 @@ export function AddResidentModal({
               ביטול
             </Button>
             <Button variant="primary" loading={loading} type="submit">
-              שמירה
+              {isEdit ? 'שמירת שינויים' : 'שמירה'}
             </Button>
           </div>
         </form>

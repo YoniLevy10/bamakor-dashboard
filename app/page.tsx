@@ -4,6 +4,11 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler } from '@/lib/error-handler'
+import {
+  toastReporterClosedNotifyNetworkWarning,
+  toastReporterClosedNotifySummary,
+  type ReporterClosedNotifyApiBody,
+} from '@/lib/reporter-closed-notify-toast'
 import { 
   AppShell, 
   MobileHeader, 
@@ -388,9 +393,27 @@ export default function DashboardPage() {
         } else {
           payload.closed_at = null
         }
+        const closedNow = draftStatus === 'CLOSED' && selectedTicket.status !== 'CLOSED'
         const { error } = await supabase.from('tickets').update(payload).eq('id', selectedTicket.id)
         if (error) throw error
         toast.success('נשמר')
+        if (closedNow) {
+          try {
+            const nRes = await fetch('/api/notify-reporter-ticket-closed', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ticket_id: selectedTicket.id }),
+            })
+            const nBody = (await nRes.json().catch(() => ({}))) as ReporterClosedNotifyApiBody
+            if (!nRes.ok) {
+              toastReporterClosedNotifyNetworkWarning()
+            } else {
+              toastReporterClosedNotifySummary(nBody)
+            }
+          } catch {
+            toastReporterClosedNotifyNetworkWarning()
+          }
+        }
         await loadData()
         return true
       },
@@ -409,11 +432,14 @@ export default function DashboardPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ticket_id: selectedTicket.id }),
         })
+        const closeBody = (await response.json().catch(() => ({}))) as ReporterClosedNotifyApiBody & {
+          error?: string
+        }
         if (!response.ok) {
-          const result = await response.json()
-          throw new Error(result.error || 'Failed to close ticket')
+          throw new Error(closeBody.error || 'Failed to close ticket')
         }
         toast.success('התקלה נסגרה')
+        toastReporterClosedNotifySummary(closeBody)
         await loadData()
         closeDrawer()
         return true

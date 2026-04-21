@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { NextResponse } from 'next/server'
 import { getLogger } from '@/lib/logging'
-import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
+import { notifyReporterTicketClosed } from '@/lib/reporter-ticket-closed-notify'
 
 export async function POST(req: Request) {
   const logger = getLogger()
@@ -91,46 +91,39 @@ export async function POST(req: Request) {
     logger.info('TICKET_API', 'Ticket closed successfully', { requestId, ticket_id })
 
     type TicketWithProject = {
+      ticket_number: number
       reporter_phone?: string | null
       projects?: { name?: string | null } | { name?: string | null }[] | null
     }
     const trow = ticket as TicketWithProject
-    const reporterPhone = trow.reporter_phone
     const proj = trow.projects
     const projectName = Array.isArray(proj) ? proj[0]?.name : proj?.name
 
-    if (reporterPhone) {
-      try {
-        const building = projectName || 'הבניין'
-
-        const { data: waClient } = clientId
-          ? await supabaseAdmin
-              .from('clients')
-              .select('whatsapp_phone_number_id, whatsapp_access_token')
-              .eq('id', clientId)
-              .maybeSingle()
-          : { data: null }
-
-        const residentWhatsAppCreds = {
-          phoneNumberId: (waClient as { whatsapp_phone_number_id?: string | null } | null)
-            ?.whatsapp_phone_number_id || undefined,
-          accessToken: (waClient as { whatsapp_access_token?: string | null } | null)
-            ?.whatsapp_access_token || undefined,
-        }
-
-        await sendWhatsAppTextMessage(
-          reporterPhone,
-          `✅ שלום! התקלה שדיווחת בבניין ${building} טופלה וסגורה.\n\nאם יש בעיה נוספת, ניתן לפנות אלינו בכל עת 🙏`,
-          residentWhatsAppCreds
-        )
-        logger.info('TICKET_API', 'Resident WhatsApp sent on close', { requestId, ticket_id })
-      } catch (waErr) {
-        logger.warn('TICKET_API', 'Failed to send WhatsApp on ticket close', {
-          requestId,
-          ticket_id,
-          error: waErr instanceof Error ? waErr.message : String(waErr),
-        })
-      }
+    const notify = await notifyReporterTicketClosed(supabaseAdmin, clientId, {
+      reporterPhone: trow.reporter_phone,
+      ticketNumber: trow.ticket_number,
+      projectName: projectName || 'הבניין',
+    })
+    logger.info('TICKET_API', 'Reporter notify on close', {
+      requestId,
+      ticket_id,
+      whatsappSent: notify.whatsappSent,
+      smsSent: notify.smsSent,
+    })
+    if (notify.whatsappError) {
+      logger.warn('TICKET_API', 'Reporter WhatsApp on close failed', {
+        requestId,
+        ticket_id,
+        error: notify.whatsappError,
+      })
+    }
+    if (notify.smsError || !notify.smsSent) {
+      logger.warn('TICKET_API', 'Reporter SMS on close issue', {
+        requestId,
+        ticket_id,
+        smsSent: notify.smsSent,
+        error: notify.smsError,
+      })
     }
 
     const { error: sessionError } = await supabaseAdmin
@@ -165,6 +158,9 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       ticket: updatedTicket,
+      reporter_has_phone: Boolean(trow.reporter_phone?.trim()),
+      whatsapp_sent: notify.whatsappSent,
+      sms_sent: notify.smsSent,
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))

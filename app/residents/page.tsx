@@ -49,6 +49,7 @@ export default function ResidentsPage() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   const [addOpen, setAddOpen] = useState(false)
+  const [editResidentId, setEditResidentId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [addError, setAddError] = useState('')
   const [addProjectId, setAddProjectId] = useState('')
@@ -92,6 +93,7 @@ export default function ResidentsPage() {
   }
 
   function openAdd() {
+    setEditResidentId(null)
     setAddError('')
     setAddFullName('')
     setAddPhone('')
@@ -99,6 +101,23 @@ export default function ResidentsPage() {
     setAddNotes('')
     setAddProjectId(projectFilter !== 'ALL' ? projectFilter : '')
     setAddOpen(true)
+  }
+
+  function openEdit(r: ResidentRow) {
+    setEditResidentId(r.id)
+    setAddError('')
+    setAddProjectId(r.project_id)
+    setAddFullName(r.full_name)
+    setAddPhone(r.phone?.trim() || '')
+    setAddApartment(r.apartment_number?.trim() || '')
+    setAddNotes(r.notes?.trim() || '')
+    setAddOpen(true)
+  }
+
+  function closeResidentModal() {
+    setAddOpen(false)
+    setEditResidentId(null)
+    setAddError('')
   }
 
   function openImport() {
@@ -126,6 +145,33 @@ export default function ResidentsPage() {
     setSaving(true)
     setAddError('')
     try {
+      if (editResidentId) {
+        const updateRes = await supabase
+          .from('residents')
+          .update({
+            project_id: projectId,
+            client_id: clientId,
+            full_name: fullName,
+            phone: addPhone.trim() || null,
+            apartment_number: addApartment.trim() || null,
+            notes: addNotes.trim() || null,
+          })
+          .eq('id', editResidentId)
+          .select('id, project_id, client_id, full_name, phone, apartment_number, notes')
+          .single()
+
+        if (updateRes.error) {
+          setAddError(updateRes.error.message || 'עדכון דייר נכשל')
+          return
+        }
+
+        const row = updateRes.data as ResidentRow
+        setResidents((prev) => prev.map((x) => (x.id === row.id ? row : x)))
+        closeResidentModal()
+        toast.success('הדייר עודכן')
+        return
+      }
+
       const insertRes = await supabase
         .from('residents')
         .insert({
@@ -145,7 +191,7 @@ export default function ResidentsPage() {
       }
 
       setResidents((prev) => [insertRes.data as ResidentRow, ...prev])
-      setAddOpen(false)
+      closeResidentModal()
       toast.success('דייר נוסף בהצלחה')
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'שמירת דייר נכשלה')
@@ -182,7 +228,8 @@ export default function ResidentsPage() {
         !q ||
         r.full_name.toLowerCase().includes(q) ||
         (r.phone || '').includes(q) ||
-        (r.apartment_number || '').toLowerCase().includes(q)
+        (r.apartment_number || '').toLowerCase().includes(q) ||
+        (r.notes || '').toLowerCase().includes(q)
       return byProject && text
     })
   }, [residents, searchTerm, projectFilter])
@@ -226,7 +273,7 @@ export default function ResidentsPage() {
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder="חיפוש לפי שם, טלפון, דירה..."
+              placeholder="חיפוש לפי שם, טלפון, דירה, הערות..."
               style={{ flex: 1, maxWidth: '360px' }}
             />
             <select
@@ -269,6 +316,8 @@ export default function ResidentsPage() {
                     <th style={styles.th}>טלפון</th>
                     <th style={styles.th}>דירה</th>
                     <th style={styles.th}>בניין</th>
+                    <th style={styles.th}>הערות</th>
+                    <th style={{ ...styles.th, width: '100px' }}>פעולות</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -278,6 +327,20 @@ export default function ResidentsPage() {
                       <td style={styles.td}>{r.phone || '—'}</td>
                       <td style={styles.td}>{r.apartment_number || '—'}</td>
                       <td style={styles.td}>{projectName[r.project_id] || '—'}</td>
+                      <td style={{ ...styles.td, maxWidth: '220px', color: theme.colors.textSecondary }}>
+                        {r.notes ? (
+                          <span title={r.notes}>
+                            {r.notes.length > 80 ? `${r.notes.slice(0, 80)}…` : r.notes}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td style={styles.td}>
+                        <Button variant="secondary" size="sm" type="button" onClick={() => openEdit(r)}>
+                          עריכה
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -292,7 +355,7 @@ export default function ResidentsPage() {
 
       <AddResidentModal
         open={addOpen}
-        onClose={() => setAddOpen(false)}
+        onClose={closeResidentModal}
         projects={projects}
         projectId={addProjectId}
         fullName={addFullName}
@@ -301,6 +364,7 @@ export default function ResidentsPage() {
         notes={addNotes}
         error={addError}
         loading={saving}
+        variant={editResidentId ? 'edit' : 'add'}
         onProjectIdChange={setAddProjectId}
         onFullNameChange={setAddFullName}
         onPhoneChange={setAddPhone}

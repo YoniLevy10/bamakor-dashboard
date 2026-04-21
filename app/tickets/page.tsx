@@ -5,6 +5,11 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import {
+  toastReporterClosedNotifyNetworkWarning,
+  toastReporterClosedNotifySummary,
+  type ReporterClosedNotifyApiBody,
+} from '@/lib/reporter-closed-notify-toast'
+import {
   AppShell,
   MobileHeader,
   MobileMenu,
@@ -466,7 +471,28 @@ export default function TicketsPage() {
 
       if (error) throw error
 
+      const closedNow = draftStatus === 'CLOSED' && selectedTicket.status !== 'CLOSED'
+
       toast.success('השינויים נשמרו')
+
+      if (closedNow) {
+        try {
+          const nRes = await fetch('/api/notify-reporter-ticket-closed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_id: selectedTicket.id }),
+          })
+          const nBody = (await nRes.json().catch(() => ({}))) as ReporterClosedNotifyApiBody
+          if (!nRes.ok) {
+            toastReporterClosedNotifyNetworkWarning()
+          } else {
+            toastReporterClosedNotifySummary(nBody)
+          }
+        } catch {
+          toastReporterClosedNotifyNetworkWarning()
+        }
+      }
+
       await fetchData()
       setSelectedTicket((prev) => prev ? { ...prev, priority: draftPriority, status: draftStatus, assigned_worker_id: draftWorkerId || null } : prev)
     } catch (err) {
