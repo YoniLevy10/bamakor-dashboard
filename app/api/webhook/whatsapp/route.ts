@@ -7,6 +7,16 @@ import {
   isAddressLikeText,
   extractWhatsAppPhoneNumberId,
 } from '@/lib/whatsapp-parser'
+import {
+  isGreetingSmallTalk,
+  isUrgentAngryMessage,
+  isStatusQuestion,
+  parseApartmentDetailOnly,
+  looksLikePhoneOrNameLine,
+  isPrimarilyEnglishText,
+  isEmojiOnlyOrShortAck,
+  statusLabelHe,
+} from '@/lib/whatsapp-intent'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
 import { sendManagerSMS, sendWorkerSMS, getManagerPhoneFromEnv } from '@/lib/sms-send'
 import {
@@ -211,6 +221,7 @@ async function expireInactiveSessions(supabaseAdmin: SupabaseClient, clientId: s
       .update({
         is_active: false,
         pending_whatsapp_media_id: null,
+        pending_apartment_detail: null,
         updated_at: now.toISOString(),
       })
       .eq('client_id', clientId)
@@ -231,6 +242,7 @@ async function expireInactiveSessions(supabaseAdmin: SupabaseClient, clientId: s
         is_active: false,
         active_ticket_id: null,
         pending_whatsapp_media_id: null,
+        pending_apartment_detail: null,
         updated_at: now.toISOString(),
       })
       .eq('client_id', clientId)
@@ -254,6 +266,8 @@ type SessionRow = {
   project_id: string | null
   active_ticket_id: string | null
   is_active: boolean
+  pending_whatsapp_media_id?: string | null
+  pending_apartment_detail?: string | null
 }
 
 /** Reuse last known building (project_id) for this phone — no new QR scan */
@@ -318,7 +332,7 @@ async function getActiveSession(
 ): Promise<SessionRow | null> {
   const { data, error } = await supabaseAdmin
     .from('sessions')
-    .select('id, phone_number, project_id, active_ticket_id, is_active')
+    .select('id, phone_number, project_id, active_ticket_id, is_active, pending_whatsapp_media_id, pending_apartment_detail')
     .eq('phone_number', from)
     .eq('client_id', clientId)
     .eq('is_active', true)
@@ -353,6 +367,7 @@ async function resetSessionCompletely(
       is_active: false,
       active_ticket_id: null,
       pending_whatsapp_media_id: null,
+      pending_apartment_detail: null,
       last_activity_at: nowIso,
       updated_at: nowIso,
     })
@@ -495,6 +510,63 @@ async function logIncomingFreeTextToTicket(
   }
 }
 
+async function findLastOpenTicketForStatusReply(
+  from: string,
+  clientId: string,
+  supabaseAdmin: SupabaseClient
+): Promise<{ ticket_number: number; status: string; created_at: string } | null> {
+  const { data, error } = await supabaseAdmin
+    .from('tickets')
+    .select('ticket_number, status, created_at')
+    .eq('reporter_phone', from)
+    .eq('client_id', clientId)
+    .neq('status', 'CLOSED')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return data as { ticket_number: number; status: string; created_at: string }
+}
+
+/** Same reporter + project, non-closed ticket opened within the last N minutes (duplicate follow-up guard). */
+async function findOpenTicketForReporterInWindow(
+  from: string,
+  clientId: string,
+  projectId: string,
+  windowMinutes: number,
+  supabaseAdmin: SupabaseClient
+): Promise<{ id: string; ticket_number: number; description: string | null; status: string } | null> {
+  const sinceIso = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString()
+  const { data, error } = await supabaseAdmin
+    .from('tickets')
+    .select('id, ticket_number, description, status')
+    .eq('reporter_phone', from)
+    .eq('client_id', clientId)
+    .eq('project_id', projectId)
+    .neq('status', 'CLOSED')
+    .gte('created_at', sinceIso)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !data?.id) return null
+  return data as { id: string; ticket_number: number; description: string | null; status: string }
+}
+
+async function appendFollowUpToOpenTicket(
+  ticketId: string,
+  text: string,
+  from: string,
+  supabaseAdmin: SupabaseClient
+) {
+  const { data: row } = await supabaseAdmin.from('tickets').select('description').eq('id', ticketId).maybeSingle()
+  const prev = (row as { description?: string | null } | null)?.description
+  const next = prev && String(prev).trim() ? `${String(prev).trim()}\n${text}` : text
+  await supabaseAdmin.from('tickets').update({ description: next }).eq('id', ticketId)
+  await logIncomingFreeTextToTicket(ticketId, from, text, supabaseAdmin)
+}
+
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
   const mode = searchParams.get('hub.mode')
@@ -615,6 +687,46 @@ export async function POST(req: NextRequest) {
       hasText: !!textBody,
       hasMedia: !!mediaId 
     })
+
+    // WhatsApp non-text types (no text body)
+    if (messageType === 'location') {
+      try {
+        await sendWhatsAppTextMessage(
+          from,
+          'קיבלנו מיקום! לדיווח תקלה כתבו תיאור הבעיה בטקסט 📍',
+          residentWhatsAppCreds
+        )
+      } catch (sendError) {
+        console.error('⚠️ Failed to send location reply:', sendError)
+      }
+      return NextResponse.json({ received: true, type: 'location_received' }, { status: 200 })
+    }
+
+    if (messageType === 'contacts') {
+      try {
+        await sendWhatsAppTextMessage(
+          from,
+          'קיבלנו את אנשי הקשר. לדיווח תקלה כתבו את כתובת הבניין או סרקו את קוד ה-QR 📇',
+          residentWhatsAppCreds
+        )
+      } catch (sendError) {
+        console.error('⚠️ Failed to send contacts reply:', sendError)
+      }
+      return NextResponse.json({ received: true, type: 'contacts_received' }, { status: 200 })
+    }
+
+    if (messageType === 'sticker') {
+      const stickerSession = await getActiveSession(from, supabaseAdmin, webhookClientId)
+      const stickerMsg = stickerSession
+        ? 'קיבלנו 🙂 כתבו כשתוכלו את תיאור התקלה או פרטים נוספים.'
+        : 'שלחו את שם הרחוב לדיווח תקלה 😊'
+      try {
+        await sendWhatsAppTextMessage(from, stickerMsg, residentWhatsAppCreds)
+      } catch (sendError) {
+        console.error('⚠️ Failed to send sticker reply:', sendError)
+      }
+      return NextResponse.json({ received: true, type: 'sticker_received' }, { status: 200 })
+    }
 
     // HANDLE VOICE/AUDIO MESSAGES SAFELY
     if (messageType === 'audio') {
@@ -937,8 +1049,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // If no text body and no valid media, ignore
+    // If no text body and no valid media, ignore (except reaction ack)
     if (!textBody) {
+      if (messageType === 'reaction') {
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'קיבלנו את התגובה 🙂 לדיווח תקלה כתבו את הפרטים כאן.',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send reaction reply:', sendError)
+        }
+        return NextResponse.json({ received: true, type: 'reaction_received' }, { status: 200 })
+      }
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
@@ -1071,8 +1195,154 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    let ticketPriority: 'HIGH' | 'MEDIUM' = 'MEDIUM'
+
+    if (isStatusQuestion(textBody)) {
+      const st = await findLastOpenTicketForStatusReply(from, webhookClientId, supabaseAdmin)
+      if (st) {
+        const label = statusLabelHe(st.status)
+        const when = new Date(st.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            `תקלה #${st.ticket_number} בסטטוס: ${label}\nנוצרה ב־${when}. אנחנו על זה! 🔧`,
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send status reply:', sendError)
+        }
+      } else {
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'כרגע אין פנייה פתוחה ממספר זה.\nכדי לפתוח תקלה חדשה כתבו את שם הרחוב או סרקו את קוד ה-QR 🔧',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send status empty reply:', sendError)
+        }
+      }
+      return NextResponse.json({ received: true, type: 'status_query' }, { status: 200 })
+    }
+
     // STEP 2: active session — or restore last building for this phone (no new QR)
     let session = await getActiveSession(from, supabaseAdmin, webhookClientId)
+
+    if (!session) {
+      if (isGreetingSmallTalk(textBody)) {
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'שלום! כדי לדווח תקלה, כתבו את שם הרחוב של הבניין או סרקו את קוד ה-QR 😊',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send greeting reply:', sendError)
+        }
+        return NextResponse.json({ received: true, type: 'greeting' }, { status: 200 })
+      }
+      if (isPrimarilyEnglishText(textBody)) {
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'Hello! To report an issue, please write your building address or scan the QR code 😊',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send English fallback:', sendError)
+        }
+        return NextResponse.json({ received: true, type: 'english_fallback' }, { status: 200 })
+      }
+      if (looksLikePhoneOrNameLine(textBody)) {
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'תודה! כדי לדווח תקלה, כתבו את שם הרחוב של הבניין 😊',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send phone/name reply:', sendError)
+        }
+        return NextResponse.json({ received: true, type: 'phone_or_name' }, { status: 200 })
+      }
+      if (isEmojiOnlyOrShortAck(textBody)) {
+        try {
+          await sendWhatsAppTextMessage(from, 'שלחו את שם הרחוב לדיווח תקלה 😊', residentWhatsAppCreds)
+        } catch (sendError) {
+          console.error('⚠️ Failed to send emoji-only reply:', sendError)
+        }
+        return NextResponse.json({ received: true, type: 'emoji_only' }, { status: 200 })
+      }
+      if (isUrgentAngryMessage(textBody) && !isAddressLikeText(textBody)) {
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'קיבלנו! זו נראית תקלה דחופה.\nכתבו את שם הבניין ונטפל מיד 🚨',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send urgent no-context reply:', sendError)
+        }
+        return NextResponse.json({ received: true, type: 'urgent_no_context' }, { status: 200 })
+      }
+    } else {
+      if (isGreetingSmallTalk(textBody)) {
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'שלום! כשתוכלו, כתבו בקצרה את תיאור התקלה כאן בצ׳אט 📝',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send greeting-with-session reply:', sendError)
+        }
+        await supabaseAdmin
+          .from('sessions')
+          .update({ last_activity_at: new Date().toISOString() })
+          .eq('id', session.id)
+        return NextResponse.json({ received: true, type: 'greeting_with_session' }, { status: 200 })
+      }
+      if (isEmojiOnlyOrShortAck(textBody)) {
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'קיבלנו 🙂 נמשיך לטפל — כתבו עוד פרטים אם צריך.',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send emoji-ack reply:', sendError)
+        }
+        await supabaseAdmin
+          .from('sessions')
+          .update({ last_activity_at: new Date().toISOString() })
+          .eq('id', session.id)
+        return NextResponse.json({ received: true, type: 'emoji_ack_with_session' }, { status: 200 })
+      }
+      const apartmentOnly = parseApartmentDetailOnly(textBody)
+      if (apartmentOnly && session.project_id) {
+        const { error: aptErr } = await supabaseAdmin
+          .from('sessions')
+          .update({
+            pending_apartment_detail: apartmentOnly,
+            last_activity_at: new Date().toISOString(),
+          })
+          .eq('id', session.id)
+        if (aptErr) {
+          console.error('⚠️ Failed to save pending apartment on session:', aptErr)
+        }
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'קיבלנו את פרט הדירה/קומה ✅ נצרף אותו לפנייה כשתשלחו את תיאור התקלה.',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send apartment-saved reply:', sendError)
+        }
+        return NextResponse.json({ received: true, type: 'apartment_saved' }, { status: 200 })
+      }
+    }
+
     if (!session) {
       const pendingEarly = await getPendingSelection(from, supabaseAdmin, webhookClientId)
       if (!pendingEarly) {
@@ -1227,6 +1497,19 @@ export async function POST(req: NextRequest) {
       // NO PENDING SELECTION (or cleared above):
       // Product rule: do NOT run fuzzy building search for unrelated free-text after reset.
       // Only attempt building search if the message looks like an address/building lookup.
+      if (parseApartmentDetailOnly(textBody)) {
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            'כדי לדווח תקלה כתבו את שם הרחוב של הבניין',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send apartment-without-session reply:', sendError)
+        }
+        return NextResponse.json({ received: true, type: 'apartment_without_session' }, { status: 200 })
+      }
+
       const addressLike = isAddressLikeText(textBody)
       logWhatsAppRuntimePath('TEXT_ADDRESS_LIKE_RESULT', {
         textBody,
@@ -1416,6 +1699,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if (isUrgentAngryMessage(textBody)) {
+      ticketPriority = 'HIGH'
+    }
+
     logWhatsAppRuntimePath('TICKET_CREATE_PATH_ENTERED', {
       textBody,
       phone_number: from,
@@ -1424,6 +1711,41 @@ export async function POST(req: NextRequest) {
 
     // Product rule: never keep active_ticket_id for text follow-ups.
     // Session is only used to bridge: (project identified) -> (ticket description) -> ticket created.
+
+    if (session.project_id) {
+      const dupTicket = await findOpenTicketForReporterInWindow(
+        from,
+        webhookClientId,
+        session.project_id,
+        5,
+        supabaseAdmin
+      )
+      if (dupTicket) {
+        await appendFollowUpToOpenTicket(dupTicket.id, textBody, from, supabaseAdmin)
+        await supabaseAdmin
+          .from('sessions')
+          .update({ last_activity_at: new Date().toISOString() })
+          .eq('id', session.id)
+        try {
+          await sendWhatsAppTextMessage(
+            from,
+            `קיבלנו את העדכון והוספנו לפנייה #${dupTicket.ticket_number} ✅`,
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send duplicate-follow-up reply:', sendError)
+        }
+        return NextResponse.json(
+          {
+            received: true,
+            type: 'ticket_follow_up_appended',
+            ticketId: dupTicket.id,
+            ticketNumber: dupTicket.ticket_number,
+          },
+          { status: 200 }
+        )
+      }
+    }
 
     const { data: existingProject, error: existingProjectError } = await supabaseAdmin
       .from('projects')
@@ -1443,15 +1765,28 @@ export async function POST(req: NextRequest) {
       buildingNumber = parsedStart?.buildingNumber || null
     }
 
+    let ticketDescription = textBody
+    const { data: sessionForApt } = await supabaseAdmin
+      .from('sessions')
+      .select('pending_apartment_detail')
+      .eq('id', session.id)
+      .maybeSingle()
+    const aptFromSession = (sessionForApt as { pending_apartment_detail?: string | null } | null)
+      ?.pending_apartment_detail
+      ?.trim()
+    if (aptFromSession) {
+      ticketDescription = `${textBody}\n${aptFromSession}`
+    }
+
     const { data: createdTicket, error: ticketError } = await supabaseAdmin
       .from('tickets')
       .insert({
         client_id: webhookClientId,
         project_id: session.project_id,
         reporter_phone: from,
-        description: textBody,
+        description: ticketDescription,
         status: 'NEW',
-        priority: 'MEDIUM',
+        priority: ticketPriority,
         language: 'he',
         source: 'whatsapp',
         building_number: buildingNumber,
@@ -1508,7 +1843,7 @@ export async function POST(req: NextRequest) {
         console.error('⚠️ Failed to fetch project manager phone:', projectNotificationError)
       } else if (projectForNotification) {
         const buildingLine = buildingNumber ? `בניין: ${buildingNumber}\n` : ''
-        const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${textBody || 'ללא פירוט'}\nמדווח: ${from}\nכניסה למערכת:\n${getPublicTicketsUrl()}\n${clientName}`
+        const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${ticketDescription || 'ללא פירוט'}\nמדווח: ${from}\nכניסה למערכת:\n${getPublicTicketsUrl()}\n${clientName}`
 
         const managerDestination = clientManagerPhone || projectForNotification.manager_phone || getManagerPhoneFromEnv()
 
@@ -1531,7 +1866,7 @@ export async function POST(req: NextRequest) {
             .maybeSingle()
 
           if (workerRow?.phone) {
-            const workerMsg = `תקלה חדשה ב${projectForNotification.name}\n#${createdTicket.ticket_number}\n${textBody || 'ללא פירוט'}\nמדווח: ${from}\n${getPublicTicketsUrl()}\n${clientName}`
+            const workerMsg = `תקלה חדשה ב${projectForNotification.name}\n#${createdTicket.ticket_number}\n${ticketDescription || 'ללא פירוט'}\nמדווח: ${from}\n${getPublicTicketsUrl()}\n${clientName}`
             console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket) → assigned worker')
             const wOk = await sendWorkerSMS(workerRow.phone, workerMsg, smsSenderName)
             if (wOk) {

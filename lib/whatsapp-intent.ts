@@ -1,0 +1,118 @@
+/** Lightweight intent detection for WhatsApp resident messages (Hebrew-first). */
+
+const GREETING_TOKENS = new Set([
+  'שלום',
+  'היי',
+  'הי',
+  'בוקר',
+  'ערב',
+  'לילה',
+  'תודה',
+  'תודהרבה',
+  'אוקיי',
+  'אוקי',
+  'סבבה',
+  'בסדר',
+  'נשמע',
+  'נשמעטוב',
+])
+
+export function isGreetingSmallTalk(text: string): boolean {
+  const t = text.trim().replace(/\s+/g, ' ')
+  if (!t || t.length > 40) return false
+  if (/^(בוקר טוב|ערב טוב|לילה טוב|תודה רבה|נשמע טוב)\b/i.test(t)) return true
+  const lower = t.toLowerCase().replace(/[!?.…,:;'"׳״]/g, '')
+  const compact = lower.replace(/\s+/g, '')
+  if (!compact) return false
+  if (/^(שלום|היי|הי|בוקרטוב|ערבטוב|לילהטוב|תודה|תודהרבה|אוקיי|אוקי|סבבה|בסדר|נשמעטוב|נשמע)$/.test(compact)) return true
+  const words = lower.split(' ').filter(Boolean)
+  if (words.length <= 3 && words.every((w) => GREETING_TOKENS.has(w.replace(/[!?.]/g, '')) || w === 'טוב' || w === 'רבה')) {
+    return true
+  }
+  return false
+}
+
+const URGENT_KEYWORDS =
+  /דחוף|חירום|מצב\s*חירום|אש\b|שריפה|מים\s*שוטפים|מים\s*שוטף|נזילה\s*דחופה|sos|urgent|emergency|!!!{2,}/i
+
+export function isUrgentAngryMessage(text: string): boolean {
+  return URGENT_KEYWORDS.test(text.trim())
+}
+
+/** Status / progress questions (avoid matching casual "מה קורה" in long descriptions). */
+export function isStatusQuestion(text: string): boolean {
+  const t = text.trim()
+  if (t.length > 120) return false
+  if (/עדכון\s*[?؟]?$/i.test(t)) return true
+  if (/מתי\s*(יהיה\s*)?(טיפול|יטפלו|תטפלו|מגיע)/i.test(t)) return true
+  if (/מה\s*קורה\s*(עם|עם ה|עם ה)?\s*(ה)?תקל/i.test(t)) return true
+  if (/סטטוס\s*(של|שלי|של ה)?\s*(ה)?תקל/i.test(t)) return true
+  if (/איפה\s*התקלה/i.test(t)) return true
+  if (/מה\s*המצב/i.test(t)) return true
+  if (/^(נפתר|טופל|סגור)\s*[?؟]?$/i.test(t)) return true
+  if (/נשלח\s*טכנאי/i.test(t)) return true
+  return false
+}
+
+/** Short message that looks like apartment / floor only (not full ticket description). */
+export function parseApartmentDetailOnly(text: string): string | null {
+  const t = text.trim()
+  if (t.length < 3 || t.length > 80) return null
+  if (
+    /^(דירה|דירת)\s*[\dא-ת\/\-]+(\s|$)/i.test(t) ||
+    /^(קומה|קומת)\s*[\dא-ת]+/i.test(t) ||
+    /^אפרט\s*[\dא-ת]+/i.test(t) ||
+    /^מספר\s*דירה\s*[\d]+/i.test(t)
+  ) {
+    return t
+  }
+  return null
+}
+
+const PHONE_IL = /(?:\+?972|0)?-?5[0-9]-?[0-9]{7}/
+
+export function looksLikePhoneOrNameLine(text: string): boolean {
+  const t = text.trim()
+  if (PHONE_IL.test(t) && t.length <= 22) return true
+  if (/^שמי\s+[\u0590-\u05FFa-zA-Z\-\s]{1,40}$/i.test(t)) return true
+  if (/^אני\s+[\u0590-\u05FFa-zA-Z\-\s]{1,40}$/i.test(t)) return true
+  return false
+}
+
+export function isPrimarilyEnglishText(text: string): boolean {
+  const t = text.trim()
+  if (t.length < 2 || t.length > 500) return false
+  const hebrew = (t.match(/[\u0590-\u05FF]/g) || []).length
+  const latin = (t.match(/[a-zA-Z]/g) || []).length
+  if (hebrew >= 3) return false
+  if (latin < 4) return false
+  return latin >= hebrew * 2 || (latin > 8 && hebrew === 0)
+}
+
+export function isEmojiOnlyOrShortAck(text: string): boolean {
+  const t = text.trim()
+  if (!t || t.length > 12) return false
+  if (/^(נ|כן|יאפ|יופי|סגור|👍|✅|🙏|❤️|💙|👌|🙂|😊|😉)+$/u.test(t)) return true
+  const withoutSpace = t.replace(/\s/g, '')
+  if (!withoutSpace) return false
+  // Emoji / symbols only (no letters or digits in any script)
+  if (!/[\p{L}\p{N}]/u.test(withoutSpace) && /[^\s]/.test(withoutSpace)) return true
+  return false
+}
+
+export function statusLabelHe(status: string): string {
+  switch (status) {
+    case 'NEW':
+      return 'חדשה'
+    case 'ASSIGNED':
+      return 'משויכת'
+    case 'IN_PROGRESS':
+      return 'בטיפול'
+    case 'WAITING_PARTS':
+      return 'ממתינה לחלקים'
+    case 'CLOSED':
+      return 'סגורה'
+    default:
+      return status
+  }
+}
