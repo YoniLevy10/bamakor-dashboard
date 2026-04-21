@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { sendWorkerSMS } from '@/lib/sms-send'
 import { getLogger, getAuditLogger } from '@/lib/logging'
+import { getPublicTicketsUrl } from '@/lib/public-app-url'
 
 // ARCHIVED: Old WhatsApp notification
 // import { sendWhatsAppTextWithTemplateFallback } from '@/lib/whatsapp-send'
@@ -147,7 +148,7 @@ export async function POST(req: Request) {
         console.log('📱 Sending worker notification to:', worker.phone)
 
         // CURRENT CHANNEL: SMS for worker notifications
-        const smsMessage = `תקלה חדשה הוקצתה לך\nפרויקט: ${projectName}\nתקלה: #${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא פירוט'}\nכניסה למערכת:\nhttps://bamakor.vercel.app/tickets\n${clientName}`
+        const smsMessage = `תקלה חדשה הוקצתה לך\nפרויקט: ${projectName}\nתקלה: #${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא פירוט'}\nכניסה למערכת:\n${getPublicTicketsUrl()}\n${clientName}`
         const smsSent = await sendWorkerSMS(worker.phone, smsMessage, smsSenderName)
 
         if (smsSent) {

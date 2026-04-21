@@ -15,12 +15,17 @@ import {
   createAttachmentRecord,
 } from '@/lib/whatsapp-media'
 import { getLogger } from '@/lib/logging'
+import { getPublicTicketsUrl } from '@/lib/public-app-url'
 
 // ARCHIVED: Old WhatsApp manager notification
 // This module previously sent WhatsApp messages to project managers
 // CURRENT STATUS: Using SMS for manager notifications (temporary, while awaiting WhatsApp template approval)
 
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
+const VERIFY_TOKEN =
+  process.env.WHATSAPP_VERIFY_TOKEN ||
+  (() => {
+    throw new Error('WHATSAPP_VERIFY_TOKEN not set')
+  })()
 const logger = getLogger()
 
 type ProjectRow = {
@@ -1265,7 +1270,8 @@ export async function POST(req: NextRequest) {
         try {
           await sendWhatsAppTextMessage(
             from,
-            'תקלה טכנית. אנא סרקו את קוד ה-QR בבניין או פנו למנהלת הבניין.'
+            'תקלה טכנית. אנא סרקו את קוד ה-QR בבניין או פנו למנהלת הבניין.',
+            residentWhatsAppCreds
           )
         } catch (sendError) {
           console.error('⚠️ Failed to send error message:', sendError)
@@ -1389,7 +1395,7 @@ export async function POST(req: NextRequest) {
         console.error('⚠️ Failed to fetch project manager phone:', projectNotificationError)
       } else if (projectForNotification) {
         const buildingLine = buildingNumber ? `בניין: ${buildingNumber}\n` : ''
-        const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${textBody || 'ללא פירוט'}\nמדווח: ${from}\nכניסה למערכת:\nhttps://bamakor.vercel.app/tickets\n${clientName}`
+        const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${textBody || 'ללא פירוט'}\nמדווח: ${from}\nכניסה למערכת:\n${getPublicTicketsUrl()}\n${clientName}`
 
         const managerDestination = clientManagerPhone || projectForNotification.manager_phone || getManagerPhoneFromEnv()
 
@@ -1412,7 +1418,7 @@ export async function POST(req: NextRequest) {
             .maybeSingle()
 
           if (workerRow?.phone) {
-            const workerMsg = `תקלה חדשה ב${projectForNotification.name}\n#${createdTicket.ticket_number}\n${textBody || 'ללא פירוט'}\nמדווח: ${from}\nhttps://bamakor.vercel.app/tickets\n${clientName}`
+            const workerMsg = `תקלה חדשה ב${projectForNotification.name}\n#${createdTicket.ticket_number}\n${textBody || 'ללא פירוט'}\nמדווח: ${from}\n${getPublicTicketsUrl()}\n${clientName}`
             console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket) → assigned worker')
             const wOk = await sendWorkerSMS(workerRow.phone, workerMsg, smsSenderName)
             if (wOk) {
