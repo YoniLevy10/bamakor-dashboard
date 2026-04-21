@@ -296,19 +296,27 @@ export default function ProjectsPage() {
   }
 
   async function deleteProject(project: ProjectRow) {
-    const confirmed = window.confirm(`למחוק את ${project.name}? פעולה זו בלתי הפיכה.`)
+    const confirmed = window.confirm(
+      `למחוק לצמיתות את "${project.name}" (${project.project_code})?\n\nיימחקו גם כל התקלות, הדיירים והסשנים המשויכים לפרויקט. פעולה בלתי הפיכה.`
+    )
     if (!confirmed) return
 
     await asyncHandler(
       async () => {
-        const { error } = await supabase.from('projects').delete().eq('id', project.id)
-        if (error) throw error
+        const res = await fetch('/api/delete-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: project.id }),
+        })
+        const json = (await res.json().catch(() => ({}))) as { error?: string }
+        if (!res.ok) throw new Error(json.error || 'מחיקת פרויקט נכשלה')
         toast.success('הפרויקט נמחק')
-        await loadProjects()
+        closeDetailDrawer()
         if (editingProject?.id === project.id) closeDrawer()
+        await loadProjects()
         return true
       },
-      { context: 'Failed to delete project', showErrorToast: true }
+      { context: 'מחיקת פרויקט נכשלה', showErrorToast: true }
     )
   }
 
@@ -642,6 +650,16 @@ export default function ProjectsPage() {
                 onClick={() => window.location.href = `/qr?project=${encodeURIComponent(selectedProject.project_code)}`}
               >
                 צפייה ב-QR
+              </Button>
+            </div>
+
+            <div style={styles.dangerZone}>
+              <Button
+                variant="danger"
+                onClick={() => deleteProject(selectedProject)}
+                style={{ width: '100%' }}
+              >
+                מחיקת פרויקט לצמיתות
               </Button>
             </div>
           </div>

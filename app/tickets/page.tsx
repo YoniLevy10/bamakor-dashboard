@@ -125,6 +125,7 @@ export default function TicketsPage() {
   const [mergeCandidates, setMergeCandidates] = useState<TicketRow[]>([])
   const [mergeLoading, setMergeLoading] = useState(false)
   const [exportProject, setExportProject] = useState('ALL')
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -226,6 +227,15 @@ export default function TicketsPage() {
       ...workers.map((w) => ({ label: w.full_name, value: w.id })),
     ]
   }, [workers])
+
+  const activeFilterCount = useMemo(() => {
+    let n = 0
+    if (statusFilter !== 'ALL') n++
+    if (priorityFilter !== 'ALL') n++
+    if (projectFilter !== 'ALL') n++
+    if (workerFilter !== 'ALL') n++
+    return n
+  }, [statusFilter, priorityFilter, projectFilter, workerFilter])
 
   const filteredTickets = useMemo(() => {
     return tickets.filter((ticket) => {
@@ -365,6 +375,7 @@ export default function TicketsPage() {
   }
 
   function openTicket(ticket: TicketRow) {
+    setMobileToolsOpen(false)
     setSelectedTicket(ticket)
     setDraftPriority(ticket.priority || 'LOW')
     setDraftStatus(ticket.status)
@@ -506,6 +517,70 @@ export default function TicketsPage() {
 
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
+      <Drawer
+        open={mobileToolsOpen && isMobile}
+        onClose={() => setMobileToolsOpen(false)}
+        title="סינון וייצוא"
+        subtitle="התאימו את הרשימה או הורידו קובץ"
+        isMobile={isMobile}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <Select
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={statusOptions}
+            style={{ width: '100%', minWidth: 0 }}
+          />
+          <Select
+            value={priorityFilter}
+            onChange={setPriorityFilter}
+            options={priorityOptions}
+            style={{ width: '100%', minWidth: 0 }}
+          />
+          <Select
+            value={projectFilter}
+            onChange={setProjectFilter}
+            options={projectOptions}
+            style={{ width: '100%', minWidth: 0 }}
+          />
+          <Select
+            value={workerFilter}
+            onChange={setWorkerFilter}
+            options={workerOptions}
+            style={{ width: '100%', minWidth: 0 }}
+          />
+          <div
+            style={{
+              height: '1px',
+              background: theme.colors.border,
+              margin: '4px 0',
+            }}
+          />
+          <div style={{ fontSize: '12px', fontWeight: 600, color: theme.colors.textMuted }}>ייצוא לאקסל</div>
+          <Select
+            value={exportProject}
+            onChange={setExportProject}
+            options={[
+              { label: 'כל הפרויקטים', value: 'ALL' },
+              ...projects.map((p) => ({ label: p.name, value: p.project_code })),
+            ]}
+            style={{ width: '100%', minWidth: 0 }}
+          />
+          <Button
+            variant="secondary"
+            size="md"
+            type="button"
+            style={{ width: '100%' }}
+            onClick={() => {
+              exportToExcel()
+              setMobileToolsOpen(false)
+            }}
+          >
+            הורד Excel
+          </Button>
+        </div>
+      </Drawer>
+
       {isMobile && (
         <div style={{ padding: '12px 20px 0', display: 'flex', justifyContent: 'flex-start' }}>
           <Button variant="primary" size="md" onClick={() => setShowAddTicketModal(true)}>
@@ -514,7 +589,7 @@ export default function TicketsPage() {
         </div>
       )}
 
-      <div style={styles.content}>
+      <div style={{ ...styles.content, ...(isMobile ? { padding: '16px 16px 28px' } : {}) }}>
         {!isMobile && (
           <PageHeader
             title="תקלות"
@@ -538,69 +613,98 @@ export default function TicketsPage() {
           <KpiCard label="נסגרו" value={stats.resolved} accent="success" />
         </div>
 
-        {/* Filters */}
+        {/* Filters: desktop = full toolbar; mobile = search + one drawer for filters/export */}
         <Card noPadding>
-          <div style={{
-            ...styles.filtersRow,
-            flexDirection: isMobile ? 'column' : 'row',
-          }}>
-            <SearchInput
-              value={searchTerm}
-              onChange={setSearchTerm}
-              placeholder="חיפוש תקלות..."
-              style={{ flex: 1, maxWidth: isMobile ? '100%' : '320px' }}
-            />
+          {isMobile ? (
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                flexWrap: 'wrap',
+                ...styles.filtersRow,
+                flexDirection: 'column',
+                alignItems: 'stretch',
+                gap: '12px',
+                padding: '14px 16px',
               }}
             >
-              <Select
-                value={exportProject}
-                onChange={setExportProject}
-                options={[
-                  { label: 'ייצוא: כל הפרויקטים', value: 'ALL' },
-                  ...projects.map((p) => ({ label: `ייצוא: ${p.name}`, value: p.project_code })),
-                ]}
-                style={{ minWidth: '200px' }}
+              <SearchInput
+                value={searchTerm}
+                onChange={setSearchTerm}
+                placeholder="חיפוש תקלות..."
+                style={{ width: '100%', maxWidth: 'none' }}
               />
-              <Button variant="secondary" size="sm" type="button" onClick={exportToExcel}>
-                ייצא ל-Excel
+              <Button
+                variant="secondary"
+                size="md"
+                type="button"
+                onClick={() => setMobileToolsOpen(true)}
+                style={{ width: '100%' }}
+              >
+                סינון וייצוא לאקסל
+                {activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
               </Button>
             </div>
+          ) : (
             <div style={{
-              ...styles.filterGroup,
-              flexWrap: isMobile ? 'wrap' : 'nowrap',
+              ...styles.filtersRow,
+              flexDirection: 'row',
             }}>
-              <Select
-                value={statusFilter}
-                onChange={setStatusFilter}
-                options={statusOptions}
-                style={{ minWidth: '140px' }}
+              <SearchInput
+                value={searchTerm}
+                onChange={setSearchTerm}
+                placeholder="חיפוש תקלות..."
+                style={{ flex: 1, maxWidth: '320px' }}
               />
-              <Select
-                value={priorityFilter}
-                onChange={setPriorityFilter}
-                options={priorityOptions}
-                style={{ minWidth: '130px' }}
-              />
-              <Select
-                value={projectFilter}
-                onChange={setProjectFilter}
-                options={projectOptions}
-                style={{ minWidth: '140px' }}
-              />
-              <Select
-                value={workerFilter}
-                onChange={setWorkerFilter}
-                options={workerOptions}
-                style={{ minWidth: '140px' }}
-              />
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <Select
+                  value={exportProject}
+                  onChange={setExportProject}
+                  options={[
+                    { label: 'ייצוא: כל הפרויקטים', value: 'ALL' },
+                    ...projects.map((p) => ({ label: `ייצוא: ${p.name}`, value: p.project_code })),
+                  ]}
+                  style={{ minWidth: '200px' }}
+                />
+                <Button variant="secondary" size="sm" type="button" onClick={exportToExcel}>
+                  ייצא ל-Excel
+                </Button>
+              </div>
+              <div style={{
+                ...styles.filterGroup,
+                flexWrap: 'nowrap',
+              }}>
+                <Select
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  options={statusOptions}
+                  style={{ minWidth: '140px' }}
+                />
+                <Select
+                  value={priorityFilter}
+                  onChange={setPriorityFilter}
+                  options={priorityOptions}
+                  style={{ minWidth: '130px' }}
+                />
+                <Select
+                  value={projectFilter}
+                  onChange={setProjectFilter}
+                  options={projectOptions}
+                  style={{ minWidth: '140px' }}
+                />
+                <Select
+                  value={workerFilter}
+                  onChange={setWorkerFilter}
+                  options={workerOptions}
+                  style={{ minWidth: '140px' }}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Table */}
           {loading ? (
