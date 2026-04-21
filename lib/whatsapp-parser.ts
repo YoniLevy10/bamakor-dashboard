@@ -43,11 +43,12 @@ export function isAddressLikeText(text: string): boolean {
     return true
   }
 
-  // Street-style without digits: e.g. "הרצל כהן" / "שד׳ רוטשילד תל אביב" (no house number)
+  // Street-style without digits: typically *two* tokens (e.g. "הרצל כהן").
+  // Three+ Hebrew words without cues/digits are usually a problem description ("דלת לא נסגרת"), not an address search.
   const hebrewWord = /[\u0590-\u05FF]{2,}/
   const words = t.split(/\s+/).filter(Boolean)
   if (
-    words.length >= 2 &&
+    words.length === 2 &&
     t.length >= 12 &&
     words.every((w) => hebrewWord.test(w) || /^[\s,.-]+$/.test(w))
   ) {

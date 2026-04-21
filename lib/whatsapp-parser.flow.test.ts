@@ -6,6 +6,10 @@ describe('isAddressLikeText — problem descriptions must not trigger building s
     expect(isAddressLikeText('עט כחול')).toBe(false)
   })
 
+  it('three-word problem description is not mistaken for street search', () => {
+    expect(isAddressLikeText('דלת לא נסגרת')).toBe(false)
+  })
+
   it('single nickname token 3–40 letters can be address-like (product rule)', () => {
     expect(isAddressLikeText('חלץ')).toBe(true)
   })

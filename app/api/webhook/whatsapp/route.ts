@@ -214,8 +214,6 @@ async function expireInactiveSessions(supabaseAdmin: SupabaseClient, clientId: s
       .from('sessions')
       .update({
         is_active: false,
-        pending_whatsapp_media_id: null,
-        pending_apartment_detail: null,
         updated_at: now.toISOString(),
       })
       .eq('client_id', clientId)
@@ -235,8 +233,6 @@ async function expireInactiveSessions(supabaseAdmin: SupabaseClient, clientId: s
       .update({
         is_active: false,
         active_ticket_id: null,
-        pending_whatsapp_media_id: null,
-        pending_apartment_detail: null,
         updated_at: now.toISOString(),
       })
       .eq('client_id', clientId)
@@ -269,9 +265,10 @@ async function getActiveSession(
   supabaseAdmin: SupabaseClient,
   clientId: string
 ): Promise<SessionRow | null> {
+  // Core columns only — migrations 013/014 add optional columns; selecting missing columns returns null session and breaks the flow.
   const { data, error } = await supabaseAdmin
     .from('sessions')
-    .select('id, phone_number, project_id, active_ticket_id, is_active, pending_whatsapp_media_id, pending_apartment_detail')
+    .select('id, phone_number, project_id, active_ticket_id, is_active')
     .eq('phone_number', from)
     .eq('client_id', clientId)
     .eq('is_active', true)
@@ -305,8 +302,6 @@ async function resetSessionCompletely(
     .update({
       is_active: false,
       active_ticket_id: null,
-      pending_whatsapp_media_id: null,
-      pending_apartment_detail: null,
       last_activity_at: nowIso,
       updated_at: nowIso,
     })
@@ -379,6 +374,10 @@ async function attachPendingWhatsAppImageToTicketIfAny(
     .maybeSingle()
 
   if (error) {
+    const msg = String((error as { message?: string }).message || '')
+    if (msg.includes('pending_whatsapp_media_id') || (error as { code?: string }).code === '42703') {
+      return false
+    }
     console.error('⚠️ pending image: could not load session', { from, error })
     return false
   }
@@ -388,13 +387,25 @@ async function attachPendingWhatsAppImageToTicketIfAny(
   const sessionId = (openSession as { id?: string } | null)?.id
   if (!pendingId || !sessionId) return false
 
-  await supabaseAdmin
+  const { error: clearPendingErr } = await supabaseAdmin
     .from('sessions')
     .update({
       pending_whatsapp_media_id: null,
       last_activity_at: new Date().toISOString(),
     })
     .eq('id', sessionId)
+
+  if (clearPendingErr) {
+    const m = String((clearPendingErr as { message?: string }).message || '')
+    if (m.includes('pending_whatsapp_media_id') || (clearPendingErr as { code?: string }).code === '42703') {
+      await supabaseAdmin
+        .from('sessions')
+        .update({
+          last_activity_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId)
+    }
+  }
 
   const mediaData = await downloadWhatsAppMedia(pendingId, 'image')
   if (!mediaData) {
@@ -638,7 +649,7 @@ export async function POST(req: NextRequest) {
       // Check if user has an active session/ticket context
       const { data: session, error: sessionError } = await supabaseAdmin
         .from('sessions')
-        .select('id, phone_number, project_id, active_ticket_id, is_active, pending_whatsapp_media_id')
+        .select('id, phone_number, project_id, active_ticket_id, is_active')
         .eq('phone_number', from)
         .eq('client_id', webhookClientId)
         .eq('is_active', true)
