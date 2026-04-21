@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast } from '@/lib/error-handler'
 import { AddResidentModal, type ResidentProjectRow } from '../components/residents/AddResidentModal'
+import { ImportResidentsModal } from '../components/residents/ImportResidentsModal'
 import {
   AppShell,
   MobileHeader,
@@ -56,6 +57,8 @@ export default function ResidentsPage() {
   const [addApartment, setAddApartment] = useState('')
   const [addNotes, setAddNotes] = useState('')
 
+  const [importOpen, setImportOpen] = useState(false)
+
   async function load() {
     setLoading(true)
     setResidentsTableMissing(false)
@@ -96,6 +99,10 @@ export default function ResidentsPage() {
     setAddNotes('')
     setAddProjectId(projectFilter !== 'ALL' ? projectFilter : '')
     setAddOpen(true)
+  }
+
+  function openImport() {
+    setImportOpen(true)
   }
 
   async function submitAdd(e: React.FormEvent) {
@@ -197,9 +204,19 @@ export default function ResidentsPage() {
             title="דיירים"
             subtitle="ניהול שמות דיירים לפי בניין (לאחר הרצת מיגרציה ב-Supabase)"
             actions={
-              <Button variant="primary" size="sm" onClick={openAdd} disabled={residentsTableMissing}>
-                הוספת דייר
-              </Button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={openImport}
+                  disabled={residentsTableMissing}
+                >
+                  ייבוא דיירים
+                </Button>
+                <Button variant="primary" size="sm" onClick={openAdd} disabled={residentsTableMissing}>
+                  הוספת דייר
+                </Button>
+              </div>
             }
           />
         )}
@@ -226,6 +243,9 @@ export default function ResidentsPage() {
             </select>
             <Button variant="secondary" size="sm" onClick={() => load()}>
               רענון
+            </Button>
+            <Button variant="secondary" size="sm" onClick={openImport} disabled={residentsTableMissing}>
+              ייבוא דיירים
             </Button>
             <Button variant="primary" size="sm" onClick={openAdd} disabled={residentsTableMissing}>
               הוספת דייר
@@ -287,6 +307,16 @@ export default function ResidentsPage() {
         onApartmentNumberChange={setAddApartment}
         onNotesChange={setAddNotes}
         onSubmit={submitAdd}
+      />
+
+      <ImportResidentsModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        projects={projects}
+        defaultProjectId={projectFilter !== 'ALL' ? projectFilter : ''}
+        onImported={(newRows) => {
+          setResidents((prev) => [...(newRows as ResidentRow[]), ...prev])
+        }}
       />
     </AppShell>
   )

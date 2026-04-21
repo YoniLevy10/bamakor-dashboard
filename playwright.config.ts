@@ -36,8 +36,10 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm run dev',
+    // Use production server for stable E2E (avoids dev "Compiling..." overlay/timeouts)
+    command: 'npm run build && npm run start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
+    timeout: 180_000,
   },
 })

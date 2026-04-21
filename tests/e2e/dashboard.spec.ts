@@ -11,11 +11,16 @@ test.describe('Dashboard - Core Functionality', () => {
     await page.goto('/')
     await expect(page.locator('button', { hasText: /תקלה חדשה/i }).first()).toBeVisible()
 
-    // Check sidebar links exist (stable a11y selectors)
-    const dashboardLink = page.locator('nav a[href="/"]').first()
-    const ticketsLink = page.locator('nav a[href="/tickets"]').first()
-    const projectsLink = page.locator('nav a[href="/projects"]').first()
-    
+    // On mobile, the sidebar is collapsed into a menu
+    const menuBtn = page.locator('button[aria-label="פתיחת תפריט"]').first()
+    if (await menuBtn.isVisible().catch(() => false)) {
+      await menuBtn.click()
+    }
+
+    const dashboardLink = page.locator('a[href="/"]').first()
+    const ticketsLink = page.locator('a[href="/tickets"]').first()
+    const projectsLink = page.locator('a[href="/projects"]').first()
+
     await expect(dashboardLink).toBeVisible()
     await expect(ticketsLink).toBeVisible()
     await expect(projectsLink).toBeVisible()
@@ -45,7 +50,7 @@ test.describe('Dashboard - Core Functionality', () => {
       if (msg.type() === 'error') errorCount++
     })
     
-    await page.waitForTimeout(2000)
+    await page.waitForLoadState('networkidle', { timeout: 15000 })
     expect(errorCount).toBe(0)
   })
 

@@ -1,0 +1,557 @@
+'use client'
+
+import { useMemo, useState, type CSSProperties } from 'react'
+import * as XLSX from 'xlsx'
+import { Button, theme } from '../ui'
+import type { ResidentProjectRow } from './AddResidentModal'
+import { toast } from '@/lib/error-handler'
+
+type ParsedRow = Record<string, unknown>
+
+type Mapping = {
+  project_code?: string
+  project_name?: string
+  full_name: string
+  phone?: string
+  apartment_number?: string
+  notes?: string
+}
+
+function normalizeHeader(h: unknown): string {
+  return (typeof h === 'string' ? h : h == null ? '' : String(h)).trim()
+}
+
+function guessKey(headers: string[], candidates: RegExp[]): string | '' {
+  const lower = headers.map((h) => h.toLowerCase())
+  for (const rx of candidates) {
+    const idx = lower.findIndex((h) => rx.test(h))
+    if (idx >= 0) return headers[idx]
+  }
+  return ''
+}
+
+function sanitizePhone(raw: string) {
+  const trimmed = raw.replace(/\s|-/g, '')
+  const hasPlus = trimmed.startsWith('+')
+  const digits = trimmed.replace(/[^\d]/g, '')
+  return hasPlus ? `+${digits}` : digits
+}
+
+export function ImportResidentsModal({
+  open,
+  onClose,
+  projects,
+  defaultProjectId,
+  onImported,
+}: {
+  open: boolean
+  onClose: () => void
+  projects: ResidentProjectRow[]
+  defaultProjectId: string
+  onImported: (newRows: unknown[]) => void
+}) {
+  const [fileName, setFileName] = useState('')
+  const [rows, setRows] = useState<ParsedRow[]>([])
+  const [headers, setHeaders] = useState<string[]>([])
+  const [dragOver, setDragOver] = useState(false)
+
+  const [mapping, setMapping] = useState<Mapping>({
+    full_name: '',
+  })
+
+  const [singleProjectId, setSingleProjectId] = useState<string>(defaultProjectId || '')
+  const [importing, setImporting] = useState(false)
+  const [apiError, setApiError] = useState('')
+
+  const preview = useMemo(() => rows.slice(0, 20), [rows])
+
+  const canImport = useMemo(() => {
+    if (rows.length === 0) return false
+    if (!mapping.full_name) return false
+    const hasProjectMapping = Boolean(mapping.project_code || mapping.project_name || singleProjectId)
+    return hasProjectMapping
+  }, [rows.length, mapping, singleProjectId])
+
+  if (!open) return null
+
+  function reset() {
+    setFileName('')
+    setRows([])
+    setHeaders([])
+    setDragOver(false)
+    setApiError('')
+    setMapping({ full_name: '' })
+    setSingleProjectId(defaultProjectId || '')
+  }
+
+  function close() {
+    reset()
+    onClose()
+  }
+
+  async function parseFile(file: File) {
+    setApiError('')
+    const buf = await file.arrayBuffer()
+    const wb = XLSX.read(buf, { type: 'array' })
+    const sheetName = wb.SheetNames[0]
+    const ws = wb.Sheets[sheetName]
+    const json = XLSX.utils.sheet_to_json<ParsedRow>(ws, { defval: '' })
+    const inferredHeaders = Array.from(
+      new Set(
+        json.flatMap((r) => Object.keys(r).map((k) => normalizeHeader(k))).filter(Boolean)
+      )
+    )
+
+    setFileName(file.name)
+    setRows(json)
+    setHeaders(inferredHeaders)
+
+    // Guess mapping
+    const guessedFullName = guessKey(inferredHeaders, [/^name$/i, /שם/, /full.?name/i])
+    const guessedPhone = guessKey(inferredHeaders, [/phone/i, /טלפון/])
+    const guessedApt = guessKey(inferredHeaders, [/apartment/i, /דירה/])
+    const guessedNotes = guessKey(inferredHeaders, [/notes/i, /הערות/])
+    const guessedProjectCode = guessKey(inferredHeaders, [/project.?code/i, /קוד.*(פרויקט|בניין)/, /קוד/])
+    const guessedProjectName = guessKey(inferredHeaders, [/project/i, /בניין/])
+
+    setMapping({
+      full_name: guessedFullName || inferredHeaders[0] || '',
+      phone: guessedPhone || undefined,
+      apartment_number: guessedApt || undefined,
+      notes: guessedNotes || undefined,
+      project_code: guessedProjectCode || undefined,
+      project_name: guessedProjectName || undefined,
+    })
+  }
+
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragOver(false)
+    const f = e.dataTransfer.files?.[0]
+    if (!f) return
+    await parseFile(f)
+  }
+
+  async function onFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    await parseFile(f)
+  }
+
+  function buildPayload() {
+    const project = singleProjectId ? projects.find((p) => p.id === singleProjectId) : null
+    const forcedProjectCode = project?.project_code || null
+    const forcedProjectName = project?.name || null
+
+    const out = rows.map((r) => {
+      const fullName = String(r[mapping.full_name] ?? '').trim()
+      const phoneRaw = mapping.phone ? String(r[mapping.phone] ?? '').trim() : ''
+      const apt = mapping.apartment_number ? String(r[mapping.apartment_number] ?? '').trim() : ''
+      const notes = mapping.notes ? String(r[mapping.notes] ?? '').trim() : ''
+
+      const projectCode =
+        forcedProjectCode ||
+        (mapping.project_code ? String(r[mapping.project_code] ?? '').trim() : '')
+      const projectName =
+        forcedProjectName ||
+        (mapping.project_name ? String(r[mapping.project_name] ?? '').trim() : '')
+
+      return {
+        full_name: fullName,
+        phone: phoneRaw ? sanitizePhone(phoneRaw) : '',
+        apartment_number: apt,
+        notes,
+        project_code: projectCode,
+        project_name: projectName,
+      }
+    })
+
+    return out
+  }
+
+  async function doImport() {
+    if (!canImport) return
+    setImporting(true)
+    setApiError('')
+    try {
+      const payloadRows = buildPayload()
+      const res = await fetch('/api/import-residents', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ rows: payloadRows }),
+      })
+
+      const json: unknown = await res.json()
+      if (!res.ok) {
+        const errMsg =
+          typeof (json as { error?: unknown } | null)?.error === 'string'
+            ? String((json as { error?: unknown }).error)
+            : 'ייבוא נכשל'
+        setApiError(errMsg)
+        return
+      }
+
+      const inserted = Number((json as { inserted?: unknown } | null)?.inserted || 0)
+      const failed = Number((json as { failed?: unknown } | null)?.failed || 0)
+      if (inserted > 0) toast.success(`יובאו ${inserted} דיירים`)
+      if (failed > 0) toast.error(`${failed} שורות נכשלו — בדקו שגיאות`)
+
+      const residents = (json as { residents?: unknown } | null)?.residents
+      if (Array.isArray(residents)) {
+        onImported(residents)
+      }
+      close()
+    } catch (e) {
+      setApiError(e instanceof Error ? e.message : 'ייבוא נכשל')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  return (
+    <>
+      <div style={styles.modalOverlay} onClick={close} />
+      <div style={styles.modal}>
+        <div style={styles.modalHeader}>
+          <h2 style={styles.modalTitle}>ייבוא דיירים מקובץ</h2>
+          <button onClick={close} style={styles.modalClose} aria-label="סגירה">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={styles.body}>
+          <div
+            style={{
+              ...styles.dropZone,
+              ...(dragOver ? styles.dropZoneActive : {}),
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragOver(true)
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+          >
+            <div style={styles.dropTitle}>גררו קובץ Excel/CSV לכאן</div>
+            <div style={styles.dropSub}>או בחרו קובץ מהמחשב</div>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={onFileInput} />
+            {fileName && <div style={styles.fileName}>{fileName}</div>}
+          </div>
+
+          {headers.length > 0 && (
+            <div style={styles.mappingCard}>
+              <div style={styles.mappingTitle}>מיפוי עמודות (אוטומטי, ניתן לשינוי)</div>
+
+              <div style={styles.row}>
+                <label style={styles.label}>בניין (אופציונלי)</label>
+                <select
+                  value={singleProjectId}
+                  onChange={(e) => setSingleProjectId(e.target.value)}
+                  style={styles.select}
+                >
+                  <option value="">לפי עמודה בקובץ</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {!singleProjectId && (
+                <div style={styles.grid2}>
+                  <div style={styles.row}>
+                    <label style={styles.label}>עמודת קוד בניין</label>
+                    <select
+                      value={mapping.project_code || ''}
+                      onChange={(e) =>
+                        setMapping((m) => ({ ...m, project_code: e.target.value || undefined }))
+                      }
+                      style={styles.select}
+                    >
+                      <option value="">—</option>
+                      {headers.map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={styles.row}>
+                    <label style={styles.label}>עמודת שם בניין</label>
+                    <select
+                      value={mapping.project_name || ''}
+                      onChange={(e) =>
+                        setMapping((m) => ({ ...m, project_name: e.target.value || undefined }))
+                      }
+                      style={styles.select}
+                    >
+                      <option value="">—</option>
+                      {headers.map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div style={styles.grid2}>
+                <div style={styles.row}>
+                  <label style={styles.label}>עמודת שם מלא (חובה)</label>
+                  <select
+                    value={mapping.full_name}
+                    onChange={(e) => setMapping((m) => ({ ...m, full_name: e.target.value }))}
+                    style={styles.select}
+                  >
+                    <option value="">—</option>
+                    {headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={styles.row}>
+                  <label style={styles.label}>עמודת טלפון</label>
+                  <select
+                    value={mapping.phone || ''}
+                    onChange={(e) =>
+                      setMapping((m) => ({ ...m, phone: e.target.value || undefined }))
+                    }
+                    style={styles.select}
+                  >
+                    <option value="">—</option>
+                    {headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={styles.row}>
+                  <label style={styles.label}>עמודת דירה</label>
+                  <select
+                    value={mapping.apartment_number || ''}
+                    onChange={(e) =>
+                      setMapping((m) => ({ ...m, apartment_number: e.target.value || undefined }))
+                    }
+                    style={styles.select}
+                  >
+                    <option value="">—</option>
+                    {headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={styles.row}>
+                  <label style={styles.label}>עמודת הערות</label>
+                  <select
+                    value={mapping.notes || ''}
+                    onChange={(e) =>
+                      setMapping((m) => ({ ...m, notes: e.target.value || undefined }))
+                    }
+                    style={styles.select}
+                  >
+                    <option value="">—</option>
+                    {headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={styles.hint}>
+                טיפ: אם הקובץ הוא לבניין אחד, בחרו אותו למעלה כדי לא להתעסק בעמודות בניין.
+              </div>
+            </div>
+          )}
+
+          {preview.length > 0 && (
+            <div style={styles.previewCard}>
+              <div style={styles.previewTitle}>תצוגה מקדימה (20 שורות)</div>
+              <div style={styles.previewTableWrap}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>שם</th>
+                      <th style={styles.th}>טלפון</th>
+                      <th style={styles.th}>דירה</th>
+                      <th style={styles.th}>בניין</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.map((r, i) => (
+                      <tr key={i}>
+                        <td style={styles.td}>{String(r[mapping.full_name] ?? '')}</td>
+                        <td style={styles.td}>
+                          {mapping.phone ? String(r[mapping.phone] ?? '') : ''}
+                        </td>
+                        <td style={styles.td}>
+                          {mapping.apartment_number ? String(r[mapping.apartment_number] ?? '') : ''}
+                        </td>
+                        <td style={styles.td}>
+                          {singleProjectId
+                            ? projects.find((p) => p.id === singleProjectId)?.name || ''
+                            : mapping.project_code
+                              ? String(r[mapping.project_code] ?? '')
+                              : mapping.project_name
+                                ? String(r[mapping.project_name] ?? '')
+                                : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {apiError && <div style={styles.errorBox}>{apiError}</div>}
+        </div>
+
+        <div style={styles.footer}>
+          <Button variant="secondary" onClick={close} type="button">
+            ביטול
+          </Button>
+          <Button
+            variant="primary"
+            onClick={doImport}
+            loading={importing}
+            disabled={!canImport}
+            type="button"
+          >
+            ייבוא
+          </Button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+const styles: Record<string, CSSProperties> = {
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0, 0, 0, 0.7)',
+    zIndex: 100,
+  },
+  modal: {
+    position: 'fixed',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: '92%',
+    maxWidth: '860px',
+    background: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    border: `1px solid ${theme.colors.border}`,
+    zIndex: 101,
+    maxHeight: '92vh',
+    overflow: 'auto',
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '18px 20px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  modalTitle: { fontSize: '18px', fontWeight: 600, margin: 0, color: theme.colors.textPrimary },
+  modalClose: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    borderRadius: theme.radius.sm,
+    background: 'transparent',
+    border: 'none',
+    color: theme.colors.textMuted,
+    cursor: 'pointer',
+  },
+  body: { padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px' },
+  dropZone: {
+    border: `1px dashed ${theme.colors.border}`,
+    borderRadius: theme.radius.lg,
+    padding: '16px',
+    background: theme.colors.surfaceElevated,
+  },
+  dropZoneActive: {
+    border: `1px dashed ${theme.colors.primary}`,
+    boxShadow: `0 0 0 3px ${theme.colors.primary}22`,
+  },
+  dropTitle: { fontSize: '15px', fontWeight: 600, marginBottom: '6px' },
+  dropSub: { fontSize: '13px', color: theme.colors.textMuted, marginBottom: '10px' },
+  fileName: { marginTop: '10px', fontSize: '13px', color: theme.colors.textSecondary },
+  mappingCard: {
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.lg,
+    padding: '14px',
+    background: theme.colors.surface,
+  },
+  mappingTitle: { fontSize: '14px', fontWeight: 600, marginBottom: '10px' },
+  row: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  label: { fontSize: '12px', fontWeight: 600, color: theme.colors.textMuted },
+  select: {
+    padding: '10px 12px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surfaceElevated,
+    color: theme.colors.textPrimary,
+  },
+  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' },
+  hint: { marginTop: '10px', fontSize: '12px', color: theme.colors.textMuted },
+  previewCard: {
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.radius.lg,
+    padding: '14px',
+    background: theme.colors.surface,
+  },
+  previewTitle: { fontSize: '14px', fontWeight: 600, marginBottom: '10px' },
+  previewTableWrap: { overflowX: 'auto' },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  th: {
+    textAlign: 'start',
+    padding: '10px 12px',
+    fontSize: '12px',
+    fontWeight: 700,
+    color: theme.colors.textMuted,
+    background: theme.colors.muted,
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  td: { padding: '10px 12px', fontSize: '13px', borderBottom: `1px solid ${theme.colors.border}` },
+  errorBox: {
+    padding: '10px 12px',
+    background: theme.colors.errorMuted,
+    color: theme.colors.error,
+    borderRadius: theme.radius.md,
+    fontSize: '13px',
+  },
+  footer: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '10px',
+    padding: '16px 20px',
+    borderTop: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surface,
+  },
+}
+
