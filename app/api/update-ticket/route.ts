@@ -10,6 +10,14 @@ export async function POST(req: Request) {
   logger.info('TICKET_API', 'Update ticket request received', { requestId })
   
   try {
+    const bamakorClientId = process.env.BAMAKOR_CLIENT_ID
+    if (!bamakorClientId) {
+      return NextResponse.json(
+        { error: 'Server configuration error. BAMAKOR_CLIENT_ID is not set.' },
+        { status: 500 }
+      )
+    }
+
     let supabaseAdmin
     try {
       supabaseAdmin = getSupabaseAdmin()
@@ -33,11 +41,12 @@ export async function POST(req: Request) {
       )
     }
 
-    const headerClientId = req.headers.get('x-client-id')
-
     // Validate ticket exists
-    let existsQuery = supabaseAdmin.from('tickets').select('id, client_id').eq('id', ticket_id)
-    if (headerClientId) existsQuery = existsQuery.eq('client_id', headerClientId)
+    const existsQuery = supabaseAdmin
+      .from('tickets')
+      .select('id, client_id')
+      .eq('id', ticket_id)
+      .eq('client_id', bamakorClientId)
     const { data: ticket, error: ticketError } = await existsQuery.single()
 
     if (ticketError || !ticket) {
@@ -48,10 +57,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const clientId = headerClientId || (ticket as { client_id?: string | null }).client_id
-    if (!clientId) {
-      return NextResponse.json({ error: 'חסר client_id' }, { status: 400 })
-    }
+    const clientId = bamakorClientId
 
     // Prepare update payload
     const updatePayload: Record<string, unknown> = {}

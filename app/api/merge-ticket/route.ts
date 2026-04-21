@@ -4,7 +4,13 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getSupabaseAdmin()
-    const headerClientId = req.headers.get('x-client-id')
+    const bamakorClientId = process.env.BAMAKOR_CLIENT_ID
+    if (!bamakorClientId) {
+      return NextResponse.json(
+        { error: 'Server configuration error. BAMAKOR_CLIENT_ID is not set.' },
+        { status: 500 }
+      )
+    }
     const body = await req.json()
     const sourceTicketId = body?.source_ticket_id as string | undefined
     const targetTicketId = body?.target_ticket_id as string | undefined
@@ -20,21 +26,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'לא ניתן למזג תקלה לעצמה' }, { status: 400 })
     }
 
-    let sourceQuery = supabaseAdmin
+    const sourceQuery = supabaseAdmin
       .from('tickets')
       .select('id, ticket_number, project_id, description, status, client_id')
       .eq('id', sourceTicketId)
-    if (headerClientId) sourceQuery = sourceQuery.eq('client_id', headerClientId)
+      .eq('client_id', bamakorClientId)
     const { data: source, error: sErr } = await sourceQuery.single()
 
     if (sErr || !source) {
       return NextResponse.json({ error: 'תקלת מקור לא נמצאה' }, { status: 404 })
     }
 
-    const clientId = headerClientId || (source as { client_id?: string | null }).client_id
-    if (!clientId) {
-      return NextResponse.json({ error: 'חסר client_id' }, { status: 400 })
-    }
+    const clientId = bamakorClientId
 
     const { data: target, error: tErr } = await supabaseAdmin
       .from('tickets')

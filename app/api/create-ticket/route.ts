@@ -19,6 +19,7 @@ type TicketRequestBody = {
   phone?: unknown
   description?: unknown
   reporter_name?: unknown
+  reporter_phone?: unknown
   source?: unknown
   project_code?: unknown
   building_number?: unknown
@@ -129,6 +130,16 @@ export async function POST(req: Request) {
   try {
     logger.debug('TICKET_API', 'Incoming request', { requestId })
     
+    const bamakorClientId = process.env.BAMAKOR_CLIENT_ID
+    if (!bamakorClientId) {
+      return NextResponse.json(
+        {
+          error: 'Server configuration error. BAMAKOR_CLIENT_ID is not set.',
+        },
+        { status: 500 }
+      )
+    }
+
     let supabaseAdmin
     try {
       supabaseAdmin = getSupabaseAdmin()
@@ -158,6 +169,7 @@ export async function POST(req: Request) {
         phone: formData.get('phone') || '',
         description: formData.get('description') || '',
         reporter_name: formData.get('reporter_name') || '',
+        reporter_phone: formData.get('reporter_phone') || '',
         source: formData.get('source') || '',
         project_code: formData.get('project_code') || '',
         building_number: formData.get('building_number') || '',
@@ -170,11 +182,11 @@ export async function POST(req: Request) {
       body = await req.json()
     }
 
-    const headerClientId = req.headers.get('x-client-id')
     const message = body?.message ? String(body.message).trim() : ''
     const phone = body?.phone ? String(body.phone).trim() : ''
     const description = body?.description ? String(body.description).trim() : ''
     const reporterName = body?.reporter_name ? String(body.reporter_name).trim() : null
+    const reporterPhone = body?.reporter_phone ? String(body.reporter_phone).trim() : null
     const source = body?.source ? String(body.source).trim() : 'web_form'
     const projectCodeFromBody = body?.project_code
       ? String(body.project_code).trim().toUpperCase()
@@ -192,26 +204,11 @@ export async function POST(req: Request) {
         )
       }
 
-      let effectiveClientId = headerClientId
-      if (!effectiveClientId) {
-        // Backward-compatible fallback for single-tenant dev: if only 1 client exists, use it.
-        const { data: rows } = await supabaseAdmin
-          .from('clients')
-          .select('id')
-          .order('created_at', { ascending: true })
-          .limit(1)
-        const firstId = (rows as { id?: string }[] | null)?.[0]?.id
-        effectiveClientId = firstId || null
-      }
-      if (!effectiveClientId) {
-        return NextResponse.json({ error: 'חסר client_id' }, { status: 400 })
-      }
-
       const { data: project, error: projectError } = await supabaseAdmin
         .from('projects')
         .select('id, name, project_code, client_id')
         .eq('project_code', projectCodeFromBody)
-        .eq('client_id', effectiveClientId)
+        .eq('client_id', bamakorClientId)
         .maybeSingle()
 
       if (projectError) {
@@ -235,7 +232,7 @@ export async function POST(req: Request) {
           project_id: project.id,
           client_id: project.client_id,
           reporter_name: reporterName,
-          reporter_phone: null,
+          reporter_phone: reporterPhone,
           description,
           status: 'NEW',
           priority: 'MEDIUM',
@@ -413,6 +410,7 @@ export async function POST(req: Request) {
       .from('projects')
       .select('id, name, project_code, client_id')
       .eq('project_code', projectCode)
+      .eq('client_id', bamakorClientId)
       .maybeSingle()
 
     if (projectError || !project) {

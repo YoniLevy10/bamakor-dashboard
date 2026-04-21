@@ -477,11 +477,6 @@ export default function DashboardPage() {
       <div style={styles.content}>
         <div style={styles.hero}>
           <div style={styles.heroTop}>
-            <div style={styles.heroActions}>
-              <Button variant="primary" size="lg" onClick={() => setShowAddTicketModal(true)}>
-                תקלה חדשה
-              </Button>
-            </div>
             <div style={styles.heroText}>
               <h1 style={styles.heroTitle} suppressHydrationWarning>
                 {getGreeting()}
@@ -495,6 +490,11 @@ export default function DashboardPage() {
                   {openTicketsCount} תקלות פתוחות דורשות טיפול
                 </p>
               )}
+            </div>
+            <div style={styles.heroActions}>
+              <Button variant="primary" size="lg" onClick={() => setShowAddTicketModal(true)}>
+                תקלה חדשה
+              </Button>
             </div>
           </div>
         </div>
@@ -690,7 +690,7 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     gap: '20px',
     flexWrap: 'wrap',
   },

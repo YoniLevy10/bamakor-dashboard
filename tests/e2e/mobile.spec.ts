@@ -1,4 +1,4 @@
-import { test, expect, devices } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 
 // iPhone 12 Tests
 const iPhoneContext = test.extend({
@@ -15,7 +15,7 @@ iPhoneContext.describe('Dashboard - Mobile (iPhone 12)', () => {
     await page.goto('/')
     
     // Verify page loads
-    await expect(page).toHaveTitle(/Dashboard|Bamakor/i)
+    await expect(page).toHaveTitle(/במקור|Bamakor|Dashboard/i)
     
     // Check main content is visible
     const mainContent = page.locator('[style*="padding"]').first()
@@ -25,12 +25,16 @@ iPhoneContext.describe('Dashboard - Mobile (iPhone 12)', () => {
   iPhoneContext('Mobile navigation is accessible', async ({ page }) => {
     await page.goto('/')
     
-    // On mobile, check for mobile menu button or navigation
-    const navElements = page.locator('a').filter({ hasText: /dashboard|tickets|projects/i })
-    
-    // Verify navigation is available
-    const count = await navElements.count()
-    expect(count).toBeGreaterThanOrEqual(1)
+    // Open mobile menu
+    const menuBtn = page.locator('button[aria-label="פתיחת תפריט"]').first()
+    await expect(menuBtn).toBeVisible()
+    await menuBtn.click()
+
+    // Verify navigation links are present in the opened menu
+    const ticketsLink = page.locator('a[href="/tickets"]').first()
+    const projectsLink = page.locator('a[href="/projects"]').first()
+    await expect(ticketsLink).toBeVisible()
+    await expect(projectsLink).toBeVisible()
   })
 
   iPhoneContext('KPI cards stack on mobile', async ({ page }) => {
@@ -40,16 +44,15 @@ iPhoneContext.describe('Dashboard - Mobile (iPhone 12)', () => {
     await page.waitForTimeout(1000)
     
     // Verify cards are visible and stacked
-    const cards = page.locator('div').filter({ hasText: /Total Tickets|Open|Assigned|Closed/i })
-    const count = await cards.count()
-    expect(count).toBeGreaterThanOrEqual(1)
+    const kpiButtons = page.locator('button', { hasText: /סה״כ תקלות|פתוחות|בטיפול|נסגרו/i })
+    await expect(kpiButtons.first()).toBeVisible()
   })
 
   iPhoneContext('New Ticket button is accessible on mobile', async ({ page }) => {
     await page.goto('/')
     
     // Check bottom action button or header button
-    const newTicketBtn = page.locator('button', { hasText: /New Ticket/i })
+    const newTicketBtn = page.locator('button', { hasText: /תקלה חדשה/i })
     await expect(newTicketBtn).toBeVisible()
     
     // Verify it's tappable (large enough)
@@ -61,12 +64,12 @@ iPhoneContext.describe('Dashboard - Mobile (iPhone 12)', () => {
     await page.goto('/')
     
     // Open modal
-    const newTicketBtn = page.locator('button', { hasText: /New Ticket/i })
+    const newTicketBtn = page.locator('button', { hasText: /תקלה חדשה/i })
     await newTicketBtn.click()
     
     // Verify modal is visible and not cut off
-    const modal = page.locator('[style*="position"][style*="fixed"]').first()
-    await expect(modal).toBeVisible()
+    const modalTitle = page.locator('h2', { hasText: /תקלה חדשה/i }).first()
+    await expect(modalTitle).toBeVisible()
   })
 
   iPhoneContext('Scrollable content on small screens', async ({ page }) => {
@@ -96,7 +99,7 @@ androidContext.describe('Dashboard - Mobile (Pixel 5 Android)', () => {
   androidContext('Dashboard loads on Android mobile', async ({ page }) => {
     await page.goto('/')
     
-    await expect(page).toHaveTitle(/Dashboard|Bamakor/i)
+    await expect(page).toHaveTitle(/במקור|Bamakor|Dashboard/i)
     
     // Verify content is visible
     const content = page.locator('[style*="padding"]').first()
@@ -106,7 +109,7 @@ androidContext.describe('Dashboard - Mobile (Pixel 5 Android)', () => {
   androidContext('Key buttons are clickable on Android', async ({ page }) => {
     await page.goto('/')
     
-    const newTicketBtn = page.locator('button', { hasText: /New Ticket/i })
+    const newTicketBtn = page.locator('button', { hasText: /תקלה חדשה/i })
     await expect(newTicketBtn).toBeVisible()
     
     // Click and verify action
@@ -119,9 +122,12 @@ androidContext.describe('Dashboard - Mobile (Pixel 5 Android)', () => {
   androidContext('Dashboard navigation works on Android', async ({ page }) => {
     await page.goto('/')
     
-    // Check for tickets link
-    const ticketsLink = page.locator('a').filter({ hasText: /tickets/i })
-    const count = await ticketsLink.count()
-    expect(count).toBeGreaterThanOrEqual(0)
+    // Open mobile menu (same header pattern on narrow viewports)
+    const menuBtn = page.locator('button[aria-label="פתיחת תפריט"]').first()
+    await expect(menuBtn).toBeVisible()
+    await menuBtn.click()
+
+    const ticketsLink = page.locator('a[href="/tickets"]').first()
+    await expect(ticketsLink).toBeVisible()
   })
 })

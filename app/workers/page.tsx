@@ -49,8 +49,6 @@ type RawTicketWithProjects = {
   projects?: { project_code?: string; name?: string } | { project_code?: string; name?: string }[]
 }
 
-type ClientRow = { id: string }
-
 type WorkerForm = {
   full_name: string
   phone: string
@@ -86,17 +84,25 @@ export default function WorkersPage() {
   const [loadingWorkerTickets, setLoadingWorkerTickets] = useState(false)
 
   async function loadClientId() {
-    const { data, error } = await supabase
-      .from('clients')
-      .select('id')
-      .order('created_at', { ascending: true })
-      .limit(1)
-
-    if (error) throw error
-    const firstClient = (data as ClientRow[] | null)?.[0]
-    if (!firstClient?.id) throw new Error('No client found')
-    setClientId(firstClient.id)
-    return firstClient.id
+    const envClientId = process.env.NEXT_PUBLIC_BAMAKOR_CLIENT_ID
+    if (!envClientId) {
+      // Dev-only fallback to keep single-tenant DX when env isn't set
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('NEXT_PUBLIC_BAMAKOR_CLIENT_ID is not set')
+      }
+      const { data: rows, error } = await supabase
+        .from('clients')
+        .select('id')
+        .order('created_at', { ascending: true })
+        .limit(1)
+      if (error) throw error
+      const firstId = (rows as Array<{ id?: string }> | null)?.[0]?.id
+      if (!firstId) throw new Error('No client found')
+      setClientId(firstId)
+      return firstId
+    }
+    setClientId(envClientId)
+    return envClientId
   }
 
   async function loadWorkers(nextClientId?: string) {
@@ -186,6 +192,7 @@ export default function WorkersPage() {
             projects (project_code, name)
           `)
           .eq('assigned_worker_id', workerId)
+          .eq('client_id', clientId)
           .order('created_at', { ascending: false })
           .limit(10)
 

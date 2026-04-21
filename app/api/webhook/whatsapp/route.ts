@@ -21,6 +21,7 @@ import { getLogger } from '@/lib/logging'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'bamakor_verify_123'
 const logger = getLogger()
+const BAMAKOR_CLIENT_ID = process.env.BAMAKOR_CLIENT_ID || ''
 
 type ProjectRow = {
   id: string
@@ -427,6 +428,9 @@ async function resolveClientIdFromWhatsAppPhoneNumberId(
   supabaseAdmin: SupabaseClient,
   phoneNumberId: string
 ): Promise<string | null> {
+  // Single-tenant (Bamakor): always use configured client id.
+  if (BAMAKOR_CLIENT_ID) return BAMAKOR_CLIENT_ID
+
   const { data, error } = await supabaseAdmin
     .from('clients')
     .select('id')
@@ -458,6 +462,13 @@ export async function POST(req: NextRequest) {
   logger.info('WEBHOOK', 'WhatsApp webhook POST received', { requestId })
   
   try {
+    if (!BAMAKOR_CLIENT_ID) {
+      return NextResponse.json(
+        { error: 'Server configuration error. BAMAKOR_CLIENT_ID is not set.' },
+        { status: 500 }
+      )
+    }
+
     const body = await req.json()
     
     let supabaseAdmin
@@ -507,20 +518,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
-    const webhookClientId = await resolveClientIdFromWhatsAppPhoneNumberId(supabaseAdmin, phoneNumberId)
-    if (!webhookClientId) {
-      console.error('❌ Unknown WhatsApp phone number ID:', phoneNumberId)
-      return NextResponse.json({ received: true }, { status: 200 })
-    }
+    const webhookClientId = BAMAKOR_CLIENT_ID
 
     const { data: waClient, error: waClientErr } = await supabaseAdmin
       .from('clients')
-      .select('id, name, sms_sender_name, whatsapp_phone_number_id, whatsapp_access_token')
+      .select('id, name, sms_sender_name, whatsapp_phone_number_id, whatsapp_access_token, manager_phone')
       .eq('id', webhookClientId)
       .maybeSingle()
 
     if (waClientErr) {
       console.error('❌ Failed to load client WhatsApp credentials:', waClientErr)
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+    if (
+      waClient &&
+      (waClient as { whatsapp_phone_number_id?: string | null }).whatsapp_phone_number_id &&
+      (waClient as { whatsapp_phone_number_id?: string | null }).whatsapp_phone_number_id !== phoneNumberId
+    ) {
+      console.error('❌ WhatsApp phone_number_id does not match BAMAKOR client configuration', {
+        incomingPhoneNumberId: phoneNumberId,
+        expectedPhoneNumberId: (waClient as { whatsapp_phone_number_id?: string | null }).whatsapp_phone_number_id,
+      })
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
@@ -533,6 +551,7 @@ export async function POST(req: NextRequest) {
 
     const clientName = (waClient as { name?: string | null } | null)?.name || 'המערכת'
     const smsSenderName = (waClient as { sms_sender_name?: string | null } | null)?.sms_sender_name || 'במקור'
+    const clientManagerPhone = (waClient as { manager_phone?: string | null } | null)?.manager_phone || null
 
     // Expire temporary WhatsApp session state if inactive (scoped to this tenant)
     await expireInactiveSessions(supabaseAdmin, webhookClientId)
@@ -1399,8 +1418,7 @@ export async function POST(req: NextRequest) {
         const buildingLine = buildingNumber ? `בניין: ${buildingNumber}\n` : ''
         const smsMessage = `נפתחה תקלה חדשה\nפרויקט: ${projectForNotification.name}\n${buildingLine}תקלה: #${createdTicket.ticket_number}\nתיאור: ${textBody || 'ללא פירוט'}\nמדווח: ${from}\nכניסה למערכת:\nhttps://bamakor.vercel.app/tickets\n${clientName}`
 
-        const managerDestination =
-          getManagerPhoneFromEnv() || projectForNotification.manager_phone
+        const managerDestination = clientManagerPhone || projectForNotification.manager_phone || getManagerPhoneFromEnv()
 
         if (managerDestination) {
           console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket) → manager')

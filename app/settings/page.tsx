@@ -23,24 +23,17 @@ import {
 
 type ClientRow = {
   id: string
-  company_name?: string | null
-  logo_url?: string | null
-  preferred_language?: string | null
   manager_phone?: string | null
   default_worker_phone?: string | null
   sms_on_ticket_open?: boolean | null
   sms_on_ticket_close?: boolean | null
   whatsapp_phone_number_id?: string | null
   whatsapp_access_token?: string | null
-  plan_tier?: string | null
-  buildings_allowed?: number | null
 }
 
 const TABS = [
-  { id: 'company', label: 'פרטי חברה' },
   { id: 'notifications', label: 'התראות' },
   { id: 'whatsapp', label: 'וואטסאפ / הטמעה' },
-  { id: 'billing', label: 'מנוי' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -50,7 +43,7 @@ function SettingsPageInner() {
   const searchParams = useSearchParams()
   const tabFromUrl = searchParams.get('tab') as TabId | null
   const activeTab: TabId =
-    tabFromUrl && TABS.some((t) => t.id === tabFromUrl) ? tabFromUrl : 'company'
+    tabFromUrl && TABS.some((t) => t.id === tabFromUrl) ? tabFromUrl : 'notifications'
 
   function goTab(id: TabId) {
     router.replace(`/settings?tab=${encodeURIComponent(id)}`, { scroll: false })
@@ -62,11 +55,6 @@ function SettingsPageInner() {
 
   const [clientId, setClientId] = useState<string>('')
   const [client, setClient] = useState<ClientRow | null>(null)
-  const [buildingsUsed, setBuildingsUsed] = useState(0)
-
-  const [companyName, setCompanyName] = useState('')
-  const [logoUrl, setLogoUrl] = useState('')
-  const [preferredLanguage, setPreferredLanguage] = useState<'he' | 'en'>('he')
 
   const [managerPhone, setManagerPhone] = useState('')
   const [defaultWorkerPhone, setDefaultWorkerPhone] = useState('')
@@ -77,11 +65,9 @@ function SettingsPageInner() {
   const [waAccessToken, setWaAccessToken] = useState('')
   const [waTokenLoaded, setWaTokenLoaded] = useState(false)
 
-  const [savingCompany, setSavingCompany] = useState(false)
   const [savingNotifications, setSavingNotifications] = useState(false)
   const [savingWhatsapp, setSavingWhatsapp] = useState(false)
   const [testingWa, setTestingWa] = useState(false)
-  const [uploadingLogo, setUploadingLogo] = useState(false)
 
   const [origin, setOrigin] = useState('')
 
@@ -102,26 +88,44 @@ function SettingsPageInner() {
     [origin]
   )
 
+  async function resolveBamakorClientId(): Promise<string> {
+    const envClientId = process.env.NEXT_PUBLIC_BAMAKOR_CLIENT_ID
+    if (envClientId) return envClientId
+
+    // Dev-only fallback (keeps single-tenant DX when env isn't set)
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('NEXT_PUBLIC_BAMAKOR_CLIENT_ID is not set')
+    }
+
+    const { data: rows, error } = await supabase
+      .from('clients')
+      .select('id')
+      .order('created_at', { ascending: true })
+      .limit(1)
+
+    if (error) throw error
+    const firstId = (rows as Array<{ id?: string }> | null)?.[0]?.id
+    if (!firstId) throw new Error('לא נמצא רשומת לקוח')
+    return firstId
+  }
+
   async function load() {
     setLoading(true)
     await asyncHandler(
       async () => {
-        const { data: rows, error: cErr } = await supabase
+        const resolvedClientId = await resolveBamakorClientId()
+
+        const { data: row, error: cErr } = await supabase
           .from('clients')
-          .select('*')
-          .order('created_at', { ascending: true })
-          .limit(1)
+          .select('id, manager_phone, default_worker_phone, sms_on_ticket_open, sms_on_ticket_close, whatsapp_phone_number_id, whatsapp_access_token')
+          .eq('id', resolvedClientId)
+          .maybeSingle()
 
         if (cErr) throw cErr
-        const row = (rows as ClientRow[] | null)?.[0]
         if (!row?.id) throw new Error('לא נמצא רשומת לקוח')
 
         setClientId(row.id)
         setClient(row)
-
-        setCompanyName(row.company_name || '')
-        setLogoUrl(row.logo_url || '')
-        setPreferredLanguage(row.preferred_language === 'en' ? 'en' : 'he')
 
         setManagerPhone(row.manager_phone || '')
         setDefaultWorkerPhone(row.default_worker_phone || '')
@@ -131,14 +135,6 @@ function SettingsPageInner() {
         setWaPhoneNumberId(row.whatsapp_phone_number_id || '')
         setWaAccessToken(row.whatsapp_access_token || '')
         setWaTokenLoaded(true)
-
-        const { count, error: pErr } = await supabase
-          .from('projects')
-          .select('id', { count: 'exact', head: true })
-          .eq('client_id', row.id)
-
-        if (pErr) throw pErr
-        setBuildingsUsed(count ?? 0)
 
         return true
       },
@@ -151,29 +147,6 @@ function SettingsPageInner() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load from Supabase
     void load()
   }, [])
-
-  async function saveCompany() {
-    if (!clientId) return
-    setSavingCompany(true)
-    await asyncHandler(
-      async () => {
-        const { error } = await supabase
-          .from('clients')
-          .update({
-            company_name: companyName.trim() || null,
-            logo_url: logoUrl.trim() || null,
-            preferred_language: preferredLanguage,
-          })
-          .eq('id', clientId)
-        if (error) throw error
-        toast.success('נשמר')
-        await load()
-        return true
-      },
-      { context: 'שמירה נכשלה', showErrorToast: true }
-    )
-    setSavingCompany(false)
-  }
 
   async function saveNotifications() {
     if (!clientId) return
@@ -221,28 +194,6 @@ function SettingsPageInner() {
     setSavingWhatsapp(false)
   }
 
-  async function onLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file || !clientId) return
-    setUploadingLogo(true)
-    await asyncHandler(
-      async () => {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('client_id', clientId)
-        const res = await fetch('/api/settings/upload-logo', { method: 'POST', body: fd })
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error || 'העלאה נכשלה')
-        setLogoUrl(json.url)
-        toast.success('הלוגו הועלה — לחצו שמירה בטאב פרטי חברה')
-        return true
-      },
-      { context: 'העלאת לוגו נכשלה', showErrorToast: true }
-    )
-    setUploadingLogo(false)
-    e.target.value = ''
-  }
-
   async function copyWebhook() {
     try {
       await navigator.clipboard.writeText(webhookUrl)
@@ -272,14 +223,6 @@ function SettingsPageInner() {
     setTestingWa(false)
   }
 
-  const planTier = (client?.plan_tier || 'basic').toLowerCase()
-  const planLabel =
-    planTier === 'pro' ? 'Pro' : planTier === 'enterprise' ? 'Enterprise' : 'Basic'
-  const planLabelHe =
-    planTier === 'pro' ? 'מקצועי' : planTier === 'enterprise' ? 'ארגוני' : 'בסיסי'
-
-  const buildingsAllowed = client?.buildings_allowed ?? 10
-
   return (
     <AppShell isMobile={isMobile}>
       {isMobile && (
@@ -293,7 +236,7 @@ function SettingsPageInner() {
 
       <div style={styles.content}>
         {!isMobile && (
-          <PageHeader title="הגדרות" subtitle="ניהול פרטי חברה, התראות, וואטסאפ ומנוי" />
+          <PageHeader title="הגדרות" subtitle="התראות ווואטסאפ" />
         )}
 
         {loading ? (
@@ -319,65 +262,6 @@ function SettingsPageInner() {
                 </button>
               ))}
             </div>
-
-            {activeTab === 'company' && (
-              <Card noPadding>
-                <div style={styles.cardInner}>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>שם חברה</label>
-                    <input
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      style={styles.input}
-                      placeholder="לדוגמה: חברת שרה ניהול נכסים"
-                    />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>לוגו</label>
-                    {logoUrl ? (
-                      <div style={styles.logoPreview}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={logoUrl} alt="" style={{ maxWidth: 120, maxHeight: 120, objectFit: 'contain' }} />
-                      </div>
-                    ) : null}
-                    <input type="file" accept="image/*" onChange={onLogoFile} style={styles.fileInput} />
-                    <span style={styles.formHint}>העלאה ל-Supabase Storage (bucket: client-logos)</span>
-                    {uploadingLogo && <span style={styles.formHint}>מעלה…</span>}
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>שפת ממשק</label>
-                    <div style={styles.langRow}>
-                      <button
-                        type="button"
-                        onClick={() => setPreferredLanguage('he')}
-                        style={{
-                          ...styles.langBtn,
-                          ...(preferredLanguage === 'he' ? styles.langBtnActive : {}),
-                        }}
-                      >
-                        עברית
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPreferredLanguage('en')}
-                        style={{
-                          ...styles.langBtn,
-                          ...(preferredLanguage === 'en' ? styles.langBtnActive : {}),
-                        }}
-                      >
-                        English
-                      </button>
-                    </div>
-                    <span style={styles.formHint}>המערכת כרגע בעברית (RTL); העדפה נשמרת לעתיד</span>
-                  </div>
-                  <div style={styles.drawerActions}>
-                    <Button variant="primary" onClick={saveCompany} loading={savingCompany}>
-                      שמור שינויים
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            )}
 
             {activeTab === 'notifications' && (
               <Card noPadding>
@@ -473,24 +357,6 @@ function SettingsPageInner() {
                 </div>
               </Card>
             )}
-
-            {activeTab === 'billing' && (
-              <Card noPadding>
-                <div style={styles.cardInner}>
-                  <div style={styles.planRow}>
-                    <span style={styles.planBadge}>{planLabelHe}</span>
-                    <span style={styles.planSub}>({planLabel})</span>
-                  </div>
-                  <p style={styles.planText}>
-                    בניינים בשימוש: <strong>{buildingsUsed}</strong> מתוך <strong>{buildingsAllowed}</strong>
-                  </p>
-                  <Button variant="secondary" type="button" onClick={() => toast.info('צור קשר לשדרוג')}>
-                    צור קשר לשדרוג
-                  </Button>
-                  <p style={styles.formHint}>תשלום / Stripe — יתווסף בהמשך</p>
-                </div>
-              </Card>
-            )}
           </>
         )}
       </div>
@@ -548,7 +414,7 @@ const styles: Record<string, CSSProperties> = {
     zIndex: 2,
   },
   tabBtnActive: {
-    borderColor: theme.colors.primary,
+    border: `1px solid ${theme.colors.primary}`,
     background: theme.colors.primaryMuted,
     color: theme.colors.primary,
   },
@@ -580,32 +446,6 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '12px',
     color: theme.colors.textMuted,
   },
-  fileInput: {
-    fontSize: '14px',
-  },
-  logoPreview: {
-    padding: '12px',
-    background: theme.colors.muted,
-    borderRadius: theme.radius.md,
-    display: 'inline-block',
-  },
-  langRow: {
-    display: 'flex',
-    gap: '10px',
-  },
-  langBtn: {
-    padding: '10px 20px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
-    background: theme.colors.surface,
-    cursor: 'pointer',
-    fontSize: '15px',
-  },
-  langBtnActive: {
-    borderColor: theme.colors.primary,
-    background: theme.colors.primaryMuted,
-    color: theme.colors.primary,
-  },
   checkboxLabel: {
     display: 'flex',
     alignItems: 'center',
@@ -633,28 +473,5 @@ const styles: Record<string, CSSProperties> = {
     gap: '10px',
     alignItems: 'center',
     flexWrap: 'wrap',
-  },
-  planRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  planBadge: {
-    display: 'inline-block',
-    padding: '6px 14px',
-    borderRadius: theme.radius.full,
-    background: theme.colors.primaryMuted,
-    color: theme.colors.primary,
-    fontWeight: 600,
-    fontSize: '15px',
-  },
-  planSub: {
-    fontSize: '14px',
-    color: theme.colors.textMuted,
-  },
-  planText: {
-    fontSize: '15px',
-    color: theme.colors.textSecondary,
-    margin: 0,
   },
 }

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import {
   AppShell,
@@ -10,6 +11,7 @@ import {
   PageHeader,
   KpiCard,
   Card,
+  Button,
   Select,
   LoadingSpinner,
   theme
@@ -65,7 +67,9 @@ export default function SummaryPage() {
   const [loading, setLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [period, setPeriod] = useState<'week' | 'month' | 'all'>('week')
+  const [period, setPeriod] = useState<'week' | 'month' | 'all' | 'custom'>('week')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900)
@@ -132,41 +136,88 @@ export default function SummaryPage() {
     setLoading(false)
   }
 
-  const summary = useMemo(() => {
+  function startOfDay(d: Date) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  }
+
+  function clampDateRange(range: { from: Date; toExclusive: Date }) {
+    const from = range.from
+    const toExclusive = range.toExclusive
+    if (!(from instanceof Date) || isNaN(from.getTime())) return null
+    if (!(toExclusive instanceof Date) || isNaN(toExclusive.getTime())) return null
+    if (toExclusive <= from) return null
+    return { from, toExclusive }
+  }
+
+  function resolveDateRange(): { label: string; from: Date; toExclusive: Date } | null {
     const now = new Date()
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const startOfWeek = new Date(startOfToday)
-    startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay())
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const today = startOfDay(now)
 
-    const todayOpened = tickets.filter((t) => new Date(t.created_at) >= startOfToday).length
-    const todayClosed = tickets.filter((t) => t.closed_at && new Date(t.closed_at) >= startOfToday).length
+    if (period === 'all') {
+      return { label: 'מתחילת התקופה', from: new Date(0), toExclusive: new Date(now.getTime() + 1) }
+    }
 
-    const weekOpened = tickets.filter((t) => new Date(t.created_at) >= startOfWeek).length
-    const weekClosed = tickets.filter((t) => t.closed_at && new Date(t.closed_at) >= startOfWeek).length
+    if (period === 'week') {
+      const start = new Date(today)
+      start.setDate(today.getDate() - today.getDay())
+      return { label: 'השבוע', from: start, toExclusive: new Date(now.getTime() + 1) }
+    }
 
-    const monthOpened = tickets.filter((t) => new Date(t.created_at) >= startOfMonth).length
-    const monthClosed = tickets.filter((t) => t.closed_at && new Date(t.closed_at) >= startOfMonth).length
+    if (period === 'month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      return { label: 'החודש', from: start, toExclusive: new Date(now.getTime() + 1) }
+    }
 
+    // custom
+    if (!customFrom || !customTo) return null
+    const from = startOfDay(new Date(customFrom))
+    const toInclusive = startOfDay(new Date(customTo))
+    const toExclusive = new Date(toInclusive.getTime() + 24 * 60 * 60 * 1000)
+    const valid = clampDateRange({ from, toExclusive })
+    if (!valid) return null
+    return {
+      label: `מותאם אישית (${from.toLocaleDateString('he-IL')}–${toInclusive.toLocaleDateString('he-IL')})`,
+      from: valid.from,
+      toExclusive: valid.toExclusive,
+    }
+  }
+
+  const activeRange = useMemo(() => resolveDateRange(), [period, customFrom, customTo])
+
+  const ticketsInRange = useMemo(() => {
+    if (!activeRange) return []
+    return tickets.filter((t) => {
+      const createdAt = new Date(t.created_at)
+      return createdAt >= activeRange.from && createdAt < activeRange.toExclusive
+    })
+  }, [tickets, activeRange])
+
+  const closedInRangeCount = useMemo(() => {
+    if (!activeRange) return 0
+    return tickets.filter((t) => {
+      if (!t.closed_at) return false
+      const closedAt = new Date(t.closed_at)
+      return closedAt >= activeRange.from && closedAt < activeRange.toExclusive
+    }).length
+  }, [tickets, activeRange])
+
+  const summary = useMemo(() => {
     const openNow = tickets.filter((t) => t.status === 'NEW').length
     const assignedNow = tickets.filter((t) => t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS').length
 
     return {
-      todayOpened,
-      todayClosed,
-      weekOpened,
-      weekClosed,
-      monthOpened,
-      monthClosed,
+      openedInRange: ticketsInRange.length,
+      closedInRange: closedInRangeCount,
       openNow,
       assignedNow,
     }
-  }, [tickets])
+  }, [tickets, ticketsInRange.length, closedInRangeCount])
 
   const projectStats = useMemo(() => {
+    const sourceTickets = activeRange ? ticketsInRange : tickets
     return projects
       .map((project) => {
-        const projectTickets = tickets.filter(
+        const projectTickets = sourceTickets.filter(
           (t) =>
             (t.project_id && t.project_id === project.id) ||
             (!!t.project_code && t.project_code === project.project_code)
@@ -182,12 +233,13 @@ export default function SummaryPage() {
         }
       })
       .sort((a, b) => b.total - a.total)
-  }, [projects, tickets])
+  }, [projects, tickets, ticketsInRange, activeRange])
 
   const workerLoad = useMemo(() => {
+    const sourceTickets = activeRange ? ticketsInRange : tickets
     return workers
       .map((worker) => {
-        const assignedTickets = tickets.filter(
+        const assignedTickets = sourceTickets.filter(
           (t) => t.assigned_worker_id === worker.id && t.status !== 'CLOSED'
         ).length
         return {
@@ -198,7 +250,7 @@ export default function SummaryPage() {
       })
       .filter((w) => w.assigned_tickets > 0)
       .sort((a, b) => b.assigned_tickets - a.assigned_tickets)
-  }, [workers, tickets])
+  }, [workers, tickets, ticketsInRange, activeRange])
 
   const projectsRequiringAttention = useMemo(() => {
     return projectStats
@@ -228,6 +280,44 @@ export default function SummaryPage() {
     })
   }
 
+  function exportSummaryToExcel() {
+    const range = activeRange
+    if (!range) return
+
+    const kpiRows = [
+      { מדד: 'פתוחות כעת', ערך: summary.openNow },
+      { מדד: 'בטיפול כעת', ערך: summary.assignedNow },
+      { מדד: `נפתחו (${range.label})`, ערך: summary.openedInRange },
+      { מדד: `נסגרו (${range.label})`, ערך: summary.closedInRange },
+    ]
+
+    const projectRows = projectStats.map((p) => ({
+      פרויקט: p.name,
+      קוד: p.project_code,
+      'סה״כ תקלות': p.total,
+      פתוחות: p.open,
+      בטיפול: p.assigned,
+      נסגרו: p.closed,
+    }))
+
+    const workerRows = workerLoad.map((w) => ({
+      עובד: w.full_name,
+      'תקלות פעילות': w.assigned_tickets,
+    }))
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ טווח: range.label, הופק_בתאריך: new Date().toLocaleString('he-IL') }]), 'Meta')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(kpiRows), 'KPIs')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(projectRows), 'Projects')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(workerRows), 'Workers')
+
+    const safeName =
+      period === 'custom'
+        ? `summary-custom-${customFrom || 'from'}-${customTo || 'to'}`
+        : `summary-${period}`
+    XLSX.writeFile(wb, `${safeName}.xlsx`)
+  }
+
   return (
     <AppShell isMobile={isMobile}>
       {isMobile && (
@@ -247,31 +337,81 @@ export default function SummaryPage() {
             title="סיכום"
             subtitle="סקירה תפעולית ומדדי ביצוע"
             actions={
-              <Select
-                value={period}
-                onChange={(value) => setPeriod(value as 'week' | 'month' | 'all')}
-                options={[
-                  { label: 'השבוע', value: 'week' },
-                  { label: 'החודש', value: 'month' },
-                  { label: 'מתחילת התקופה', value: 'all' },
-                ]}
-              />
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <Select
+                  value={period}
+                  onChange={(value) => setPeriod(value as 'week' | 'month' | 'all' | 'custom')}
+                  options={[
+                    { label: 'השבוע', value: 'week' },
+                    { label: 'החודש', value: 'month' },
+                    { label: 'מתחילת התקופה', value: 'all' },
+                    { label: 'התאמה אישית', value: 'custom' },
+                  ]}
+                />
+                <Button
+                  variant="secondary"
+                  type="button"
+                  disabled={!activeRange}
+                  onClick={exportSummaryToExcel}
+                >
+                  ייצוא ל-Excel
+                </Button>
+              </div>
             }
           />
         )}
         {isMobile && (
           <div style={{ marginBottom: '24px', marginTop: '-8px' }}>
-            <Select
-              value={period}
-              onChange={(value) => setPeriod(value as 'week' | 'month' | 'all')}
-              options={[
-                { label: 'השבוע', value: 'week' },
-                { label: 'החודש', value: 'month' },
-                { label: 'מתחילת התקופה', value: 'all' },
-              ]}
-              style={{ width: '100%', maxWidth: '360px' }}
-            />
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <Select
+                value={period}
+                onChange={(value) => setPeriod(value as 'week' | 'month' | 'all' | 'custom')}
+                options={[
+                  { label: 'השבוע', value: 'week' },
+                  { label: 'החודש', value: 'month' },
+                  { label: 'מתחילת התקופה', value: 'all' },
+                  { label: 'התאמה אישית', value: 'custom' },
+                ]}
+                style={{ width: '100%', maxWidth: '360px' }}
+              />
+              <Button
+                variant="secondary"
+                type="button"
+                disabled={!activeRange}
+                onClick={exportSummaryToExcel}
+              >
+                ייצוא ל-Excel
+              </Button>
+            </div>
           </div>
+        )}
+
+        {period === 'custom' && (
+          <Card style={{ marginBottom: '24px' }}>
+            <div style={styles.dateRow}>
+              <div style={styles.dateField}>
+                <label style={styles.dateLabel}>מתאריך</label>
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  style={styles.dateInput}
+                />
+              </div>
+              <div style={styles.dateField}>
+                <label style={styles.dateLabel}>עד תאריך</label>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  style={styles.dateInput}
+                />
+              </div>
+              {!activeRange && (
+                <div style={styles.dateHint}>בחרו טווח תאריכים תקין (עד תאריך חייב להיות אחרי מתאריך)</div>
+              )}
+            </div>
+          </Card>
         )}
 
         {loading ? (
@@ -298,14 +438,14 @@ export default function SummaryPage() {
                 onClick={() => navigateToTickets({ status: 'ASSIGNED' })}
               />
               <KpiCard
-                label="נפתחו השבוע"
-                value={summary.weekOpened}
+                label={activeRange ? `נפתחו (${activeRange.label})` : 'נפתחו'}
+                value={summary.openedInRange}
                 accent="primary"
                 onClick={() => navigateToTickets()}
               />
               <KpiCard
-                label="נסגרו השבוע"
-                value={summary.weekClosed}
+                label={activeRange ? `נסגרו (${activeRange.label})` : 'נסגרו'}
+                value={summary.closedInRange}
                 accent="success"
               />
             </div>
@@ -315,13 +455,15 @@ export default function SummaryPage() {
               <div style={styles.metricsGrid}>
                 <div style={styles.metricCard}>
                   <div style={styles.metricValue}>
-                    {summary.weekOpened > 0
-                      ? `${Math.round((summary.weekClosed / summary.weekOpened) * 100)}%`
+                    {summary.openedInRange > 0
+                      ? `${Math.round((summary.closedInRange / summary.openedInRange) * 100)}%`
                       : '—'}
                   </div>
-                  <div style={styles.metricLabel}>אחוז סגירה (7 ימים)</div>
+                  <div style={styles.metricLabel}>
+                    אחוז סגירה ({activeRange ? activeRange.label : 'טווח'})
+                  </div>
                   <div style={styles.metricDescription}>
-                    {summary.weekClosed} מתוך {summary.weekOpened} נסגרו
+                    {summary.closedInRange} מתוך {summary.openedInRange} נסגרו
                   </div>
                 </div>
 
@@ -526,6 +668,36 @@ const styles: Record<string, CSSProperties> = {
     outline: 'none',
     border: 'none',
     boxSizing: 'border-box',
+  },
+  dateRow: {
+    display: 'flex',
+    gap: '16px',
+    alignItems: 'flex-end',
+    flexWrap: 'wrap',
+  },
+  dateField: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    minWidth: '220px',
+  },
+  dateLabel: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: theme.colors.textSecondary,
+  },
+  dateInput: {
+    padding: '10px 12px',
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.colors.border}`,
+    background: theme.colors.surface,
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
+  },
+  dateHint: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+    paddingBottom: '6px',
   },
   loadingContainer: {
     display: 'flex',

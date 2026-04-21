@@ -35,8 +35,6 @@ type ProjectRow = {
 
 type WorkerRow = { id: string; full_name: string }
 
-type ClientRow = { id: string }
-
 type ProjectForm = {
   name: string
   project_code: string
@@ -82,33 +80,47 @@ export default function ProjectsPage() {
   const [loadingTickets, setLoadingTickets] = useState(false)
 
   async function loadClientId() {
-    const { data, error } = await supabase
-      .from('clients')
-      .select('id')
-      .order('created_at', { ascending: true })
-      .limit(1)
-
-    if (error) throw error
-    const firstClient = (data as ClientRow[] | null)?.[0]
-    if (!firstClient?.id) throw new Error('No client found')
-    setClientId(firstClient.id)
-    return firstClient.id
+    const envClientId = process.env.NEXT_PUBLIC_BAMAKOR_CLIENT_ID
+    if (!envClientId) {
+      // Dev-only fallback to keep single-tenant DX when env isn't set
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('NEXT_PUBLIC_BAMAKOR_CLIENT_ID is not set')
+      }
+      const { data: rows, error } = await supabase
+        .from('clients')
+        .select('id')
+        .order('created_at', { ascending: true })
+        .limit(1)
+      if (error) throw error
+      const firstId = (rows as Array<{ id?: string }> | null)?.[0]?.id
+      if (!firstId) throw new Error('No client found')
+      setClientId(firstId)
+      return firstId
+    }
+    setClientId(envClientId)
+    return envClientId
   }
 
-  async function loadProjects() {
+  async function loadProjects(nextClientId?: string) {
+    const activeClientId = nextClientId || clientId
+    if (!activeClientId) return
     const { data, error } = await supabase
       .from('projects')
       .select('*')
+      .eq('client_id', activeClientId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
     setProjects((data as ProjectRow[]) || [])
   }
 
-  async function loadWorkers() {
+  async function loadWorkers(nextClientId?: string) {
+    const activeClientId = nextClientId || clientId
+    if (!activeClientId) return
     const { data, error } = await supabase
       .from('workers')
       .select('id, full_name')
+      .eq('client_id', activeClientId)
       .order('full_name', { ascending: true })
 
     if (error) throw error
@@ -135,9 +147,9 @@ export default function ProjectsPage() {
     setLoading(true)
     await asyncHandler(
       async () => {
-        await loadClientId()
-        await loadWorkers()
-        await loadProjects()
+        const fetchedClientId = await loadClientId()
+        await loadWorkers(fetchedClientId)
+        await loadProjects(fetchedClientId)
         return true
       },
       { context: 'Failed to load projects', showErrorToast: true }

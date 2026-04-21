@@ -692,11 +692,11 @@ export function PageHeader({
 }) {
   return (
     <div style={pageHeaderStyles.container}>
-      {actions && <div style={pageHeaderStyles.actions}>{actions}</div>}
       <div style={{ flex: 1, minWidth: 0 }}>
         <h1 style={pageHeaderStyles.title}>{title}</h1>
         {subtitle && <p style={pageHeaderStyles.subtitle}>{subtitle}</p>}
       </div>
+      {actions && <div style={pageHeaderStyles.actions}>{actions}</div>}
     </div>
   )
 }
