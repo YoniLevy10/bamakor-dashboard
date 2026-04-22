@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
     const ticketQuery = supabaseAdmin
       .from('tickets')
-      .select('id, ticket_number, status, reporter_phone, project_id, client_id, projects (name)')
+      .select('id, status, reporter_phone, project_id, client_id, projects (name)')
       .eq('id', ticket_id)
       .eq('client_id', bamakorClientId)
 
@@ -91,7 +91,6 @@ export async function POST(req: Request) {
     logger.info('TICKET_API', 'Ticket closed successfully', { requestId, ticket_id })
 
     type TicketWithProject = {
-      ticket_number: number
       reporter_phone?: string | null
       projects?: { name?: string | null } | { name?: string | null }[] | null
     }
@@ -101,28 +100,18 @@ export async function POST(req: Request) {
 
     const notify = await notifyReporterTicketClosed(supabaseAdmin, clientId, {
       reporterPhone: trow.reporter_phone,
-      ticketNumber: trow.ticket_number,
       projectName: projectName || 'הבניין',
     })
-    logger.info('TICKET_API', 'Reporter notify on close', {
+    logger.info('TICKET_API', 'Reporter WhatsApp on close', {
       requestId,
       ticket_id,
       whatsappSent: notify.whatsappSent,
-      smsSent: notify.smsSent,
     })
     if (notify.whatsappError) {
       logger.warn('TICKET_API', 'Reporter WhatsApp on close failed', {
         requestId,
         ticket_id,
         error: notify.whatsappError,
-      })
-    }
-    if (notify.smsError || !notify.smsSent) {
-      logger.warn('TICKET_API', 'Reporter SMS on close issue', {
-        requestId,
-        ticket_id,
-        smsSent: notify.smsSent,
-        error: notify.smsError,
       })
     }
 
@@ -160,7 +149,6 @@ export async function POST(req: Request) {
       ticket: updatedTicket,
       reporter_has_phone: Boolean(trow.reporter_phone?.trim()),
       whatsapp_sent: notify.whatsappSent,
-      sms_sent: notify.smsSent,
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))

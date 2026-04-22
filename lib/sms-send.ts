@@ -2,7 +2,7 @@
  * 019SMS notification service for internal staff
  * 
  * ARCHITECTURE:
- * - Residents: WhatsApp (conversation flow); SMS only for short “ticket closed” confirmation
+ * - Residents: WhatsApp (conversation flow) — ticket close uses WhatsApp only
  * - Workers: SMS via 019SMS (internal notifications)
  * - Manager: SMS via 019SMS (internal notifications)
  * 
@@ -19,8 +19,8 @@
  * - Success: status code 0 in response
  * - Phone format: 5xxxxxxx or 05xxxxxxx (Israeli format)
  * 
- * This module sends outbound SMS via 019SMS (workers/manager and, when a ticket is closed,
- * a short confirmation to the reporter’s phone). Resident chat remains primarily on WhatsApp.
+ * This module handles outbound SMS to internal staff via 019SMS. Resident communication
+ * stays on WhatsApp (including ticket closed).
  */
 
 import { fetchWithTimeout } from '@/lib/fetch-timeout'

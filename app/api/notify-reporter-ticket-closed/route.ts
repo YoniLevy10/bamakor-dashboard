@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
     const { data: ticket, error: ticketError } = await supabaseAdmin
       .from('tickets')
-      .select('id, ticket_number, status, reporter_phone, project_id, client_id, projects (name)')
+      .select('id, status, reporter_phone, project_id, client_id, projects (name)')
       .eq('id', ticket_id)
       .eq('client_id', clientId)
       .single()
@@ -46,7 +46,6 @@ export async function POST(req: Request) {
 
     const t = ticket as {
       reporter_phone?: string | null
-      ticket_number: number
       projects?: { name?: string | null } | { name?: string | null }[] | null
     }
     const proj = t.projects
@@ -56,34 +55,23 @@ export async function POST(req: Request) {
 
     const notify = await notifyReporterTicketClosed(supabaseAdmin, clientId, {
       reporterPhone: t.reporter_phone,
-      ticketNumber: t.ticket_number,
       projectName: projectName || 'הבניין',
     })
 
-    logger.info('NOTIFY_CLOSED', 'Reporter notified after close', {
+    logger.info('NOTIFY_CLOSED', 'Reporter WhatsApp after close', {
       requestId,
       ticket_id,
       whatsappSent: notify.whatsappSent,
-      smsSent: notify.smsSent,
     })
 
     if (notify.whatsappError) {
       logger.warn('NOTIFY_CLOSED', 'WhatsApp notify failed', { requestId, ticket_id, error: notify.whatsappError })
-    }
-    if (notify.smsError || !notify.smsSent) {
-      logger.warn('NOTIFY_CLOSED', 'SMS notify issue', {
-        requestId,
-        ticket_id,
-        smsSent: notify.smsSent,
-        error: notify.smsError,
-      })
     }
 
     return NextResponse.json({
       success: true,
       reporter_has_phone: reporterHasPhone,
       whatsapp_sent: notify.whatsappSent,
-      sms_sent: notify.smsSent,
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
