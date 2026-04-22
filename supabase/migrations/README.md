@@ -40,4 +40,3 @@ supabase db push
 ## הערות
 
 - **013–014 וגם 016**: כולם משתמשים ב־`ADD COLUMN IF NOT EXISTS` — בטוחים גם אם כבר יישמת ידנית.
-- **חבילת ארכיון לוגיקה ישנה** ב-`app/api/webhook/whatsapp/archive/README.md` (לא DB).

@@ -28,6 +28,9 @@
 .DS_Store
 *.pem
 
+# Generated for Google Docs workflow (see WHATSAPP_SCRIPTS.md)
+/SARA_MESSAGE_SCRIPTS.docx
+
 # debug
 npm-debug.log*
 yarn-debug.log*

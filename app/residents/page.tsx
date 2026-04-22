@@ -51,6 +51,7 @@ export default function ResidentsPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [editResidentId, setEditResidentId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deletingResident, setDeletingResident] = useState(false)
   const [addError, setAddError] = useState('')
   const [addProjectId, setAddProjectId] = useState('')
   const [addFullName, setAddFullName] = useState('')
@@ -122,6 +123,26 @@ export default function ResidentsPage() {
 
   function openImport() {
     setImportOpen(true)
+  }
+
+  async function deleteResident() {
+    if (residentsTableMissing || !editResidentId) return
+    const name = addFullName.trim() || 'הדייר'
+    if (!window.confirm(`למחוק את ${name} מהרשימה? הפעולה לא ניתנת לשחזור.`)) return
+
+    setDeletingResident(true)
+    setAddError('')
+    try {
+      const { error } = await supabase.from('residents').delete().eq('id', editResidentId)
+      if (error) throw error
+      setResidents((prev) => prev.filter((x) => x.id !== editResidentId))
+      closeResidentModal()
+      toast.success('הדייר נמחק')
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'מחיקת דייר נכשלה')
+    } finally {
+      setDeletingResident(false)
+    }
   }
 
   async function submitAdd(e: React.FormEvent) {
@@ -365,6 +386,8 @@ export default function ResidentsPage() {
         error={addError}
         loading={saving}
         variant={editResidentId ? 'edit' : 'add'}
+        onDelete={editResidentId ? deleteResident : undefined}
+        deleteLoading={deletingResident}
         onProjectIdChange={setAddProjectId}
         onFullNameChange={setAddFullName}
         onPhoneChange={setAddPhone}

@@ -18,6 +18,9 @@ type AddResidentModalProps = {
   loading: boolean
   /** 'edit' — כותרת וכפתור שמירה לעדכון דייר קיים */
   variant?: 'add' | 'edit'
+  /** במצב עריכה — מחיקת הדייר (כפתור מסוכן ליד ביטול/שמירה) */
+  onDelete?: () => void
+  deleteLoading?: boolean
   onProjectIdChange: (value: string) => void
   onFullNameChange: (value: string) => void
   onPhoneChange: (value: string) => void
@@ -38,6 +41,8 @@ export function AddResidentModal({
   error,
   loading,
   variant = 'add',
+  onDelete,
+  deleteLoading = false,
   onProjectIdChange,
   onFullNameChange,
   onPhoneChange,
@@ -145,12 +150,27 @@ export function AddResidentModal({
           {error && <div style={styles.formError}>{error}</div>}
 
           <div style={styles.modalActions}>
-            <Button variant="secondary" type="button" onClick={onClose}>
-              ביטול
-            </Button>
-            <Button variant="primary" loading={loading} type="submit">
-              {isEdit ? 'שמירת שינויים' : 'שמירה'}
-            </Button>
+            <div style={styles.modalActionsStart}>
+              {isEdit && onDelete ? (
+                <Button
+                  variant="danger"
+                  type="button"
+                  onClick={onDelete}
+                  loading={deleteLoading}
+                  disabled={loading}
+                >
+                  מחק דייר
+                </Button>
+              ) : null}
+            </div>
+            <div style={styles.modalActionsEnd}>
+              <Button variant="secondary" type="button" onClick={onClose} disabled={deleteLoading}>
+                ביטול
+              </Button>
+              <Button variant="primary" loading={loading} type="submit" disabled={deleteLoading}>
+                {isEdit ? 'שמירת שינויים' : 'שמירה'}
+              </Button>
+            </div>
           </div>
         </form>
       </div>
@@ -260,9 +280,21 @@ const styles: Record<string, CSSProperties> = {
   },
   modalActions: {
     display: 'flex',
+    flexWrap: 'wrap',
     gap: '10px',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: '8px',
+  },
+  modalActionsStart: {
+    display: 'flex',
+    alignItems: 'center',
+    minHeight: '40px',
+  },
+  modalActionsEnd: {
+    display: 'flex',
+    gap: '10px',
+    marginInlineStart: 'auto',
   },
 }
 
