@@ -97,7 +97,9 @@ function SettingsPageInner() {
 
         const { data: row, error: cErr } = await supabase
           .from('clients')
-          .select('id, manager_phone, sms_on_ticket_open, sms_on_ticket_close, whatsapp_phone_number_id, whatsapp_access_token')
+          .select(
+            'id, manager_phone, default_worker_phone, sms_on_ticket_open, sms_on_ticket_close, whatsapp_phone_number_id, whatsapp_access_token'
+          )
           .eq('id', resolvedClientId)
           .maybeSingle()
 
@@ -108,7 +110,7 @@ function SettingsPageInner() {
         setClient(row)
 
         setManagerPhone(row.manager_phone || '')
-        setDefaultWorkerPhone('')
+        setDefaultWorkerPhone(row.default_worker_phone || '')
         setSmsOnOpen(row.sms_on_ticket_open !== false)
         setSmsOnClose(row.sms_on_ticket_close !== false)
 
