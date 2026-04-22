@@ -331,18 +331,14 @@ export default function DashboardPage() {
         .order('created_at', { ascending: false })
 
       if (data && data.length > 0) {
-        const attachmentsWithUrls = await Promise.all(
-          data.map(async (attachment: AttachmentRow) => {
-            try {
-              const { data: signedUrlData } = await supabase.storage
-                .from('ticket-attachments')
-                .createSignedUrl(attachment.file_url || '', 3600)
-              return { ...attachment, signed_url: signedUrlData?.signedUrl || null }
-            } catch {
-              return { ...attachment, signed_url: null }
-            }
-          })
-        )
+        // Same as /tickets: bucket is public — getPublicUrl works; createSignedUrl often returns null for anon client.
+        const attachmentsWithUrls = data.map((attachment: AttachmentRow) => {
+          const filePath = attachment.file_url || ''
+          const { data: publicUrlData } = supabase.storage
+            .from('ticket-attachments')
+            .getPublicUrl(filePath)
+          return { ...attachment, signed_url: publicUrlData?.publicUrl || null }
+        })
         setSelectedTicketAttachments(attachmentsWithUrls)
       } else {
         setSelectedTicketAttachments([])
