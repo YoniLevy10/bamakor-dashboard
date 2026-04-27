@@ -25,11 +25,6 @@ import { queuePendingResidentApproval } from '@/lib/pending-resident-from-ticket
 // This module previously sent WhatsApp messages to project managers
 // CURRENT STATUS: Using SMS for manager notifications (temporary, while awaiting WhatsApp template approval)
 
-const VERIFY_TOKEN =
-  process.env.WHATSAPP_VERIFY_TOKEN ||
-  (() => {
-    throw new Error('WHATSAPP_VERIFY_TOKEN not set')
-  })()
 const logger = getLogger()
 
 type ProjectRow = {
@@ -499,10 +494,15 @@ async function appendFollowUpToOpenTicket(
 }
 
 export async function GET(req: NextRequest) {
+  const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || ''
   const searchParams = req.nextUrl.searchParams
   const mode = searchParams.get('hub.mode')
   const token = searchParams.get('hub.verify_token')
   const challenge = searchParams.get('hub.challenge')
+
+  if (!VERIFY_TOKEN) {
+    return new NextResponse('Server configuration error', { status: 500 })
+  }
 
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
     return new NextResponse(challenge || 'OK', { status: 200 })
@@ -536,9 +536,17 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
 
-    console.log('✅ WEBHOOK DB VERSION ACTIVE')
-    console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
-    logger.debug('WEBHOOK', 'Full webhook payload', { requestId, payload: body })
+    // Avoid logging full payload in production (may contain PII/tokens).
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('✅ WEBHOOK DB VERSION ACTIVE')
+      console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
+      logger.debug('WEBHOOK', 'Full webhook payload (dev only)', { requestId, payload: body })
+    } else {
+      logger.debug('WEBHOOK', 'Webhook payload received', {
+        requestId,
+        hasEntry: Array.isArray((body as { entry?: unknown }).entry),
+      })
+    }
 
     const parsedMessage = parseIncomingWhatsAppMessage(body)
 
@@ -607,7 +615,7 @@ export async function POST(req: NextRequest) {
     const from = whatsappDbPhoneKey(waFrom)
     const isTestWhatsAppSender = isWhatsAppTestSender(waFrom)
 
-    console.log('📞 From:', isTestWhatsAppSender ? '(מספר בדיקות — לא נשמר במערכת)' : waRecipient)
+    console.log('📞 From:', isTestWhatsAppSender ? '(מספר בדיקות — לא נשמר במערכת)' : '(redacted)')
     console.log('🧩 Message Type:', messageType)
     console.log('💬 Message body:', textBody)
     console.log('📎 Media ID:', mediaId)

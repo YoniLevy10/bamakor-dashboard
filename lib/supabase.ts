@@ -1,12 +1,33 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+let _client: SupabaseClient | null = null
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error(
-    'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
-  )
+function getSupabaseClient(): SupabaseClient {
+  if (_client) return _client
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+      'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+    )
+  }
+
+  _client = createClient(supabaseUrl, supabaseKey)
+  return _client
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+/**
+ * Lazy Supabase browser client.
+ *
+ * Why: Next can evaluate modules during build/prerender. We avoid throwing on import
+ * and instead throw only when the client is actually used.
+ */
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    const client = getSupabaseClient()
+    const value = (client as unknown as Record<PropertyKey, unknown>)[prop]
+    return typeof value === 'function' ? (value as Function).bind(client) : value
+  },
+})
