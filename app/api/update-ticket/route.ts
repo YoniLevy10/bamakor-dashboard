@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { getLogger, getAuditLogger } from '@/lib/logging'
+import { checkRateLimitDistributed, sanitizeId, sanitizeString } from '@/lib/api-validation'
+import { requireSessionClientId } from '@/lib/api-auth'
 
 export async function POST(req: Request) {
   const logger = getLogger()
@@ -23,15 +24,30 @@ export async function POST(req: Request) {
       )
     }
 
-    const bamakorClientId = await getSingletonClientId(supabaseAdmin)
+    const auth = await requireSessionClientId()
+    if (!auth.ok) return auth.response
+    const bamakorClientId = auth.ctx.clientId
 
     const body = await req.json()
-    const { ticket_id, priority, status } = body
+    const ticket_id = sanitizeId((body as { ticket_id?: unknown })?.ticket_id)
+    const priority = (body as { priority?: unknown })?.priority
+    const status = (body as { status?: unknown })?.status
+
+    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
+    const rl = await checkRateLimitDistributed({
+      supabaseAdmin,
+      key: `ip:${ip}:update-ticket`,
+      windowMs: 60_000,
+      maxRequests: 120,
+    })
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
+    }
 
     if (!ticket_id) {
       logger.error('TICKET_API', 'Missing ticket_id parameter', undefined, { requestId })
       return NextResponse.json(
-        { error: 'ticket_id is required' },
+        { error: 'ticket_id is required', requestId },
         { status: 400 }
       )
     }
@@ -57,16 +73,24 @@ export async function POST(req: Request) {
     // Prepare update payload
     const updatePayload: Record<string, unknown> = {}
     if (priority !== undefined && priority !== null) {
-      updatePayload.priority = priority
+      const p = sanitizeString(priority).toUpperCase()
+      if (!['HIGH', 'MEDIUM', 'LOW'].includes(p)) {
+        return NextResponse.json({ error: 'עדיפות לא תקינה', requestId }, { status: 400 })
+      }
+      updatePayload.priority = p
     }
     if (status !== undefined && status !== null) {
-      updatePayload.status = status
+      const s = sanitizeString(status).toUpperCase()
+      if (!['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_PARTS', 'CLOSED'].includes(s)) {
+        return NextResponse.json({ error: 'סטטוס לא תקין', requestId }, { status: 400 })
+      }
+      updatePayload.status = s
     }
 
     if (Object.keys(updatePayload).length === 0) {
       logger.error('TICKET_API', 'No fields to update', undefined, { requestId, ticket_id })
       return NextResponse.json(
-        { error: 'No fields to update' },
+        { error: 'No fields to update', requestId },
         { status: 400 }
       )
     }
@@ -83,7 +107,7 @@ export async function POST(req: Request) {
       logger.error('TICKET_API', 'Failed to update ticket', updateError, { requestId, ticket_id, updates: Object.keys(updatePayload) })
       audit.logFailedOperation('UPDATE', 'TICKET', ticket_id, 'unknown', `Update failed: ${updateError.message}`)
       return NextResponse.json(
-        { error: updateError.message },
+        { error: 'Server error', requestId },
         { status: 500 }
       )
     }
@@ -93,14 +117,14 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       data: updatedTicket,
+      requestId,
     })
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error))
     logger.error('TICKET_API', 'Update ticket route error', err, { requestId })
     console.error('Error updating ticket:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json(
-      { error: errorMessage },
+      { error: 'Server error', requestId },
       { status: 500 }
     )
   }

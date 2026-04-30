@@ -7,10 +7,13 @@
  */
 
 import { Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
 import { toast, asyncHandler } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import {
   AppShell,
   MobileHeader,
@@ -21,9 +24,11 @@ import {
   LoadingSpinner,
   theme,
 } from '../components/ui'
+import { getIsMobileViewport } from '@/lib/mobile-viewport'
 
 type ClientRow = {
   id: string
+  whatsapp_business_phone?: string | null
   manager_phone?: string | null
   default_worker_phone?: string | null
   sms_on_ticket_open?: boolean | null
@@ -62,6 +67,7 @@ function SettingsPageInner() {
   const [smsOnOpen, setSmsOnOpen] = useState(true)
   const [smsOnClose, setSmsOnClose] = useState(true)
 
+  const [waBusinessPhone, setWaBusinessPhone] = useState('')
   const [waPhoneNumberId, setWaPhoneNumberId] = useState('')
   const [waAccessToken, setWaAccessToken] = useState('')
   const [waTokenLoaded, setWaTokenLoaded] = useState(false)
@@ -69,11 +75,12 @@ function SettingsPageInner() {
   const [savingNotifications, setSavingNotifications] = useState(false)
   const [savingWhatsapp, setSavingWhatsapp] = useState(false)
   const [testingWa, setTestingWa] = useState(false)
+  const [pushEnabling, setPushEnabling] = useState(false)
 
   const [origin, setOrigin] = useState('')
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
+    const check = () => setIsMobile(getIsMobileViewport())
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
@@ -98,7 +105,7 @@ function SettingsPageInner() {
         const { data: row, error: cErr } = await supabase
           .from('clients')
           .select(
-            'id, manager_phone, default_worker_phone, sms_on_ticket_open, sms_on_ticket_close, whatsapp_phone_number_id, whatsapp_access_token'
+            'id, whatsapp_business_phone, manager_phone, default_worker_phone, sms_on_ticket_open, sms_on_ticket_close, whatsapp_phone_number_id, whatsapp_access_token'
           )
           .eq('id', resolvedClientId)
           .maybeSingle()
@@ -114,6 +121,7 @@ function SettingsPageInner() {
         setSmsOnOpen(row.sms_on_ticket_open !== false)
         setSmsOnClose(row.sms_on_ticket_close !== false)
 
+        setWaBusinessPhone(row.whatsapp_business_phone || '')
         setWaPhoneNumberId(row.whatsapp_phone_number_id || '')
         setWaAccessToken(row.whatsapp_access_token || '')
         setWaTokenLoaded(true)
@@ -155,7 +163,7 @@ function SettingsPageInner() {
           ;({ error } = await supabase.from('clients').update(payloadBase).eq('id', clientId))
         }
         if (error) throw error
-        toast.success('נשמר')
+        toast.success(TM.settingsSaved)
         await load()
         return true
       },
@@ -170,14 +178,23 @@ function SettingsPageInner() {
     await asyncHandler(
       async () => {
         const payload: Record<string, string | null> = {
+          whatsapp_business_phone: waBusinessPhone.trim() || null,
           whatsapp_phone_number_id: waPhoneNumberId.trim() || null,
         }
         if (waAccessToken.trim()) {
           payload.whatsapp_access_token = waAccessToken.trim()
         }
-        const { error } = await supabase.from('clients').update(payload).eq('id', clientId)
+        let { error } = await supabase.from('clients').update(payload).eq('id', clientId)
+        const colMissing =
+          error &&
+          (error.code === '42703' ||
+            String(error.message || '').toLowerCase().includes('whatsapp_business_phone'))
+        if (error && colMissing) {
+          const { whatsapp_business_phone: _omit, ...rest } = payload
+          ;({ error } = await supabase.from('clients').update(rest).eq('id', clientId))
+        }
         if (error) throw error
-        toast.success('נשמר')
+        toast.success(TM.settingsSaved)
         await load()
         return true
       },
@@ -195,12 +212,58 @@ function SettingsPageInner() {
     }
   }
 
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+    const raw = atob(base64)
+    const outputArray = new Uint8Array(raw.length)
+    for (let i = 0; i < raw.length; ++i) outputArray[i] = raw.charCodeAt(i)
+    return outputArray
+  }
+
+  async function enablePushNotifications() {
+    const vapid = (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '').trim()
+    if (!vapid) {
+      toast.error('חסר NEXT_PUBLIC_VAPID_PUBLIC_KEY בשרת')
+      return
+    }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      toast.error('הדפדפן לא תומך בהתראות דחיפה')
+      return
+    }
+    setPushEnabling(true)
+    try {
+      const perm = await Notification.requestPermission()
+      if (perm !== 'granted') {
+        toast.error('ההרשאה נדחתה')
+        return
+      }
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapid),
+      })
+      const res = await fetchWithTimeout('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: sub.toJSON() }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((json as { error?: string }).error || 'שמירה נכשלה')
+      toast.success('התראות הופעלו')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'הפעלה נכשלה')
+    } finally {
+      setPushEnabling(false)
+    }
+  }
+
   async function testWhatsapp() {
     if (!clientId) return
     setTestingWa(true)
     await asyncHandler(
       async () => {
-        const res = await fetch('/api/settings/test-whatsapp', {
+        const res = await fetchWithTimeout('/api/settings/test-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
@@ -226,9 +289,32 @@ function SettingsPageInner() {
       )}
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-      <div style={styles.content}>
+      {isMobile && (
+        <div style={{ padding: '0 16px 12px', maxWidth: '100%', boxSizing: 'border-box' }}>
+          <Link href="/billing" style={styles.headerSecondaryLink}>
+            חיוב ושימוש
+          </Link>
+        </div>
+      )}
+
+      <div
+        style={{
+          ...styles.content,
+          ...(isMobile
+            ? { padding: '16px 16px 8px', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }
+            : {}),
+        }}
+      >
         {!isMobile && (
-          <PageHeader title="הגדרות" subtitle="התראות ווואטסאפ" />
+          <PageHeader
+            title="הגדרות"
+            subtitle="התראות ווואטסאפ"
+            actions={
+              <Link href="/billing" style={styles.headerSecondaryLink}>
+                חיוב ושימוש
+              </Link>
+            }
+          />
         )}
 
         {loading ? (
@@ -237,7 +323,7 @@ function SettingsPageInner() {
           </div>
         ) : (
           <>
-            <div style={styles.tabBar} role="tablist" aria-label="הגדרות">
+            <div className="app-error-log-tabs" style={styles.tabBar} role="tablist" aria-label="הגדרות">
               {TABS.map((t) => (
                 <button
                   key={t.id}
@@ -296,6 +382,26 @@ function SettingsPageInner() {
                     />
                     <span>שלח SMS בסגירת תקלה</span>
                   </label>
+                  <div
+                    style={{
+                      marginTop: '20px',
+                      paddingTop: '20px',
+                      borderTop: `1px solid ${theme.colors.border}`,
+                    }}
+                  >
+                    <label style={styles.formLabel}>התראות דחיפה (PWA)</label>
+                    <p style={styles.formHint}>
+                      קבלת התראה כשנפתחת תקלה חדשה. נדרשים מפתחות VAPID בשרת (ציבורי גם ב־NEXT_PUBLIC).
+                    </p>
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      onClick={() => void enablePushNotifications()}
+                      loading={pushEnabling}
+                    >
+                      הפעל התראות
+                    </Button>
+                  </div>
                   <div style={styles.drawerActions}>
                     <Button variant="primary" onClick={saveNotifications} loading={savingNotifications}>
                       שמור שינויים
@@ -308,6 +414,18 @@ function SettingsPageInner() {
             {activeTab === 'whatsapp' && (
               <Card noPadding>
                 <div style={styles.cardInner}>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>מספר וואטסאפ לקישורי QR (wa.me)</label>
+                    <input
+                      value={waBusinessPhone}
+                      onChange={(e) => setWaBusinessPhone(e.target.value)}
+                      style={styles.input}
+                      placeholder="למשל 972501234567 או 050-1234567"
+                    />
+                    <span style={styles.formHint}>
+                      אם ריק — ייעשה שימוש במספר מנהל או בעובד ברירת מחדל מהתראות. הריצו מיגרציה 023 אם השדה לא קיים.
+                    </span>
+                  </div>
                   <div style={styles.formGroup}>
                     <label style={styles.formLabel}>WhatsApp Phone Number ID</label>
                     <input
@@ -427,11 +545,14 @@ const styles: Record<string, CSSProperties> = {
     color: theme.colors.textSecondary,
   },
   input: {
+    width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
     padding: '12px 14px',
     borderRadius: theme.radius.md,
     border: `1px solid ${theme.colors.border}`,
     background: theme.colors.surface,
-    fontSize: '15px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
   },
   formHint: {
@@ -465,5 +586,11 @@ const styles: Record<string, CSSProperties> = {
     gap: '10px',
     alignItems: 'center',
     flexWrap: 'wrap',
+  },
+  headerSecondaryLink: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: theme.colors.primary,
+    textDecoration: 'none',
   },
 }

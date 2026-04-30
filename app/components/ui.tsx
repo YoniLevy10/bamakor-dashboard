@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
-import { type ReactNode, type CSSProperties } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { type ReactNode, type CSSProperties, useEffect, useState } from 'react'
+import { createClient } from '@/utils/supabase/client'
 
 // ============================================================================
 // DESIGN TOKENS - Apple-Inspired Premium Design System
@@ -94,13 +95,14 @@ export const theme = {
 // ============================================================================
 
 const navItems = [
-  { href: '/', label: 'לוח בקרה', icon: 'grid' },
+  { href: '/', label: 'לוח בקרה', icon: 'home' },
   { href: '/tickets', label: 'תקלות', icon: 'ticket' },
   { href: '/projects', label: 'פרויקטים', icon: 'folder' },
-  { href: '/workers', label: 'עובדים', icon: 'users' },
-  { href: '/residents', label: 'דיירים', icon: 'users' },
-  { href: '/pending-residents', label: 'דיירים לאישור', icon: 'clock' },
+  { href: '/residents', label: 'דיירים', icon: 'building' },
+  { href: '/pending-residents', label: 'דיירים לאישור', icon: 'inbox' },
   { href: '/qr', label: 'קודי QR', icon: 'qr' },
+  { href: '/error-logs', label: 'יומן שגיאות', icon: 'chart' },
+  { href: '/settings/whatsapp-templates', label: 'תבניות וואטסאפ', icon: 'message' },
   { href: '/summary', label: 'סיכום', icon: 'chart' },
 ]
 
@@ -108,6 +110,12 @@ function NavIcon({ type, active }: { type: string; active?: boolean }) {
   const color = active ? theme.colors.primary : theme.colors.textMuted
 
   const icons: Record<string, ReactNode> = {
+    home: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        <polyline points="9 22 9 12 15 12 15 22" />
+      </svg>
+    ),
     grid: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="2" />
@@ -135,6 +143,28 @@ function NavIcon({ type, active }: { type: string; active?: boolean }) {
         <circle cx="9" cy="7" r="4" />
         <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
         <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    ),
+    building: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+        <path d="M6 12h4" />
+        <path d="M6 16h4" />
+        <path d="M14 12h4" />
+        <path d="M14 16h4" />
+        <path d="M6 8h4" />
+        <path d="M14 8h4" />
+      </svg>
+    ),
+    inbox: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+        <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+      </svg>
+    ),
+    message: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     ),
     qr: (
@@ -177,11 +207,65 @@ function NavIcon({ type, active }: { type: string; active?: boolean }) {
 }
 
 // ============================================================================
+// SIGN OUT (Google OAuth session)
+// ============================================================================
+
+function NavSignOutButton({ onAfterSignOut }: { onAfterSignOut?: () => void }) {
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+
+  return (
+    <button
+      type="button"
+      disabled={loading}
+      onClick={async () => {
+        setLoading(true)
+        try {
+          const supabase = createClient()
+          await supabase.auth.signOut()
+          onAfterSignOut?.()
+          router.push('/login')
+          router.refresh()
+        } finally {
+          setLoading(false)
+        }
+      }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        width: '100%',
+        marginTop: '6px',
+        padding: '10px 12px',
+        borderRadius: theme.radius.md,
+        border: `1px solid ${theme.colors.border}`,
+        background: theme.colors.surface,
+        color: theme.colors.textSecondary,
+        fontSize: '14px',
+        fontWeight: 500,
+        cursor: loading ? 'wait' : 'pointer',
+        textAlign: 'start',
+      }}
+    >
+      {loading ? 'יוצאים…' : 'יציאה מהחשבון'}
+    </button>
+  )
+}
+
+// ============================================================================
 // SIDEBAR
 // ============================================================================
 
 export function Sidebar() {
   const pathname = usePathname()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Avoid dev-time hydration mismatches (Turbopack/HMR) by not SSR-rendering the menu.
+  if (!mounted) return null
 
   return (
     <aside style={sidebarStyles.container}>
@@ -202,7 +286,10 @@ export function Sidebar() {
       <div style={sidebarStyles.navColumn}>
         <nav style={sidebarStyles.nav}>
           {navItems.map((item) => {
-            const isActive = pathname === item.href
+            const isActive =
+              item.href === '/settings/whatsapp-templates'
+                ? pathname.startsWith('/settings/whatsapp-templates')
+                : pathname === item.href
             return (
               <Link
                 key={item.href}
@@ -213,7 +300,7 @@ export function Sidebar() {
                 }}
               >
                 <NavIcon type={item.icon} active={isActive} />
-                <span style={isActive ? { color: theme.colors.primary } : {}}>{item.label}</span>
+                <span style={sidebarStyles.navLabel}>{item.label}</span>
               </Link>
             )
           })}
@@ -227,8 +314,9 @@ export function Sidebar() {
             }}
           >
             <NavIcon type="settings" active={pathname === '/settings'} />
-            <span style={pathname === '/settings' ? { color: theme.colors.primary } : {}}>הגדרות</span>
+            <span style={sidebarStyles.navLabel}>הגדרות</span>
           </Link>
+          <NavSignOutButton />
         </div>
       </div>
 
@@ -308,6 +396,9 @@ const sidebarStyles: Record<string, CSSProperties> = {
     marginTop: 'auto',
     paddingTop: '12px',
     borderTop: `1px solid ${theme.colors.border}`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
   },
   navLink: {
     display: 'flex',
@@ -317,9 +408,18 @@ const sidebarStyles: Record<string, CSSProperties> = {
     borderRadius: theme.radius.md,
     color: theme.colors.textSecondary,
     textDecoration: 'none',
-    fontSize: '15px',
+    fontSize: '14px',
     fontWeight: 500,
+    minHeight: '44px',
+    boxSizing: 'border-box',
     transition: 'all 0.15s ease',
+  },
+  navLabel: {
+    fontSize: '14px',
+    fontWeight: 500,
+    lineHeight: 1.25,
+    flex: 1,
+    minWidth: 0,
   },
   navLinkActive: {
     background: theme.colors.primaryMuted,
@@ -404,8 +504,163 @@ const topBarStyles: Record<string, CSSProperties> = {
 }
 
 // ============================================================================
-// APP SHELL
+// APP SHELL & MOBILE BOTTOM NAV
 // ============================================================================
+
+const BOTTOM_NAV_ROUTES = new Set([
+  '/',
+  '/tickets',
+  '/projects',
+  '/residents',
+  '/pending-residents',
+  '/qr',
+  '/error-logs',
+  '/settings/whatsapp-templates',
+  '/summary',
+])
+
+function showMobileBottomNavForPath(pathname: string): boolean {
+  if (BOTTOM_NAV_ROUTES.has(pathname)) return true
+  if (pathname === '/settings' || pathname === '/billing') return true
+  return false
+}
+
+const bottomNavMainItems: { href: string; label: string; icon: string }[] = navItems.map((i) => ({
+  href: i.href,
+  label: i.label,
+  icon: i.icon,
+}))
+
+export function MobileBottomNav() {
+  const pathname = usePathname()
+
+  const settingsActive = pathname === '/settings'
+
+  return (
+    <nav
+      style={bottomNavStyles.bar}
+      aria-label="ניווט ראשי"
+    >
+      <div style={bottomNavStyles.scroll}>
+        {bottomNavMainItems.map((item) => {
+          const active =
+            item.href === '/settings/whatsapp-templates'
+              ? pathname.startsWith('/settings/whatsapp-templates')
+              : pathname === item.href
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                ...bottomNavStyles.link,
+                ...(active ? bottomNavStyles.linkActive : {}),
+              }}
+            >
+              <span style={bottomNavStyles.iconWrap}>
+                <NavIcon type={item.icon} active={active} />
+              </span>
+              <span style={bottomNavStyles.label}>{item.label}</span>
+            </Link>
+          )
+        })}
+      </div>
+      <div style={bottomNavStyles.settingsDivider} aria-hidden />
+      <Link
+        href="/settings"
+        style={{
+          ...bottomNavStyles.link,
+          ...bottomNavStyles.settingsLink,
+          ...(settingsActive ? bottomNavStyles.linkActive : {}),
+        }}
+      >
+        <span style={bottomNavStyles.iconWrap}>
+          <NavIcon type="settings" active={settingsActive} />
+        </span>
+        <span style={bottomNavStyles.label}>הגדרות</span>
+      </Link>
+    </nav>
+  )
+}
+
+const bottomNavStyles: Record<string, CSSProperties> = {
+  bar: {
+    position: 'fixed',
+    insetInline: 0,
+    bottom: 0,
+    zIndex: 95,
+    display: 'flex',
+    flexDirection: 'row-reverse',
+    alignItems: 'stretch',
+    gap: 0,
+    paddingTop: '6px',
+    paddingBottom: 'calc(6px + env(safe-area-inset-bottom, 0px))',
+    paddingInline: '4px',
+    background: theme.colors.surface,
+    borderTop: `1px solid ${theme.colors.border}`,
+    boxShadow: '0 -2px 16px rgba(0,0,0,0.06)',
+  },
+  scroll: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'row-reverse',
+    alignItems: 'stretch',
+    gap: '2px',
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    scrollbarWidth: 'none',
+    msOverflowStyle: 'none',
+  },
+  settingsDivider: {
+    width: '1px',
+    alignSelf: 'stretch',
+    margin: '6px 2px',
+    background: theme.colors.border,
+    flexShrink: 0,
+  },
+  link: {
+    flex: '0 0 auto',
+    width: '72px',
+    maxWidth: '72px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '2px',
+    minWidth: 0,
+    minHeight: '48px',
+    padding: '4px 4px',
+    textDecoration: 'none',
+    color: theme.colors.textMuted,
+    borderRadius: theme.radius.md,
+    boxSizing: 'border-box',
+  },
+  settingsLink: {
+    flex: '0 0 auto',
+    width: '72px',
+    maxWidth: '72px',
+  },
+  linkActive: {
+    color: theme.colors.primary,
+    background: theme.colors.primaryMuted,
+  },
+  iconWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '24px',
+  },
+  label: {
+    fontSize: '10px',
+    fontWeight: 600,
+    lineHeight: 1.2,
+    textAlign: 'center',
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+}
 
 export function AppShell({
   children,
@@ -414,12 +669,24 @@ export function AppShell({
   children: ReactNode
   isMobile?: boolean
 }) {
+  const pathname = usePathname()
+  const bottomNav = !!isMobile && showMobileBottomNavForPath(pathname)
+
   return (
     <div dir="rtl" style={{ display: 'flex', minHeight: '100vh', background: theme.colors.background }}>
       {!isMobile && <Sidebar />}
-      <main style={{ flex: 1, marginInlineStart: isMobile ? 0 : '240px', minWidth: 0 }}>
+      <main
+        data-app-main
+        style={{
+          flex: 1,
+          marginInlineStart: isMobile ? 0 : '240px',
+          minWidth: 0,
+          paddingBottom: bottomNav ? 'calc(58px + env(safe-area-inset-bottom, 0px))' : undefined,
+        }}
+      >
         {children}
       </main>
+      {bottomNav ? <MobileBottomNav /> : null}
     </div>
   )
 }
@@ -550,7 +817,10 @@ export function MobileMenu({
         <div style={mobileMenuStyles.navColumn}>
           <nav style={mobileMenuStyles.nav}>
             {navItems.map((item) => {
-              const isActive = pathname === item.href
+              const isActive =
+                item.href === '/settings/whatsapp-templates'
+                  ? pathname.startsWith('/settings/whatsapp-templates')
+                  : pathname === item.href
               return (
                 <Link
                   key={item.href}
@@ -562,7 +832,7 @@ export function MobileMenu({
                   }}
                 >
                   <NavIcon type={item.icon} active={isActive} />
-                  <span>{item.label}</span>
+                  <span style={mobileMenuStyles.navLabel}>{item.label}</span>
                 </Link>
               )
             })}
@@ -577,8 +847,22 @@ export function MobileMenu({
               }}
             >
               <NavIcon type="settings" active={pathname === '/settings'} />
-              <span>הגדרות</span>
+              <span style={mobileMenuStyles.navLabel}>הגדרות</span>
             </Link>
+            <Link
+              href="/billing"
+              onClick={onClose}
+              style={{
+                ...mobileMenuStyles.navLink,
+                ...(pathname === '/billing' ? mobileMenuStyles.navLinkActive : {}),
+              }}
+            >
+              <NavIcon type="chart" active={pathname === '/billing'} />
+              <span style={mobileMenuStyles.navLabel}>חיוב ושימוש</span>
+            </Link>
+            <div style={{ paddingInline: '8px', paddingTop: '8px' }}>
+              <NavSignOutButton onAfterSignOut={onClose} />
+            </div>
           </div>
         </div>
       </div>
@@ -648,8 +932,8 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '40px',
-    height: '40px',
+    width: '44px',
+    height: '44px',
     borderRadius: theme.radius.md,
     background: 'transparent',
     color: theme.colors.textMuted,
@@ -666,21 +950,33 @@ const mobileMenuStyles: Record<string, CSSProperties> = {
     marginTop: 'auto',
     paddingTop: '16px',
     borderTop: `1px solid ${theme.colors.border}`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
   },
   navLink: {
     display: 'flex',
     alignItems: 'center',
-    gap: '14px',
-    padding: '14px 16px',
+    gap: '12px',
+    padding: '10px 12px',
     borderRadius: theme.radius.md,
     color: theme.colors.textSecondary,
     textDecoration: 'none',
-    fontSize: '16px',
+    fontSize: '14px',
     fontWeight: 500,
+    minHeight: '44px',
+    boxSizing: 'border-box',
   },
   navLinkActive: {
     background: theme.colors.primaryMuted,
     color: theme.colors.primary,
+  },
+  navLabel: {
+    fontSize: '14px',
+    fontWeight: 500,
+    lineHeight: 1.25,
+    flex: 1,
+    minWidth: 0,
   },
 }
 
@@ -766,6 +1062,7 @@ export function KpiCard({
     <button
       type="button"
       onClick={onClick}
+      data-ui="kpi-card"
       style={{
         ...kpiStyles.card,
         borderInlineStartColor: accentColor,
@@ -886,6 +1183,7 @@ export function Button({
   loading,
   onClick,
   style: customStyle,
+  className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode
@@ -912,6 +1210,8 @@ export function Button({
       onClick={onClick}
       disabled={disabled || loading}
       data-ui="button"
+      data-size={size}
+      className={[className].filter(Boolean).join(' ') || undefined}
       style={{
         ...buttonStyles.base,
         ...variantStyles[variant],
@@ -1036,7 +1336,7 @@ export function SearchInput({
   style?: CSSProperties
 }) {
   return (
-    <div style={{ ...searchStyles.container, ...style }}>
+    <div className="app-search-input-root" style={{ ...searchStyles.container, ...style }}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={searchStyles.icon}>
         <circle cx="11" cy="11" r="8" />
         <path d="m21 21-4.3-4.3" />
@@ -1071,10 +1371,11 @@ const searchStyles: Record<string, CSSProperties> = {
     borderRadius: theme.radius.md,
     border: `1px solid ${theme.colors.border}`,
     background: theme.colors.surface,
-    fontSize: '15px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
     outline: 'none',
     transition: 'all 0.15s ease',
+    boxSizing: 'border-box',
   },
 }
 
@@ -1092,9 +1393,10 @@ export function FilterTabs({
   onChange: (value: string) => void
 }) {
   return (
-    <div style={filterTabStyles.container}>
+    <div className="app-filter-tabs" style={filterTabStyles.container}>
       {options.map((option) => (
         <button
+          type="button"
           key={option.value}
           onClick={() => onChange(option.value)}
           style={{
@@ -1154,6 +1456,7 @@ export function Select({
 }) {
   return (
     <select
+      className="app-select-input"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       style={{ ...selectStyles.select, ...style }}
@@ -1202,16 +1505,32 @@ export function Drawer({
 }) {
   if (!open) return null
 
+  const mobile = !!isMobile
+  const panelStyle: CSSProperties = mobile
+    ? drawerStyles.panelMobile
+    : { ...drawerStyles.panelSide, width: '480px' }
+
   return (
     <>
       <div style={drawerStyles.overlay} onClick={onClose} />
-      <div style={{ ...drawerStyles.panel, width: isMobile ? '100%' : '480px' }}>
+      <div
+        style={panelStyle}
+        data-drawer-panel={mobile ? 'mobile' : 'desktop'}
+        role="dialog"
+        aria-modal="true"
+      >
         <div style={drawerStyles.header}>
-          <div>
+          <div style={{ minWidth: 0, flex: 1, paddingInlineEnd: '8px' }}>
             <h2 style={drawerStyles.title}>{title}</h2>
             {subtitle && <p style={drawerStyles.subtitle}>{subtitle}</p>}
           </div>
-          <button onClick={onClose} style={drawerStyles.closeButton} aria-label="סגירה">
+          <button
+            type="button"
+            onClick={onClose}
+            style={drawerStyles.closeButton}
+            aria-label="סגירה"
+            data-drawer-close
+          >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 6 6 18" />
               <path d="m6 6 12 12" />
@@ -1232,7 +1551,7 @@ const drawerStyles: Record<string, CSSProperties> = {
     zIndex: 300,
     animation: 'fadeIn 0.2s ease',
   },
-  panel: {
+  panelSide: {
     position: 'fixed',
     top: 0,
     right: 0,
@@ -1242,6 +1561,25 @@ const drawerStyles: Record<string, CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+    maxWidth: '100vw',
+  },
+  panelMobile: {
+    position: 'fixed',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 'auto',
+    width: '100%',
+    maxHeight: 'min(92dvh, 100svh)',
+    background: theme.colors.surface,
+    zIndex: 301,
+    display: 'flex',
+    flexDirection: 'column',
+    borderTopLeftRadius: theme.radius.xl,
+    borderTopRightRadius: theme.radius.xl,
+    boxShadow: '0 -8px 40px rgba(0, 0, 0, 0.12)',
+    maxWidth: '100vw',
+    boxSizing: 'border-box',
   },
   header: {
     display: 'flex',
@@ -1267,8 +1605,8 @@ const drawerStyles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '40px',
-    height: '40px',
+    width: '44px',
+    height: '44px',
     borderRadius: theme.radius.md,
     background: 'transparent',
     color: theme.colors.textMuted,
@@ -1278,6 +1616,7 @@ const drawerStyles: Record<string, CSSProperties> = {
   },
   content: {
     flex: 1,
+    minHeight: 0,
     overflow: 'auto',
     padding: '24px',
     paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',

@@ -12,6 +12,8 @@ interface ProjectRow {
 interface AddTicketModalProps {
   open: boolean
   onClose: () => void
+  /** Bottom-sheet layout + touch targets on narrow viewports */
+  isMobile?: boolean
   projects: ProjectRow[]
   projectCode: string
   description: string
@@ -29,6 +31,7 @@ interface AddTicketModalProps {
 export function AddTicketModal({
   open,
   onClose,
+  isMobile,
   projects,
   projectCode,
   description,
@@ -63,13 +66,19 @@ export function AddTicketModal({
   return (
     <>
       <div style={styles.modalOverlay} onClick={onClose} />
-      <div style={styles.modal}>
+      <div className={isMobile ? 'app-modal-sheet-root' : undefined} style={styles.modal}>
         <div style={styles.modalHeader}>
           <h2 style={styles.modalTitle}>תקלה חדשה</h2>
-          <button onClick={onClose} style={styles.modalClose}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="app-modal-close"
+            style={styles.modalClose}
+            aria-label="סגירה"
+          >
             <svg
-              width="18"
-              height="18"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -82,10 +91,15 @@ export function AddTicketModal({
             </svg>
           </button>
         </div>
-        <form onSubmit={onSubmit} style={styles.modalForm}>
+        <form
+          onSubmit={onSubmit}
+          className={isMobile ? 'app-modal-sheet-scroll' : undefined}
+          style={styles.modalForm}
+        >
           <div style={styles.formGroup}>
             <label style={styles.formLabel}>פרויקט</label>
             <select
+              className="app-select-input"
               value={projectCode}
               onChange={(e) => onProjectCodeChange(e.target.value)}
               style={styles.formSelect}
@@ -159,7 +173,7 @@ const styles: Record<string, CSSProperties> = {
     position: 'fixed',
     inset: 0,
     background: 'rgba(0, 0, 0, 0.7)',
-    zIndex: 100,
+    zIndex: 400,
   },
   modal: {
     position: 'fixed',
@@ -171,7 +185,7 @@ const styles: Record<string, CSSProperties> = {
     background: theme.colors.surface,
     borderRadius: theme.radius.xl,
     border: `1px solid ${theme.colors.border}`,
-    zIndex: 101,
+    zIndex: 401,
     maxHeight: '90vh',
     overflow: 'auto',
   },
@@ -192,8 +206,8 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '32px',
-    height: '32px',
+    width: '44px',
+    height: '44px',
     borderRadius: theme.radius.sm,
     background: 'transparent',
     border: 'none',
@@ -217,30 +231,36 @@ const styles: Record<string, CSSProperties> = {
     color: theme.colors.textSecondary,
   },
   formSelect: {
+    width: '100%',
+    boxSizing: 'border-box',
     background: theme.colors.surfaceElevated,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
     padding: '10px 14px',
-    fontSize: '14px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
     outline: 'none',
     cursor: 'pointer',
   },
   formInput: {
+    width: '100%',
+    boxSizing: 'border-box',
     background: theme.colors.surfaceElevated,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
     padding: '10px 14px',
-    fontSize: '14px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
     outline: 'none',
   },
   formTextarea: {
+    width: '100%',
+    boxSizing: 'border-box',
     background: theme.colors.surfaceElevated,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
     padding: '12px 14px',
-    fontSize: '14px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
     outline: 'none',
     resize: 'vertical',

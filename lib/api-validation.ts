@@ -3,7 +3,8 @@
  * Centralizes validation logic, error responses, and rate limiting
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 // ============================================================================
 // 1. TYPES & INTERFACES
@@ -25,11 +26,11 @@ export interface ApiResponse<T> {
 }
 
 export interface RateLimitInfo {
-  clientId: string;
-  endpoint: string;
-  requestCount: number;
-  resetTime: number;
-  isLimited: boolean;
+  key: string
+  requestCount: number
+  resetTime: number
+  isLimited: boolean
+  remaining?: number
 }
 
 export interface ValidationRule {
@@ -257,6 +258,16 @@ export class ResponseBuilder {
   }
 }
 
+export class ApiError extends Error {
+  status: number
+  expose: boolean
+  constructor(message: string, status: number, expose = false) {
+    super(message)
+    this.status = status
+    this.expose = expose
+  }
+}
+
 // ============================================================================
 // 5. REQUEST UTILITIES
 // ============================================================================
@@ -280,38 +291,93 @@ export async function parseRequest(request: NextRequest): Promise<[unknown, stri
 }
 
 export function generateRequestId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
 // ============================================================================
 // 6. RATE LIMITING
 // ============================================================================
 
-const rateLimitMap = new Map<string, RateLimitInfo>();
-const RATE_LIMIT_WINDOW = 60000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 100; // Per minute
+const memoryRateLimitMap = new Map<string, RateLimitInfo>()
 
-export function checkRateLimit(clientId: string, endpoint: string): RateLimitInfo {
-  const key = `${clientId}:${endpoint}`;
-  const now = Date.now();
-  const existing = rateLimitMap.get(key);
+export function checkRateLimitMemory(key: string, windowMs = 60_000, maxRequests = 100): RateLimitInfo {
+  const now = Date.now()
+  const existing = memoryRateLimitMap.get(key)
 
   if (!existing || now > existing.resetTime) {
     const info: RateLimitInfo = {
-      clientId,
-      endpoint,
+      key,
       requestCount: 1,
-      resetTime: now + RATE_LIMIT_WINDOW,
+      resetTime: now + windowMs,
       isLimited: false,
-    };
-    rateLimitMap.set(key, info);
-    return info;
+      remaining: Math.max(maxRequests - 1, 0),
+    }
+    memoryRateLimitMap.set(key, info)
+    return info
   }
 
-  existing.requestCount++;
-  existing.isLimited = existing.requestCount > RATE_LIMIT_MAX_REQUESTS;
+  existing.requestCount++
+  existing.isLimited = existing.requestCount > maxRequests
+  existing.remaining = Math.max(maxRequests - existing.requestCount, 0)
+  return existing
+}
 
-  return existing;
+/** Rate limit by IP + endpoint (table `rate_limits`, RPC `bamakor_rate_limit_ip_endpoint`). */
+export async function checkRateLimitIpEndpoint(params: {
+  supabaseAdmin: SupabaseClient
+  ip: string
+  endpoint: string
+  maxRequests?: number
+}): Promise<{ isLimited: boolean; currentCount?: number }> {
+  const max = params.maxRequests ?? 20
+  const { data, error } = await params.supabaseAdmin.rpc('bamakor_rate_limit_ip_endpoint', {
+    p_ip: params.ip,
+    p_endpoint: params.endpoint,
+    p_max: max,
+  })
+  if (error) {
+    return { isLimited: false }
+  }
+  const row = Array.isArray(data) ? data[0] : data
+  return {
+    isLimited: !!row?.is_limited,
+    currentCount: typeof row?.current_count === 'number' ? row.current_count : undefined,
+  }
+}
+
+export async function checkRateLimitDistributed(params: {
+  supabaseAdmin: SupabaseClient
+  key: string
+  windowMs?: number
+  maxRequests?: number
+}): Promise<RateLimitInfo> {
+  const windowMs = params.windowMs ?? 60_000
+  const maxRequests = params.maxRequests ?? 100
+
+  // Use DB-backed limiter via RPC (atomic across serverless instances).
+  const { data, error } = await params.supabaseAdmin.rpc('bamakor_rate_limit', {
+    p_key: params.key,
+    p_window_ms: windowMs,
+    p_max: maxRequests,
+  })
+
+  if (error) {
+    // Fail-open (do not block traffic if limiter is misconfigured).
+    return checkRateLimitMemory(params.key, windowMs, maxRequests)
+  }
+
+  const row = Array.isArray(data) ? data[0] : data
+  const resetAt = row?.reset_at ? new Date(row.reset_at as string).getTime() : Date.now() + windowMs
+  const remaining = typeof row?.remaining === 'number' ? (row.remaining as number) : undefined
+  const isLimited = !!row?.is_limited
+
+  return {
+    key: params.key,
+    requestCount: remaining !== undefined ? maxRequests - remaining : 0,
+    resetTime: resetAt,
+    isLimited,
+    remaining,
+  }
 }
 
 // ============================================================================
@@ -326,6 +392,10 @@ export async function withErrorHandling<T>(
     const result = await handler();
     return [result, null, 200];
   } catch (error) {
+    if (error instanceof ApiError) {
+      return [null, error.expose ? error.message : 'Internal server error', error.status]
+    }
+
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
 
     if (message.includes('not found')) {
@@ -355,10 +425,11 @@ export function sanitizeString(input: unknown): string {
 }
 
 export function sanitizeId(input: unknown): string | null {
-  if (typeof input !== 'string') return null;
+  if (typeof input !== 'string') return null
+  const s = input.trim().toLowerCase()
   // UUID format validation
-  if (!/^[a-f0-9-]{36}$/.test(input)) return null;
-  return input;
+  if (!/^[a-f0-9-]{36}$/.test(s)) return null
+  return s
 }
 
 export function sanitizeEmail(input: unknown): string | null {

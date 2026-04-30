@@ -2,6 +2,7 @@
 
 import { type CSSProperties } from 'react'
 import { Drawer, Button, theme } from '../ui'
+import { TicketChat } from './TicketChat'
 
 interface TicketRow {
   id: string
@@ -9,6 +10,7 @@ interface TicketRow {
   project_id?: string
   project_code?: string
   project_name?: string
+  client_id?: string | null
   reporter_phone: string
   description: string
   status: string
@@ -112,6 +114,7 @@ export function TicketDetailDrawer({
           <div style={styles.drawerSection}>
             <div style={styles.drawerLabel}>סטטוס</div>
             <select
+              className="app-select-input"
               value={draftStatus}
               onChange={(e) => onStatusChange(e.target.value)}
               style={styles.drawerSelect}
@@ -127,6 +130,7 @@ export function TicketDetailDrawer({
           <div style={styles.drawerSection}>
             <div style={styles.drawerLabel}>עובד משויך</div>
             <select
+              className="app-select-input"
               value={draftWorkerId}
               onChange={(e) => onWorkerChange(e.target.value)}
               style={styles.drawerSelect}
@@ -190,6 +194,8 @@ export function TicketDetailDrawer({
                         alt={attachment.file_name}
                         style={styles.attachmentImg}
                         crossOrigin="anonymous"
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div style={styles.attachmentFile}>{attachment.file_name}</div>
@@ -249,6 +255,8 @@ export function TicketDetailDrawer({
               </div>
             )}
           </div>
+
+          <TicketChat ticketId={selectedTicket.id} clientId={selectedTicket.client_id ?? null} />
         </div>
       )}
     </Drawer>
@@ -284,21 +292,27 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 500,
   },
   drawerSelect: {
+    width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
     background: theme.colors.surfaceElevated,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
     padding: '10px 14px',
-    fontSize: '14px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
     outline: 'none',
     cursor: 'pointer',
   },
   drawerTextarea: {
+    width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
     background: theme.colors.surfaceElevated,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
     padding: '12px 14px',
-    fontSize: '14px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
     outline: 'none',
     resize: 'vertical',

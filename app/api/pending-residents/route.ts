@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { normalizeWhatsAppPhoneDigits } from '@/lib/whatsapp-test-phone'
+import { requireSessionClientId } from '@/lib/api-auth'
 import { pendingResidentsQueryUnavailable } from '@/lib/supabase-table-errors'
+import { checkRateLimitDistributed, sanitizeId, sanitizeString } from '@/lib/api-validation'
+import { getLogger, getAuditLogger } from '@/lib/logging'
 
 const MIGRATION_HINT =
   'הריצו ב-Supabase את המיגרציה supabase/migrations/015_pending_resident_join_requests.sql (או supabase db push) כדי ליצור את הטבלה.'
@@ -26,9 +28,24 @@ type PendingRow = {
 }
 
 export async function GET() {
+  const logger = getLogger()
+  const requestId = `pending-residents-${Date.now()}`
   try {
+    const auth = await requireSessionClientId()
+    if (!auth.ok) return auth.response
+    const clientId = auth.ctx.clientId
+
     const supabase = getSupabaseAdmin()
-    const clientId = await getSingletonClientId(supabase)
+    // light rate limit: list is sensitive PII-ish
+    const rl = await checkRateLimitDistributed({
+      supabaseAdmin: supabase,
+      key: `global:pending-residents:GET`,
+      windowMs: 60_000,
+      maxRequests: 120,
+    })
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
+    }
 
     const { data: rows, error } = await supabase
       .from('pending_resident_join_requests')
@@ -43,22 +60,26 @@ export async function GET() {
           items: [] as unknown[],
           tableMissing: true,
           hint: MIGRATION_HINT,
+          requestId,
         })
       }
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      logger.error('RESIDENTS_API', 'pending-residents query failed', new Error(error.message), { requestId, clientId })
+      return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
     }
 
     const list = (rows || []) as PendingRow[]
     const projectIds = [...new Set(list.map((r) => r.project_id))]
     const ticketIds = list.map((r) => r.ticket_id).filter((id): id is string => !!id)
-    const { data: projects } =
+    const [projectsRes, ticketsRes] = await Promise.all([
       projectIds.length > 0
-        ? await supabase.from('projects').select('id, name, project_code').in('id', projectIds)
-        : { data: [] as { id: string; name: string; project_code: string }[] }
-    const { data: tickets } =
+        ? supabase.from('projects').select('id, name, project_code').in('id', projectIds)
+        : Promise.resolve({ data: [] as { id: string; name: string; project_code: string }[] }),
       ticketIds.length > 0
-        ? await supabase.from('tickets').select('id, ticket_number').in('id', ticketIds)
-        : { data: [] as { id: string; ticket_number: number }[] }
+        ? supabase.from('tickets').select('id, ticket_number').in('id', ticketIds)
+        : Promise.resolve({ data: [] as { id: string; ticket_number: number }[] }),
+    ])
+    const projects = projectsRes.data
+    const tickets = ticketsRes.data
 
     const byProject = new Map((projects as { id: string; name: string; project_code: string }[] | null)?.map((p) => [p.id, p]) || [])
     const byTicket = new Map((tickets as { id: string; ticket_number: number }[] | null)?.map((t) => [t.id, t]) || [])
@@ -70,51 +91,69 @@ export async function GET() {
         project_code: byProject.get(r.project_id)?.project_code || '',
         ticket_number: r.ticket_id ? byTicket.get(r.ticket_id)?.ticket_number : undefined,
       })),
+      requestId,
     })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    logger.error('RESIDENTS_API', 'Unhandled pending-residents GET error', e instanceof Error ? e : new Error(String(e)), { requestId })
+    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
   }
 }
 
 export async function PATCH(req: NextRequest) {
+  const logger = getLogger()
+  const audit = getAuditLogger()
+  const requestId = `pending-residents-patch-${Date.now()}`
   try {
+    const auth = await requireSessionClientId()
+    if (!auth.ok) return auth.response
+    const clientId = auth.ctx.clientId
+
     const supabase = getSupabaseAdmin()
-    const clientId = await getSingletonClientId(supabase)
+    const rl = await checkRateLimitDistributed({
+      supabaseAdmin: supabase,
+      key: `global:pending-residents:PATCH`,
+      windowMs: 60_000,
+      maxRequests: 60,
+    })
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
+    }
     const body = (await req.json()) as {
       id?: string
       action?: 'approve' | 'reject'
       full_name?: string
     }
 
-    if (!body?.id || !body?.action) {
-      return NextResponse.json({ error: 'id and action are required' }, { status: 400 })
+    const id = sanitizeId(body?.id)
+    const action = body?.action
+    if (!id || !action) {
+      return NextResponse.json({ error: 'id and action are required', requestId }, { status: 400 })
     }
 
     const { data: row, error: fetchErr } = await supabase
       .from('pending_resident_join_requests')
       .select('id, client_id, project_id, ticket_id, reporter_phone_normalized, status')
-      .eq('id', body.id)
+      .eq('id', id)
       .eq('client_id', clientId)
       .maybeSingle()
 
     if (fetchErr && pendingResidentsQueryUnavailable(fetchErr)) {
       return NextResponse.json(
-        { error: 'טבלת בקשות דיירים עדיין לא קיימת במסד הנתונים.', hint: MIGRATION_HINT, code: 'MIGRATION_REQUIRED' },
+        { error: 'טבלת בקשות דיירים עדיין לא קיימת במסד הנתונים.', hint: MIGRATION_HINT, code: 'MIGRATION_REQUIRED', requestId },
         { status: 503 }
       )
     }
     if (fetchErr || !row) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Not found', requestId }, { status: 404 })
     }
 
     if ((row as { status: string }).status !== 'pending') {
-      return NextResponse.json({ error: 'Already resolved' }, { status: 400 })
+      return NextResponse.json({ error: 'Already resolved', requestId }, { status: 400 })
     }
 
     const now = new Date().toISOString()
 
-    if (body.action === 'reject') {
+    if (action === 'reject') {
       const { error: up } = await supabase
         .from('pending_resident_join_requests')
         .update({
@@ -122,19 +161,22 @@ export async function PATCH(req: NextRequest) {
           resolved_at: now,
           resolved_by: 'dashboard',
         })
-        .eq('id', body.id)
+        .eq('id', id)
         .eq('client_id', clientId)
 
       if (up) {
         if (pendingResidentsQueryUnavailable(up)) {
-          return NextResponse.json({ error: up.message, hint: MIGRATION_HINT, code: 'MIGRATION_REQUIRED' }, { status: 503 })
+          return NextResponse.json({ error: up.message, hint: MIGRATION_HINT, code: 'MIGRATION_REQUIRED', requestId }, { status: 503 })
         }
-        return NextResponse.json({ error: up.message }, { status: 500 })
+        logger.error('RESIDENTS_API', 'Reject pending resident failed', new Error(up.message), { requestId, id, clientId })
+        audit.logFailedOperation('REJECT', 'PENDING_RESIDENT', id, clientId, up.message)
+        return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
       }
-      return NextResponse.json({ ok: true, status: 'rejected' })
+      audit.logAction('REJECT', 'PENDING_RESIDENT', id, clientId, 'dashboard')
+      return NextResponse.json({ ok: true, status: 'rejected', requestId })
     }
 
-    const fullName = (body.full_name || '').trim() || 'דייר (אושר מהוואטסאפ)'
+    const fullName = sanitizeString(body.full_name) || 'דייר (אושר מהוואטסאפ)'
     const digits = normalizeWhatsAppPhoneDigits((row as { reporter_phone_normalized: string }).reporter_phone_normalized)
     const phone = formatPhoneForResident(digits)
 
@@ -148,7 +190,9 @@ export async function PATCH(req: NextRequest) {
     })
 
     if (insErr) {
-      return NextResponse.json({ error: insErr.message }, { status: 500 })
+      logger.error('RESIDENTS_API', 'Insert resident failed', new Error(insErr.message), { requestId, id, clientId })
+      audit.logFailedOperation('APPROVE', 'PENDING_RESIDENT', id, clientId, insErr.message)
+      return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
     }
 
     const { error: up } = await supabase
@@ -163,13 +207,16 @@ export async function PATCH(req: NextRequest) {
 
     if (up) {
       if (pendingResidentsQueryUnavailable(up)) {
-        return NextResponse.json({ error: up.message, hint: MIGRATION_HINT, code: 'MIGRATION_REQUIRED' }, { status: 503 })
+        return NextResponse.json({ error: up.message, hint: MIGRATION_HINT, code: 'MIGRATION_REQUIRED', requestId }, { status: 503 })
       }
-      return NextResponse.json({ error: up.message }, { status: 500 })
+      logger.error('RESIDENTS_API', 'Approve pending resident update failed', new Error(up.message), { requestId, id, clientId })
+      audit.logFailedOperation('APPROVE', 'PENDING_RESIDENT', id, clientId, up.message)
+      return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
     }
-    return NextResponse.json({ ok: true, status: 'approved' })
+    audit.logAction('APPROVE', 'PENDING_RESIDENT', id, clientId, 'dashboard')
+    return NextResponse.json({ ok: true, status: 'approved', requestId })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    logger.error('RESIDENTS_API', 'Unhandled pending-residents PATCH error', e instanceof Error ? e : new Error(String(e)), { requestId })
+    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
   }
 }

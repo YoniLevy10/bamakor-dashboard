@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
 import { toast, asyncHandler } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import { validateRequired, validatePhoneNumber, validateEmail } from '@/lib/validators'
 import {
   AppShell,
@@ -21,6 +23,8 @@ import {
   LoadingSpinner,
   theme
 } from '../components/ui'
+import { getIsMobileViewport } from '@/lib/mobile-viewport'
+import { PageKpiSkeletonN, PageListSkeleton } from '../components/page-skeleton'
 
 type WorkerRow = {
   id: string
@@ -31,6 +35,7 @@ type WorkerRow = {
   is_active: boolean
   created_at: string
   client_id: string
+  access_token?: string | null
 }
 
 type TicketRow = {
@@ -104,7 +109,7 @@ export default function WorkersPage() {
     setWorkers((data as WorkerRow[]) || [])
   }
 
-  async function initializePage() {
+  const initializePage = useCallback(async () => {
     setLoading(true)
     await asyncHandler(
       async () => {
@@ -112,22 +117,21 @@ export default function WorkersPage() {
         await loadWorkers(fetchedClientId)
         return true
       },
-      { context: 'Failed to load workers', showErrorToast: true }
+      { context: 'טעינת עובדים', showErrorToast: true }
     )
     setLoading(false)
-  }
+  }, [])
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
+    const check = () => setIsMobile(getIsMobileViewport())
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial page data
     void initializePage()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- mount only
+  }, [initializePage])
 
   function openCreateDrawer() {
     setEditingWorker(null)
@@ -220,15 +224,15 @@ export default function WorkersPage() {
   }
 
   function validateForm() {
-    const nameError = validateRequired(form.full_name, 'Full name')
-    if (nameError) return nameError.message
-    const phoneError = validatePhoneNumber(form.phone, 'Phone')
-    if (phoneError) return phoneError.message
+    const nameError = validateRequired(form.full_name, 'שם')
+    if (nameError) return 'נא למלא שם מלא'
+    const phoneError = validatePhoneNumber(form.phone, 'טלפון')
+    if (phoneError) return 'נא להזין מספר טלפון תקין (לפחות 10 ספרות)'
     if (form.email) {
-      const emailError = validateEmail(form.email, 'Email')
-      if (emailError) return emailError.message
+      const emailError = validateEmail(form.email, 'אימייל')
+      if (emailError) return 'כתובת אימייל לא תקינה'
     }
-    if (!clientId) return 'Client ID not found'
+    if (!clientId) return 'לא נמצא מזהה לקוח — התחברו מחדש'
     return ''
   }
 
@@ -257,9 +261,9 @@ export default function WorkersPage() {
             .update(payload)
             .eq('id', editingWorker.id)
           if (error) throw error
-          toast.success('העובד עודכן')
+          toast.success(TM.workerUpdated)
         } else {
-          const res = await fetch('/api/create-worker', {
+          const res = await fetchWithTimeout('/api/create-worker', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -279,7 +283,7 @@ export default function WorkersPage() {
         closeDrawer()
         return true
       },
-      { context: 'Failed to save worker', showErrorToast: true }
+      { context: 'שמירת עובד', showErrorToast: true }
     )
     setSaving(false)
   }
@@ -293,11 +297,11 @@ export default function WorkersPage() {
           .eq('id', worker.id)
 
         if (error) throw error
-        toast.success(worker.is_active ? 'Worker deactivated' : 'Worker activated')
+        toast.success(worker.is_active ? TM.workerDeactivated : TM.workerActivated)
         await loadWorkers()
         return true
       },
-      { context: 'Failed to update worker status', showErrorToast: true }
+      { context: 'עדכון סטטוס עובד', showErrorToast: true }
     )
   }
 
@@ -309,12 +313,12 @@ export default function WorkersPage() {
       async () => {
         const { error } = await supabase.from('workers').delete().eq('id', worker.id)
         if (error) throw error
-        toast.success('Worker deleted')
+        toast.success(TM.workerDeleted)
         await loadWorkers()
         if (editingWorker?.id === worker.id) closeDrawer()
         return true
       },
-      { context: 'Failed to delete worker', showErrorToast: true }
+      { context: 'מחיקת עובד', showErrorToast: true }
     )
   }
 
@@ -346,6 +350,20 @@ export default function WorkersPage() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
+  function copyWorkerFieldLink(worker: WorkerRow, e?: React.MouseEvent) {
+    e?.stopPropagation()
+    const token = worker.access_token
+    if (!token) {
+      toast.error('אין טוקן לעובד')
+      return
+    }
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/worker?token=${encodeURIComponent(token)}`
+    void navigator.clipboard.writeText(url).then(
+      () => toast.success('הקישור הועתק'),
+      () => toast.error('העתקה נכשלה')
+    )
+  }
+
   return (
     <AppShell isMobile={isMobile}>
       {isMobile && (
@@ -358,7 +376,14 @@ export default function WorkersPage() {
 
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-      <div style={styles.content}>
+      <div
+        style={{
+          ...styles.content,
+          ...(isMobile
+            ? { padding: '16px 16px 8px', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }
+            : {}),
+        }}
+      >
         {!isMobile && (
           <PageHeader
             title="עובדים"
@@ -371,6 +396,20 @@ export default function WorkersPage() {
           />
         )}
 
+        {loading ? (
+          <>
+            <PageKpiSkeletonN columns={3} />
+            <Card noPadding>
+              <div style={{ padding: '20px 16px' }}>
+                <PageListSkeleton rows={8} />
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+                  <LoadingSpinner />
+                </div>
+              </div>
+            </Card>
+          </>
+        ) : (
+          <>
         {/* KPI Cards */}
         <div style={{
           ...styles.kpiGrid,
@@ -405,11 +444,7 @@ export default function WorkersPage() {
             />
           </div>
 
-          {loading ? (
-            <div style={styles.loadingContainer}>
-              <LoadingSpinner />
-            </div>
-          ) : filteredWorkers.length === 0 ? (
+          {filteredWorkers.length === 0 ? (
             <EmptyState
               title="לא נמצאו עובדים"
               description="נסו לשנות מסננים או להוסיף עובד חדש."
@@ -464,6 +499,9 @@ export default function WorkersPage() {
                     <Button variant="secondary" size="sm" onClick={() => openEditDrawer(worker)}>
                       עריכה
                     </Button>
+                    <Button variant="secondary" size="sm" onClick={(e) => copyWorkerFieldLink(worker, e)}>
+                      העתק קישור
+                    </Button>
                     <Button variant="secondary" size="sm" onClick={() => toggleWorkerStatus(worker)}>
                       {worker.is_active ? 'השבתה' : 'הפעלה'}
                     </Button>
@@ -473,6 +511,8 @@ export default function WorkersPage() {
             </div>
           )}
         </Card>
+          </>
+        )}
       </div>
 
       {/* Create/Edit Drawer */}
@@ -620,6 +660,9 @@ export default function WorkersPage() {
             </div>
 
             <div style={styles.drawerActions}>
+              <Button variant="secondary" onClick={() => copyWorkerFieldLink(selectedWorker)}>
+                העתק קישור
+              </Button>
               <Button variant="secondary" onClick={() => openEditDrawer(selectedWorker)}>
                 עריכת עובד
               </Button>

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getSingletonClientId } from '@/lib/singleton-client-server'
+import { checkRateLimitDistributed, sanitizeId } from '@/lib/api-validation'
+import { getLogger, getAuditLogger } from '@/lib/logging'
+import { requireSessionClientId } from '@/lib/api-auth'
 
 /**
  * Hard-delete a project for the single-tenant client (service role).
@@ -8,15 +10,32 @@ import { getSingletonClientId } from '@/lib/singleton-client-server'
  * if the DB does not cascade everything on project delete.
  */
 export async function POST(req: Request) {
+  const logger = getLogger()
+  const audit = getAuditLogger()
+  const requestId = `delete-project-${Date.now()}`
   try {
+    const auth = await requireSessionClientId()
+    if (!auth.ok) return auth.response
+
     const body = await req.json().catch(() => ({}))
-    const projectId = typeof body?.project_id === 'string' ? body.project_id.trim() : ''
+    const projectId = sanitizeId((body as { project_id?: unknown })?.project_id) || ''
     if (!projectId) {
-      return NextResponse.json({ error: 'חסר project_id' }, { status: 400 })
+      return NextResponse.json({ error: 'חסר project_id', requestId }, { status: 400 })
     }
 
     const admin = getSupabaseAdmin()
-    const clientId = await getSingletonClientId(admin)
+    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
+    const rl = await checkRateLimitDistributed({
+      supabaseAdmin: admin,
+      key: `ip:${ip}:delete-project`,
+      windowMs: 60_000,
+      maxRequests: 10,
+    })
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
+    }
+
+    const clientId = auth.ctx.clientId
 
     const { data: project, error: pErr } = await admin
       .from('projects')
@@ -24,9 +43,13 @@ export async function POST(req: Request) {
       .eq('id', projectId)
       .maybeSingle()
 
-    if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 })
+    if (pErr) {
+      logger.error('PROJECT_API', 'Delete project lookup failed', new Error(pErr.message), { requestId, projectId, clientId })
+      return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
+    }
     if (!project || (project as { client_id?: string }).client_id !== clientId) {
-      return NextResponse.json({ error: 'פרויקט לא נמצא' }, { status: 404 })
+      audit.logFailedOperation('DELETE', 'PROJECT', projectId, clientId, 'project_not_found_or_wrong_tenant')
+      return NextResponse.json({ error: 'פרויקט לא נמצא', requestId }, { status: 404 })
     }
 
     const { data: ticketRows, error: tListErr } = await admin
@@ -34,7 +57,10 @@ export async function POST(req: Request) {
       .select('id')
       .eq('project_id', projectId)
 
-    if (tListErr) return NextResponse.json({ error: tListErr.message }, { status: 500 })
+    if (tListErr) {
+      logger.error('PROJECT_API', 'Delete project ticket list failed', new Error(tListErr.message), { requestId, projectId, clientId })
+      return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
+    }
     const ticketIds = ((ticketRows as { id: string }[] | null) || []).map((r) => r.id)
 
     if (ticketIds.length > 0) {
@@ -42,29 +68,32 @@ export async function POST(req: Request) {
         .from('tickets')
         .update({ merged_into_ticket_id: null })
         .in('merged_into_ticket_id', ticketIds)
-      if (mErr) return NextResponse.json({ error: mErr.message }, { status: 500 })
+      if (mErr) return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
 
       const { error: attErr } = await admin.from('ticket_attachments').delete().in('ticket_id', ticketIds)
-      if (attErr) return NextResponse.json({ error: attErr.message }, { status: 500 })
+      if (attErr) return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
 
       const { error: logErr } = await admin.from('ticket_logs').delete().in('ticket_id', ticketIds)
-      if (logErr) return NextResponse.json({ error: logErr.message }, { status: 500 })
+      if (logErr) return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
 
       const { error: delTicketsErr } = await admin.from('tickets').delete().eq('project_id', projectId)
-      if (delTicketsErr) return NextResponse.json({ error: delTicketsErr.message }, { status: 500 })
+      if (delTicketsErr) return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
     }
 
     const { error: resDelErr } = await admin.from('residents').delete().eq('project_id', projectId)
-    if (resDelErr) return NextResponse.json({ error: resDelErr.message }, { status: 500 })
+    if (resDelErr) return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
 
     const { error: sessDelErr } = await admin.from('sessions').delete().eq('project_id', projectId)
-    if (sessDelErr) return NextResponse.json({ error: sessDelErr.message }, { status: 500 })
+    if (sessDelErr) return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
 
     const { error: delProjErr } = await admin.from('projects').delete().eq('id', projectId).eq('client_id', clientId)
-    if (delProjErr) return NextResponse.json({ error: delProjErr.message }, { status: 500 })
+    if (delProjErr) return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
 
+    audit.logAction('DELETE', 'PROJECT', projectId, clientId, 'dashboard')
+    logger.warn('PROJECT_API', 'Project hard-deleted', { requestId, projectId, clientId })
     return NextResponse.json({
       success: true,
+      requestId,
       deleted: {
         project_id: projectId,
         name: (project as { name?: string }).name,
@@ -72,7 +101,7 @@ export async function POST(req: Request) {
       },
     })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    logger.error('PROJECT_API', 'Unhandled delete-project error', e instanceof Error ? e : new Error(String(e)), { requestId })
+    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
   }
 }

@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import {
   toastReporterClosedNotifyNetworkWarning,
   toastReporterClosedNotifySummary,
@@ -26,6 +28,8 @@ import {
   LoadingSpinner,
   theme
 } from '../components/ui'
+import { getIsMobileViewport } from '@/lib/mobile-viewport'
+import { PageListSkeleton } from '../components/page-skeleton'
 
 type TicketRow = {
   id: string
@@ -129,11 +133,10 @@ export default function TicketsPage() {
   const [translating, setTranslating] = useState(false)
   const [mergeCandidates, setMergeCandidates] = useState<TicketRow[]>([])
   const [mergeLoading, setMergeLoading] = useState(false)
-  const [exportProject, setExportProject] = useState('ALL')
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
+    const check = () => setIsMobile(getIsMobileViewport())
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
@@ -161,13 +164,7 @@ export default function TicketsPage() {
     }
   }, [projectFilter, workerFilter, statusFilter, priorityFilter])
 
-  useEffect(() => {
-    fetchData()
-    const interval = setInterval(fetchData, 10 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [])
-
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     await asyncHandler(
       async () => {
@@ -206,10 +203,16 @@ export default function TicketsPage() {
         setProjects((projectsResult.data as ProjectRow[]) || [])
         return true
       },
-      { context: 'Failed to load tickets', showErrorToast: true }
+      { context: 'טעינת תקלות', showErrorToast: true }
     )
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    void fetchData()
+    const interval = setInterval(() => void fetchData(), 10 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [fetchData])
 
   const stats = useMemo(() => {
     const total = tickets.length
@@ -268,16 +271,27 @@ export default function TicketsPage() {
     return worker?.full_name || 'לא ידוע'
   }
 
-  function exportToExcel() {
-    const list =
-      exportProject === 'ALL'
-        ? filteredTickets
-        : filteredTickets.filter((t) => t.project_code === exportProject)
+  const statusLabelHe: Record<string, string> = {
+    NEW: 'חדש',
+    ASSIGNED: 'משויך',
+    IN_PROGRESS: 'בטיפול',
+    WAITING_PARTS: 'ממתין לחלקים',
+    CLOSED: 'סגור',
+  }
+  const priorityLabelHe: Record<string, string> = {
+    HIGH: 'גבוהה',
+    MEDIUM: 'בינונית',
+    LOW: 'נמוכה',
+  }
 
+  function exportToExcel() {
+    const list = filteredTickets
     const rows = list.map((t) => ({
-      'מספר תקלה': t.ticket_number,
+      'מספר טיקט': t.ticket_number,
       תיאור: t.description || '',
-      סטטוס: t.status,
+      סטטוס: statusLabelHe[t.status] || t.status,
+      עדיפות: priorityLabelHe[(t.priority || 'MEDIUM').toUpperCase()] || (t.priority || ''),
+      פרויקט: t.project_name || t.project_code || '',
       'עובד משויך': getWorkerName(t.assigned_worker_id),
       'תאריך פתיחה': t.created_at ? new Date(t.created_at).toLocaleString('he-IL') : '',
       'תאריך סגירה': t.closed_at ? new Date(t.closed_at).toLocaleString('he-IL') : '',
@@ -285,10 +299,10 @@ export default function TicketsPage() {
 
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Tickets')
-    const name = exportProject === 'ALL' ? 'tickets-all' : `tickets-${exportProject}`
-    XLSX.writeFile(wb, `${name}.xlsx`)
-    toast.success('קובץ הורד')
+    XLSX.utils.book_append_sheet(wb, ws, 'תקלות')
+    const day = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `bamakor-tickets-${day}.xlsx`)
+    toast.success(TM.excelExported)
   }
 
   async function loadMergeCandidates(ticket: TicketRow) {
@@ -329,7 +343,7 @@ export default function TicketsPage() {
     if (!selectedTicket) return
     setSavingTicket(true)
     try {
-      const res = await fetch('/api/merge-ticket', {
+      const res = await fetchWithTimeout('/api/merge-ticket', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -353,7 +367,7 @@ export default function TicketsPage() {
     setTranslating(true)
     setDescriptionTranslation('')
     try {
-      const res = await fetch('/api/translate-ticket', {
+      const res = await fetchWithTimeout('/api/translate-ticket', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: selectedTicket.description }),
@@ -434,8 +448,9 @@ export default function TicketsPage() {
     setSavingTicket(true)
     try {
       // Handle worker assignment if changed
+      let didAssign = false
       if (draftWorkerId && draftWorkerId !== selectedTicket.assigned_worker_id) {
-        const assignRes = await fetch('/api/assign-ticket', {
+        const assignRes = await fetchWithTimeout('/api/assign-ticket', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ticket_id: selectedTicket.id, worker_id: draftWorkerId }),
@@ -451,6 +466,7 @@ export default function TicketsPage() {
         if ((assignBody.worker_sms_sent === false || assignBody.worker_sms_sent === null) && assignBody.worker_sms_note) {
           toast.error(assignBody.worker_sms_note)
         }
+        didAssign = true
       }
 
       const payload: Record<string, string | null> = {
@@ -473,11 +489,13 @@ export default function TicketsPage() {
 
       const closedNow = draftStatus === 'CLOSED' && selectedTicket.status !== 'CLOSED'
 
-      toast.success('השינויים נשמרו')
+      if (closedNow) toast.success(TM.ticketClosed)
+      else if (didAssign) toast.success(TM.workerAssigned)
+      else toast.success(TM.ticketUpdated)
 
       if (closedNow) {
         try {
-          const nRes = await fetch('/api/notify-reporter-ticket-closed', {
+          const nRes = await fetchWithTimeout('/api/notify-reporter-ticket-closed', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ticket_id: selectedTicket.id }),
@@ -496,7 +514,7 @@ export default function TicketsPage() {
       await fetchData()
       setSelectedTicket((prev) => prev ? { ...prev, priority: draftPriority, status: draftStatus, assigned_worker_id: draftWorkerId || null } : prev)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save changes')
+      toast.error(err instanceof Error ? err.message : TM.genericSaveError)
     }
     setSavingTicket(false)
   }
@@ -523,19 +541,19 @@ export default function TicketsPage() {
       if (addTicketForm.reporter_phone) formData.append('reporter_phone', addTicketForm.reporter_phone)
       formData.append('source', 'manual')
 
-      const response = await fetch('/api/create-ticket', { method: 'POST', body: formData })
+      const response = await fetchWithTimeout('/api/create-ticket', { method: 'POST', body: formData })
       if (!response.ok) {
         const result = await response.json()
-        throw new Error(result.error || 'Failed to create ticket')
+        throw new Error(result.error || TM.genericSaveError)
       }
 
       const result = await response.json()
-      toast.success(`תקלה #${result.ticketNumber} נוצרה`)
+      toast.success(`טיקט #${result.ticketNumber} נוצר בהצלחה ✓`)
       setAddTicketForm({ project_code: '', description: '', reporter_name: '', reporter_phone: '' })
       setShowAddTicketModal(false)
       await fetchData()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create ticket'
+      const message = err instanceof Error ? err.message : TM.genericSaveError
       setAddTicketError(message)
       toast.error(message)
     }
@@ -593,16 +611,6 @@ export default function TicketsPage() {
               margin: '4px 0',
             }}
           />
-          <div style={{ fontSize: '12px', fontWeight: 600, color: theme.colors.textMuted }}>ייצוא לאקסל</div>
-          <Select
-            value={exportProject}
-            onChange={setExportProject}
-            options={[
-              { label: 'כל הפרויקטים', value: 'ALL' },
-              ...projects.map((p) => ({ label: p.name, value: p.project_code })),
-            ]}
-            style={{ width: '100%', minWidth: 0 }}
-          />
           <Button
             variant="secondary"
             size="md"
@@ -613,7 +621,7 @@ export default function TicketsPage() {
               setMobileToolsOpen(false)
             }}
           >
-            הורד Excel
+            ייצוא Excel
           </Button>
         </div>
       </Drawer>
@@ -626,7 +634,14 @@ export default function TicketsPage() {
         </div>
       )}
 
-      <div style={{ ...styles.content, ...(isMobile ? { padding: '16px 16px 28px' } : {}) }}>
+      <div
+        style={{
+          ...styles.content,
+          ...(isMobile
+            ? { padding: '16px 16px 8px', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }
+            : {}),
+        }}
+      >
         {!isMobile && (
           <PageHeader
             title="תקלות"
@@ -690,27 +705,9 @@ export default function TicketsPage() {
                 placeholder="חיפוש תקלות..."
                 style={{ flex: 1, maxWidth: '320px' }}
               />
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <Select
-                  value={exportProject}
-                  onChange={setExportProject}
-                  options={[
-                    { label: 'ייצוא: כל הפרויקטים', value: 'ALL' },
-                    ...projects.map((p) => ({ label: `ייצוא: ${p.name}`, value: p.project_code })),
-                  ]}
-                  style={{ minWidth: '200px' }}
-                />
-                <Button variant="secondary" size="sm" type="button" onClick={exportToExcel}>
-                  ייצא ל-Excel
-                </Button>
-              </div>
+              <Button variant="secondary" size="sm" type="button" onClick={exportToExcel}>
+                ייצוא Excel
+              </Button>
               <div style={{
                 ...styles.filterGroup,
                 flexWrap: 'nowrap',
@@ -746,7 +743,10 @@ export default function TicketsPage() {
           {/* Table */}
           {loading ? (
             <div style={styles.loadingContainer}>
-              <LoadingSpinner />
+              <PageListSkeleton rows={10} />
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px' }}>
+                <LoadingSpinner />
+              </div>
             </div>
           ) : filteredTickets.length === 0 ? (
             <EmptyState
@@ -953,6 +953,8 @@ export default function TicketsPage() {
                           alt={attachment.file_name || 'attachment'}
                           style={styles.attachmentImage}
                           crossOrigin="anonymous"
+                          loading="lazy"
+                          decoding="async"
                         />
                       ) : (
                         <div style={styles.attachmentFile}>

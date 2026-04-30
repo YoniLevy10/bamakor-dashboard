@@ -44,6 +44,28 @@ vi.mock('@/lib/supabase-admin', () => ({
           },
         }
       }
+      if (table === 'clients') {
+        return {
+          select: () => ({
+            eq: () => ({
+              limit: () =>
+                Promise.resolve({
+                  data: [
+                    {
+                      id: 'test-client-id',
+                      name: 'Test',
+                      sms_sender_name: 'Test',
+                      whatsapp_phone_number_id: 'pnid-test-1',
+                      whatsapp_access_token: 'tok',
+                      manager_phone: null,
+                    },
+                  ],
+                  error: null,
+                }),
+            }),
+          }),
+        }
+      }
       throw new Error(`tests/whatsapp-webhook.post: unexpected table ${table}`)
     },
   }),

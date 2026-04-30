@@ -3,19 +3,29 @@
 import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler, validateResponse } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import { validateRequired, validateMinLength } from '@/lib/validators'
 
 type ProjectRow = {
   id: string
   name: string
   project_code: string
+  client_id?: string
 }
 
 function ReportPageContent() {
   const searchParams = useSearchParams()
   const paramProjectCode = (searchParams.get('project') || '').toUpperCase()
+  const clientFromUrl = (searchParams.get('client') || '').trim()
+  const effectiveClientId = useMemo(() => {
+    if (clientFromUrl) return clientFromUrl
+    if (process.env.NODE_ENV === 'development') {
+      return (process.env.NEXT_PUBLIC_BAMAKOR_CLIENT_ID || '').trim()
+    }
+    return ''
+  }, [clientFromUrl])
 
   const [description, setDescription] = useState('')
   const [reporterName, setReporterName] = useState('')
@@ -28,22 +38,40 @@ function ReportPageContent() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [imageUploadError, setImageUploadError] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   const SUPPORTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
   const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
   const MAX_FILES = 3
 
   useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 350)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  useEffect(() => {
     async function loadProjects() {
       await asyncHandler(
         async () => {
-          const { data, error } = await supabase
-            .from('projects')
-            .select('id, name, project_code')
-            .order('project_code', { ascending: true })
+          if (!effectiveClientId) {
+            setProjects([])
+            return
+          }
+          const url = new URL('/api/public/projects', window.location.origin)
+          url.searchParams.set('client_id', effectiveClientId)
+          if (debouncedSearch.length >= 2) {
+            url.searchParams.set('q', debouncedSearch)
+          } else if (paramProjectCode) {
+            url.searchParams.set('project', paramProjectCode)
+          }
 
-          if (error) throw new Error(error.message)
-          setProjects((data as ProjectRow[]) || [])
+          const res = await fetchWithTimeout(url.toString())
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}))
+            throw new Error((j as { error?: string }).error || 'Failed to load buildings')
+          }
+          const j = (await res.json()) as { projects?: ProjectRow[] }
+          setProjects(j.projects || [])
         },
         {
           context: 'Failed to load buildings',
@@ -53,7 +81,7 @@ function ReportPageContent() {
     }
 
     loadProjects()
-  }, [])
+  }, [effectiveClientId, paramProjectCode, debouncedSearch])
 
   // Only search if input is 2+ characters
   const searchResults = useMemo(() => {
@@ -134,11 +162,17 @@ function ReportPageContent() {
       return
     }
 
+    if (!effectiveClientId) {
+      setErrorMessage('קישור הדיווח לא תקין — חסר מזהה לקוח (?client=). השתמשו בקישור מהבניין.')
+      return
+    }
+
     setLoading(true)
 
     const result = await asyncHandler(
       async () => {
         const formData = new FormData()
+        formData.append('client_id', effectiveClientId)
         formData.append('project_code', selectedProjectCode)
         formData.append('description', description.trim())
         formData.append('reporter_name', reporterName.trim() || '')
@@ -149,7 +183,7 @@ function ReportPageContent() {
           formData.append('attachments', file)
         })
 
-        const response = await fetch('/api/create-ticket', {
+        const response = await fetchWithTimeout('/api/create-ticket', {
           method: 'POST',
           body: formData,
         })
@@ -167,15 +201,13 @@ function ReportPageContent() {
     )
 
     if (result) {
-      const successMsg = `Issue submitted successfully. Ticket #${result.ticketNumber}`
-
       // Show warning if some images failed but ticket was created
       if (result.imageUploadWarning) {
         toast.warning(result.imageUploadWarning)
       }
 
-      setSuccessMessage(successMsg)
-      toast.success('Issue submitted successfully')
+      setSuccessMessage(`תקלה #${result.ticketNumber} נשלחה בהצלחה`)
+      toast.success(`טיקט #${result.ticketNumber} נוצר בהצלחה ✓`)
 
       // Reset form
       setDescription('')
@@ -277,6 +309,12 @@ function ReportPageContent() {
 
           {successMessage && <div style={styles.successBox}>{successMessage}</div>}
           {errorMessage && <div style={styles.errorBox}>{errorMessage}</div>}
+          {!effectiveClientId && (
+            <div style={styles.errorBox} role="alert">
+              Open this page from your building QR link. The link must include a tenant id (
+              <code style={{ fontSize: 12 }}>?client=…</code>).
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} style={styles.form}>
             <div style={styles.field}>

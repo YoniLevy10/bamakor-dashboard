@@ -1,4 +1,9 @@
 import { fetchWithTimeout } from '@/lib/fetch-timeout'
+import { insertWhatsAppSendFailure } from '@/lib/error-logs-db'
+
+export type WhatsAppFailureLog = {
+  clientId: string
+}
 
 type WhatsAppTemplateComponent = {
   type: string
@@ -99,17 +104,29 @@ async function sendRawWhatsAppPayload(payload: Record<string, unknown>, creds?: 
 export async function sendWhatsAppTextMessage(
   to: string,
   body: string,
-  creds?: WhatsAppCredentials
+  creds?: WhatsAppCredentials,
+  failureLog?: WhatsAppFailureLog
 ) {
   console.log('📤 Sending WhatsApp text message to:', to)
 
-  return sendRawWhatsAppPayload({
-    to,
-    type: 'text',
-    text: {
-      body,
-    },
-  }, creds)
+  try {
+    return await sendRawWhatsAppPayload(
+      {
+        to,
+        type: 'text',
+        text: {
+          body,
+        },
+      },
+      creds
+    )
+  } catch (e) {
+    if (failureLog?.clientId) {
+      const msg = e instanceof Error ? e.message : String(e)
+      await insertWhatsAppSendFailure(failureLog.clientId, to, body, msg)
+    }
+    throw e
+  }
 }
 
 export async function sendWhatsAppTemplateMessage(

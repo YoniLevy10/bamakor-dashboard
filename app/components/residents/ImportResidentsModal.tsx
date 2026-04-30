@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx'
 import { Button, theme } from '../ui'
 import type { ResidentProjectRow } from './AddResidentModal'
 import { toast } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 
 type ParsedRow = Record<string, unknown>
 
@@ -40,12 +42,14 @@ function sanitizePhone(raw: string) {
 export function ImportResidentsModal({
   open,
   onClose,
+  isMobile,
   projects,
   defaultProjectId,
   onImported,
 }: {
   open: boolean
   onClose: () => void
+  isMobile?: boolean
   projects: ResidentProjectRow[]
   defaultProjectId: string
   onImported: (newRows: unknown[]) => void
@@ -175,7 +179,7 @@ export function ImportResidentsModal({
     setApiError('')
     try {
       const payloadRows = buildPayload()
-      const res = await fetch('/api/import-residents', {
+      const res = await fetchWithTimeout('/api/import-residents', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ rows: payloadRows }),
@@ -188,13 +192,15 @@ export function ImportResidentsModal({
             ? String((json as { error?: unknown }).error)
             : 'ייבוא נכשל'
         setApiError(errMsg)
+        toast.error(errMsg)
         return
       }
 
       const inserted = Number((json as { inserted?: unknown } | null)?.inserted || 0)
       const failed = Number((json as { failed?: unknown } | null)?.failed || 0)
-      if (inserted > 0) toast.success(`יובאו ${inserted} דיירים`)
-      if (failed > 0) toast.error(`${failed} שורות נכשלו — בדקו שגיאות`)
+      if (inserted > 0 && failed > 0) toast.success(TM.csvImportPartial(inserted, failed))
+      else if (inserted > 0) toast.success(TM.csvImported(inserted))
+      if (failed > 0 && inserted === 0) toast.error(`${failed} שורות נכשלו — בדקו שגיאות`)
 
       const residents = (json as { residents?: unknown } | null)?.residents
       if (Array.isArray(residents)) {
@@ -202,22 +208,34 @@ export function ImportResidentsModal({
       }
       close()
     } catch (e) {
-      setApiError(e instanceof Error ? e.message : 'ייבוא נכשל')
+      const msg = e instanceof Error ? e.message : TM.genericSaveError
+      setApiError(msg)
+      toast.error(msg)
     } finally {
       setImporting(false)
     }
   }
 
+  const scrollAreaStyle: CSSProperties = isMobile
+    ? { flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column' }
+    : { maxHeight: 'calc(92vh - 120px)', overflow: 'auto' }
+
   return (
     <>
       <div style={styles.modalOverlay} onClick={close} />
-      <div style={styles.modal}>
+      <div className={isMobile ? 'app-modal-sheet-root' : undefined} style={styles.modal}>
         <div style={styles.modalHeader}>
           <h2 style={styles.modalTitle}>ייבוא דיירים מקובץ</h2>
-          <button onClick={close} style={styles.modalClose} aria-label="סגירה">
+          <button
+            type="button"
+            onClick={close}
+            className="app-modal-close"
+            style={styles.modalClose}
+            aria-label="סגירה"
+          >
             <svg
-              width="18"
-              height="18"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -231,6 +249,7 @@ export function ImportResidentsModal({
           </button>
         </div>
 
+        <div className={isMobile ? 'app-modal-sheet-scroll' : undefined} style={scrollAreaStyle}>
         <div style={styles.body}>
           <div
             style={{
@@ -257,6 +276,7 @@ export function ImportResidentsModal({
               <div style={styles.row}>
                 <label style={styles.label}>בניין (אופציונלי)</label>
                 <select
+                  className="app-select-input"
                   value={singleProjectId}
                   onChange={(e) => setSingleProjectId(e.target.value)}
                   style={styles.select}
@@ -271,10 +291,11 @@ export function ImportResidentsModal({
               </div>
 
               {!singleProjectId && (
-                <div style={styles.grid2}>
+                <div className="app-import-grid" style={styles.grid2}>
                   <div style={styles.row}>
                     <label style={styles.label}>עמודת קוד בניין</label>
                     <select
+                      className="app-select-input"
                       value={mapping.project_code || ''}
                       onChange={(e) =>
                         setMapping((m) => ({ ...m, project_code: e.target.value || undefined }))
@@ -292,6 +313,7 @@ export function ImportResidentsModal({
                   <div style={styles.row}>
                     <label style={styles.label}>עמודת שם בניין</label>
                     <select
+                      className="app-select-input"
                       value={mapping.project_name || ''}
                       onChange={(e) =>
                         setMapping((m) => ({ ...m, project_name: e.target.value || undefined }))
@@ -309,10 +331,11 @@ export function ImportResidentsModal({
                 </div>
               )}
 
-              <div style={styles.grid2}>
+              <div className="app-import-grid" style={styles.grid2}>
                 <div style={styles.row}>
                   <label style={styles.label}>עמודת שם מלא (חובה)</label>
                   <select
+                    className="app-select-input"
                     value={mapping.full_name}
                     onChange={(e) => setMapping((m) => ({ ...m, full_name: e.target.value }))}
                     style={styles.select}
@@ -328,6 +351,7 @@ export function ImportResidentsModal({
                 <div style={styles.row}>
                   <label style={styles.label}>עמודת טלפון</label>
                   <select
+                    className="app-select-input"
                     value={mapping.phone || ''}
                     onChange={(e) =>
                       setMapping((m) => ({ ...m, phone: e.target.value || undefined }))
@@ -345,6 +369,7 @@ export function ImportResidentsModal({
                 <div style={styles.row}>
                   <label style={styles.label}>עמודת דירה</label>
                   <select
+                    className="app-select-input"
                     value={mapping.apartment_number || ''}
                     onChange={(e) =>
                       setMapping((m) => ({ ...m, apartment_number: e.target.value || undefined }))
@@ -362,6 +387,7 @@ export function ImportResidentsModal({
                 <div style={styles.row}>
                   <label style={styles.label}>עמודת הערות</label>
                   <select
+                    className="app-select-input"
                     value={mapping.notes || ''}
                     onChange={(e) =>
                       setMapping((m) => ({ ...m, notes: e.target.value || undefined }))
@@ -441,6 +467,7 @@ export function ImportResidentsModal({
             ייבוא
           </Button>
         </div>
+        </div>
       </div>
     </>
   )
@@ -451,7 +478,7 @@ const styles: Record<string, CSSProperties> = {
     position: 'fixed',
     inset: 0,
     background: 'rgba(0, 0, 0, 0.7)',
-    zIndex: 100,
+    zIndex: 400,
   },
   modal: {
     position: 'fixed',
@@ -463,9 +490,11 @@ const styles: Record<string, CSSProperties> = {
     background: theme.colors.surface,
     borderRadius: theme.radius.xl,
     border: `1px solid ${theme.colors.border}`,
-    zIndex: 101,
+    zIndex: 401,
     maxHeight: '92vh',
-    overflow: 'auto',
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
   },
   modalHeader: {
     display: 'flex',
@@ -479,8 +508,8 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '32px',
-    height: '32px',
+    width: '44px',
+    height: '44px',
     borderRadius: theme.radius.sm,
     background: 'transparent',
     border: 'none',
@@ -511,11 +540,14 @@ const styles: Record<string, CSSProperties> = {
   row: { display: 'flex', flexDirection: 'column', gap: '6px' },
   label: { fontSize: '12px', fontWeight: 600, color: theme.colors.textMuted },
   select: {
+    width: '100%',
+    boxSizing: 'border-box',
     padding: '10px 12px',
     borderRadius: theme.radius.md,
     border: `1px solid ${theme.colors.border}`,
     background: theme.colors.surfaceElevated,
     color: theme.colors.textPrimary,
+    fontSize: '16px',
   },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' },
   hint: { marginTop: '10px', fontSize: '12px', color: theme.colors.textMuted },

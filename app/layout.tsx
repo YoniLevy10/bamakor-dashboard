@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ToastContainer } from "./components/ToastContainer";
+import { RegisterServiceWorker } from "./components/RegisterServiceWorker";
 import { initializeLogger, LogLevel } from "@/lib/logging";
 
 const inter = Inter({
@@ -16,7 +17,7 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   viewportFit: "cover",
-  themeColor: "#0066FF",
+  themeColor: "#2563eb",
   colorScheme: "light",
   interactiveWidget: "resizes-content",
 };
@@ -30,8 +31,8 @@ export const metadata: Metadata = {
   creator: "Yoni Levy",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
-    title: "Bamakor",
+    statusBarStyle: "default",
+    title: "במקור",
   },
   formatDetection: {
     telephone: false,
@@ -40,11 +41,10 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "32x32", type: "image/x-icon" },
-      { url: "/icon.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
     ],
     apple: "/apple-icon.png",
-    shortcut: "/icon.png",
+    shortcut: "/apple-icon.png",
   },
   openGraph: {
     type: "website",
@@ -55,9 +55,9 @@ export const metadata: Metadata = {
     description: "מערכת ניהול נכסים ותקלות",
     images: [
       {
-        url: "/icon.png",
-        width: 512,
-        height: 512,
+        url: "/apple-icon.png",
+        width: 180,
+        height: 180,
         alt: "Bamakor Logo",
         type: "image/png",
       },
@@ -67,9 +67,14 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "במקור — ניהול תקלות ואחזקה",
     description: "מערכת ניהול נכסים ותקלות",
-    images: ["/icon.png"],
+    images: ["/apple-icon.png"],
   },
   category: "productivity",
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-status-bar-style": "default",
+    "apple-mobile-web-app-title": "במקור",
+  },
 };
 
 export default function RootLayout({
@@ -93,6 +98,7 @@ export default function RootLayout({
       className={`${inter.variable} font-sans antialiased bg-background`}
     >
       <body className="min-h-screen flex flex-col bg-background text-foreground" dir="rtl">
+        <RegisterServiceWorker />
         {children}
         <ToastContainer />
       </body>

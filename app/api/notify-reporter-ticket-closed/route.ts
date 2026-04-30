@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { getLogger } from '@/lib/logging'
+import { requireSessionClientId } from '@/lib/api-auth'
+import { sanitizeId } from '@/lib/api-validation'
 import { notifyReporterTicketClosed } from '@/lib/reporter-ticket-closed-notify'
 
 /**
@@ -21,9 +22,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
 
-    const clientId = await getSingletonClientId(supabaseAdmin)
+    const auth = await requireSessionClientId()
+    if (!auth.ok) return auth.response
+    const clientId = auth.ctx.clientId
+
     const body = await req.json()
-    const ticket_id = body?.ticket_id as string | undefined
+    const ticket_id = sanitizeId((body as { ticket_id?: unknown })?.ticket_id)
 
     if (!ticket_id) {
       return NextResponse.json({ error: 'ticket_id is required' }, { status: 400 })

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { sendWorkerSMS } from '@/lib/sms-send'
+import { requireSessionClientId } from '@/lib/api-auth'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 import { getPublicTicketsUrl } from '@/lib/public-app-url'
+import { checkRateLimitDistributed, sanitizeId } from '@/lib/api-validation'
 
 // ARCHIVED: Old WhatsApp notification
 // import { sendWhatsAppTextWithTemplateFallback } from '@/lib/whatsapp-send'
@@ -33,15 +34,29 @@ export async function POST(req: Request) {
       )
     }
 
-    const bamakorClientId = await getSingletonClientId(supabaseAdmin)
+    const auth = await requireSessionClientId()
+    if (!auth.ok) return auth.response
+    const bamakorClientId = auth.ctx.clientId
 
     const body = await req.json()
-    const { ticket_id, worker_id } = body
+    const ticket_id = sanitizeId((body as { ticket_id?: unknown })?.ticket_id)
+    const worker_id = sanitizeId((body as { worker_id?: unknown })?.worker_id)
+
+    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
+    const rl = await checkRateLimitDistributed({
+      supabaseAdmin,
+      key: `ip:${ip}:assign-ticket`,
+      windowMs: 60_000,
+      maxRequests: 60,
+    })
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
+    }
 
     if (!ticket_id || !worker_id) {
       logger.error('TICKET_API', 'Missing required parameters', undefined, { requestId, ticket_id, worker_id })
       return NextResponse.json(
-        { error: 'ticket_id and worker_id are required' },
+        { error: 'ticket_id and worker_id are required', requestId },
         { status: 400 }
       )
     }
@@ -115,14 +130,14 @@ export async function POST(req: Request) {
 
     if (updateError) {
       logger.error('TICKET_API', 'Failed to assign ticket', updateError, { requestId, ticket_id, worker_id })
-      audit.logFailedOperation('UPDATE', 'TICKET', ticket_id, 'unknown', `Assignment failed: ${updateError.message}`)
+      audit.logFailedOperation('UPDATE', 'TICKET', ticket_id, clientId, `Assignment failed: ${updateError.message}`)
       return NextResponse.json(
-        { error: updateError.message },
+        { error: 'Server error', requestId },
         { status: 500 }
       )
     }
     
-    audit.logTicketAssigned('unknown', ticket_id, worker_id)
+    audit.logTicketAssigned(clientId, ticket_id, worker_id)
     logger.info('TICKET_API', 'Ticket assigned successfully', { requestId, ticket_id, worker_id })
 
     const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
@@ -194,13 +209,14 @@ export async function POST(req: Request) {
       ticket: updatedTicket,
       worker_sms_sent: workerSmsSent,
       worker_sms_note: workerSmsNote,
+      requestId,
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
     logger.error('TICKET_API', 'Assign ticket route error', err, { requestId })
     console.error('❌ assign-ticket route error:', error)
     return NextResponse.json(
-      { error: 'Server error' },
+      { error: 'Server error', requestId },
       { status: 500 }
     )
   }

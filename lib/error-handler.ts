@@ -78,7 +78,7 @@ export function getErrorMessage(error: unknown): string {
     return error;
   }
 
-  return 'An unexpected error occurred. Please try again.';
+  return 'שגיאה לא צפויה — נסה שוב';
 }
 
 /**
@@ -104,7 +104,7 @@ export async function asyncHandler<T>(
     console.error(errorMsg, error);
 
     if (showErrorToast) {
-      toast.error(message);
+      toast.error(message)
     }
 
     if (onError) {
