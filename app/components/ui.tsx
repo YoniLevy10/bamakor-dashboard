@@ -256,7 +256,7 @@ function NavSignOutButton({ onAfterSignOut }: { onAfterSignOut?: () => void }) {
 // SIDEBAR
 // ============================================================================
 
-export function Sidebar() {
+export function Sidebar({ hidden }: { hidden?: boolean } = {}) {
   const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
 
@@ -265,7 +265,7 @@ export function Sidebar() {
   }, [])
 
   // Avoid dev-time hydration mismatches (Turbopack/HMR) by not SSR-rendering the menu.
-  if (!mounted) return null
+  if (!mounted || hidden) return null
 
   return (
     <aside style={sidebarStyles.container}>
@@ -670,16 +670,29 @@ export function AppShell({
   isMobile?: boolean
 }) {
   const pathname = usePathname()
-  const bottomNav = !!isMobile && showMobileBottomNavForPath(pathname)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Hydration safety: do not let `isMobile` (client-only) change SSR markup.
+  // We keep a stable default until after mount.
+  const mobile = mounted ? !!isMobile : false
+  const bottomNav = mobile && showMobileBottomNavForPath(pathname)
 
   return (
-    <div dir="rtl" style={{ display: 'flex', minHeight: '100vh', background: theme.colors.background }}>
-      {!isMobile && <Sidebar />}
+    <div
+      dir="rtl"
+      style={{ display: 'flex', minHeight: '100vh', background: theme.colors.background }}
+      suppressHydrationWarning
+    >
+      <Sidebar hidden={mobile} />
       <main
         data-app-main
         style={{
           flex: 1,
-          marginInlineStart: isMobile ? 0 : '240px',
+          marginInlineStart: mobile ? 0 : '240px',
           minWidth: 0,
           paddingBottom: bottomNav ? 'calc(58px + env(safe-area-inset-bottom, 0px))' : undefined,
         }}
