@@ -41,12 +41,10 @@ export function LoginClient() {
     setLoading(true)
     try {
       const supabase = createClient()
-      const origin = window.location.origin
-      const callbackUrl = `${origin}/auth/callback`
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: callbackUrl,
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       })
       if (oauthError) throw oauthError
