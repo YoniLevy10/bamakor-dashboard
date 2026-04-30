@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
 import { toast, asyncHandler } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import { validateRequired } from '@/lib/validators'
 import {
   AppShell,
@@ -22,6 +24,7 @@ import {
   theme
 } from '../components/ui'
 import { getIsMobileViewport } from '@/lib/mobile-viewport'
+import { PageKpiSkeletonN, PageListSkeleton } from '../components/page-skeleton'
 
 type ProjectRow = {
   id: string
@@ -121,7 +124,7 @@ export default function ProjectsPage() {
           .update({ assigned_worker_id: workerId || null })
           .eq('id', projectId)
         if (error) throw error
-        toast.success('עובד אחזקה עודכן')
+        toast.success(TM.projectMaintainerUpdated)
         await loadProjects()
         return true
       },
@@ -129,19 +132,33 @@ export default function ProjectsPage() {
     )
   }
 
-  async function initializePage() {
+  const initializePage = useCallback(async () => {
     setLoading(true)
     await asyncHandler(
       async () => {
         const fetchedClientId = await loadClientId()
-        await loadWorkers(fetchedClientId)
-        await loadProjects(fetchedClientId)
+        const [workersResult, projectsResult] = await Promise.all([
+          supabase
+            .from('workers')
+            .select('id, full_name')
+            .eq('client_id', fetchedClientId)
+            .order('full_name', { ascending: true }),
+          supabase
+            .from('projects')
+            .select('*')
+            .eq('client_id', fetchedClientId)
+            .order('created_at', { ascending: false }),
+        ])
+        if (workersResult.error) throw workersResult.error
+        if (projectsResult.error) throw projectsResult.error
+        setWorkers((workersResult.data as WorkerRow[]) || [])
+        setProjects((projectsResult.data as ProjectRow[]) || [])
         return true
       },
-      { context: 'Failed to load projects', showErrorToast: true }
+      { context: 'טעינת פרויקטים', showErrorToast: true }
     )
     setLoading(false)
-  }
+  }, [])
 
   useEffect(() => {
     const check = () => setIsMobile(getIsMobileViewport())
@@ -151,9 +168,8 @@ export default function ProjectsPage() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial page data
     void initializePage()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- mount only
+  }, [initializePage])
 
   function openCreateDrawer() {
     setEditingProject(null)
@@ -251,9 +267,9 @@ export default function ProjectsPage() {
             .update(payload)
             .eq('id', editingProject.id)
           if (error) throw error
-          toast.success('הפרויקט עודכן')
+          toast.success(TM.projectUpdated)
         } else {
-          const res = await fetch('/api/create-project', {
+          const res = await fetchWithTimeout('/api/create-project', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -267,7 +283,7 @@ export default function ProjectsPage() {
           })
           const json = await res.json().catch(() => ({}))
           if (!res.ok) throw new Error((json as { error?: string }).error || 'יצירת פרויקט נכשלה')
-          toast.success('הפרויקט נוצר')
+          toast.success(TM.projectCreated)
         }
 
         await loadProjects()
@@ -288,7 +304,7 @@ export default function ProjectsPage() {
           .eq('id', project.id)
 
         if (error) throw error
-        toast.success(project.is_active ? 'הפרויקט הושבת' : 'הפרויקט הופעל')
+        toast.success(project.is_active ? TM.projectDeactivated : TM.projectActivated)
         await loadProjects()
         return true
       },
@@ -304,14 +320,14 @@ export default function ProjectsPage() {
 
     await asyncHandler(
       async () => {
-        const res = await fetch('/api/delete-project', {
+        const res = await fetchWithTimeout('/api/delete-project', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ project_id: project.id }),
         })
         const json = (await res.json().catch(() => ({}))) as { error?: string }
         if (!res.ok) throw new Error(json.error || 'מחיקת פרויקט נכשלה')
-        toast.success('הפרויקט נמחק')
+        toast.success(TM.projectDeleted)
         closeDetailDrawer()
         if (editingProject?.id === project.id) closeDrawer()
         await loadProjects()
@@ -376,6 +392,20 @@ export default function ProjectsPage() {
           />
         )}
 
+        {loading ? (
+          <>
+            <PageKpiSkeletonN columns={isMobile ? 3 : 3} />
+            <Card noPadding>
+              <div style={{ padding: '20px 16px' }}>
+                <PageListSkeleton rows={8} />
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+                  <LoadingSpinner />
+                </div>
+              </div>
+            </Card>
+          </>
+        ) : (
+          <>
         {/* KPI Cards */}
         <div style={{
           ...styles.kpiGrid,
@@ -410,11 +440,7 @@ export default function ProjectsPage() {
             />
           </div>
 
-          {loading ? (
-            <div style={styles.loadingContainer}>
-              <LoadingSpinner />
-            </div>
-          ) : filteredProjects.length === 0 ? (
+          {filteredProjects.length === 0 ? (
             <EmptyState
               title="לא נמצאו פרויקטים"
               description="נסו לשנות מסננים או ליצור פרויקט חדש."
@@ -492,6 +518,8 @@ export default function ProjectsPage() {
             </div>
           )}
         </Card>
+          </>
+        )}
       </div>
 
       {/* Create/Edit Drawer */}

@@ -70,14 +70,16 @@ export async function GET() {
     const list = (rows || []) as PendingRow[]
     const projectIds = [...new Set(list.map((r) => r.project_id))]
     const ticketIds = list.map((r) => r.ticket_id).filter((id): id is string => !!id)
-    const { data: projects } =
+    const [projectsRes, ticketsRes] = await Promise.all([
       projectIds.length > 0
-        ? await supabase.from('projects').select('id, name, project_code').in('id', projectIds)
-        : { data: [] as { id: string; name: string; project_code: string }[] }
-    const { data: tickets } =
+        ? supabase.from('projects').select('id, name, project_code').in('id', projectIds)
+        : Promise.resolve({ data: [] as { id: string; name: string; project_code: string }[] }),
       ticketIds.length > 0
-        ? await supabase.from('tickets').select('id, ticket_number').in('id', ticketIds)
-        : { data: [] as { id: string; ticket_number: number }[] }
+        ? supabase.from('tickets').select('id, ticket_number').in('id', ticketIds)
+        : Promise.resolve({ data: [] as { id: string; ticket_number: number }[] }),
+    ])
+    const projects = projectsRes.data
+    const tickets = ticketsRes.data
 
     const byProject = new Map((projects as { id: string; name: string; project_code: string }[] | null)?.map((p) => [p.id, p]) || [])
     const byTicket = new Map((tickets as { id: string; ticket_number: number }[] | null)?.map((t) => [t.id, t]) || [])

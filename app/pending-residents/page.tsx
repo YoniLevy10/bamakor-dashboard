@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import {
   AppShell,
   MobileHeader,
@@ -12,6 +14,7 @@ import {
   LoadingSpinner,
   theme,
 } from '../components/ui'
+import { PageListSkeleton } from '../components/page-skeleton'
 
 type Item = {
   id: string
@@ -44,7 +47,7 @@ export default function PendingResidentsPage() {
     setLoading(true)
     setMigrationHint(null)
     try {
-      const res = await fetch('/api/pending-residents')
+      const res = await fetchWithTimeout('/api/pending-residents')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'טעינה נכשלה')
       setItems((data.items as Item[]) || [])
@@ -71,7 +74,7 @@ export default function PendingResidentsPage() {
   async function approve(id: string) {
     setBusyId(id)
     try {
-      const res = await fetch('/api/pending-residents', {
+      const res = await fetchWithTimeout('/api/pending-residents', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -85,7 +88,7 @@ export default function PendingResidentsPage() {
         const msg = [data.error, data.hint].filter(Boolean).join('\n')
         throw new Error(msg || 'פעולה נכשלה')
       }
-      toast.success('הדייר נוסף לרשימת הדיירים')
+      toast.success(TM.residentApproved)
       await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'פעולה נכשלה')
@@ -97,7 +100,7 @@ export default function PendingResidentsPage() {
   async function reject(id: string) {
     setBusyId(id)
     try {
-      const res = await fetch('/api/pending-residents', {
+      const res = await fetchWithTimeout('/api/pending-residents', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, action: 'reject' }),
@@ -107,7 +110,7 @@ export default function PendingResidentsPage() {
         const msg = [data.error, data.hint].filter(Boolean).join('\n')
         throw new Error(msg || 'פעולה נכשלה')
       }
-      toast.success('הבקשה סומנה כנדחית')
+      toast.success(TM.residentRejected)
       await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'פעולה נכשלה')
@@ -151,8 +154,11 @@ export default function PendingResidentsPage() {
 
         <Card style={{ padding: isMobile ? 14 : 20 }}>
           {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
-              <LoadingSpinner />
+            <div style={{ padding: '12px 0' }}>
+              <PageListSkeleton rows={6} />
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+                <LoadingSpinner size="md" />
+              </div>
             </div>
           ) : items.length === 0 ? (
             <p style={{ margin: 0, color: theme.colors.textMuted, lineHeight: 1.6 }}>

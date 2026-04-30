@@ -3,6 +3,8 @@
  * Structured logging for debugging, auditing, and monitoring
  */
 
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+
 // ============================================================================
 // 1. LOG LEVEL DEFINITIONS
 // ============================================================================
@@ -216,13 +218,15 @@ export class Logger {
   private sendToRemote(entries: LogEntry[]): void {
     if (process.env.LOGGING_ENDPOINT) {
       // Send to remote logging service
-      fetch(process.env.LOGGING_ENDPOINT, {
+      fetchWithTimeout(process.env.LOGGING_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ logs: entries }),
-      }).catch((err) => {
-        console.error('[LOGGER] Failed to send logs to remote:', err.message);
-      });
+      })
+        .then(() => void 0)
+        .catch((err) => {
+          console.error('[LOGGER] Failed to send logs to remote:', err instanceof Error ? err.message : String(err))
+        })
     }
   }
 

@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { toast, asyncHandler, validateResponse } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import { validateRequired, validateMinLength } from '@/lib/validators'
 
 type ProjectRow = {
@@ -63,7 +65,7 @@ function ReportPageContent() {
             url.searchParams.set('project', paramProjectCode)
           }
 
-          const res = await fetch(url.toString())
+          const res = await fetchWithTimeout(url.toString())
           if (!res.ok) {
             const j = await res.json().catch(() => ({}))
             throw new Error((j as { error?: string }).error || 'Failed to load buildings')
@@ -181,7 +183,7 @@ function ReportPageContent() {
           formData.append('attachments', file)
         })
 
-        const response = await fetch('/api/create-ticket', {
+        const response = await fetchWithTimeout('/api/create-ticket', {
           method: 'POST',
           body: formData,
         })
@@ -199,15 +201,13 @@ function ReportPageContent() {
     )
 
     if (result) {
-      const successMsg = `Issue submitted successfully. Ticket #${result.ticketNumber}`
-
       // Show warning if some images failed but ticket was created
       if (result.imageUploadWarning) {
         toast.warning(result.imageUploadWarning)
       }
 
-      setSuccessMessage(successMsg)
-      toast.success('Issue submitted successfully')
+      setSuccessMessage(`תקלה #${result.ticketNumber} נשלחה בהצלחה`)
+      toast.success(`טיקט #${result.ticketNumber} נוצר בהצלחה ✓`)
 
       // Reset form
       setDescription('')

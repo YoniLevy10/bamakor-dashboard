@@ -130,14 +130,14 @@ export async function POST(req: Request) {
 
     if (updateError) {
       logger.error('TICKET_API', 'Failed to assign ticket', updateError, { requestId, ticket_id, worker_id })
-      audit.logFailedOperation('UPDATE', 'TICKET', ticket_id, 'unknown', `Assignment failed: ${updateError.message}`)
+      audit.logFailedOperation('UPDATE', 'TICKET', ticket_id, clientId, `Assignment failed: ${updateError.message}`)
       return NextResponse.json(
         { error: 'Server error', requestId },
         { status: 500 }
       )
     }
     
-    audit.logTicketAssigned('unknown', ticket_id, worker_id)
+    audit.logTicketAssigned(clientId, ticket_id, worker_id)
     logger.info('TICKET_API', 'Ticket assigned successfully', { requestId, ticket_id, worker_id })
 
     const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects

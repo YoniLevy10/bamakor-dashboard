@@ -4,6 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { toast } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
 import { getIsMobileViewport } from '@/lib/mobile-viewport'
 import { Button, Card, LoadingSpinner, StatusBadge, theme, MobileBottomNav } from '../components/ui'
@@ -62,7 +64,7 @@ function WorkerPageInner() {
       }
 
       try {
-        const res = await fetch(`/api/worker-auth?token=${encodeURIComponent(token)}`)
+        const res = await fetchWithTimeout(`/api/worker-auth?token=${encodeURIComponent(token)}`)
         if (!res.ok) {
           sessionStorage.removeItem(WORKER_TOKEN_KEY)
           setTokenSession(null)
@@ -160,7 +162,7 @@ function WorkerPageInner() {
   const loadTicketsToken = useCallback(async (token: string) => {
     setLoadingTickets(true)
     try {
-      const res = await fetch(`/api/worker/tickets?token=${encodeURIComponent(token)}`)
+      const res = await fetchWithTimeout(`/api/worker/tickets?token=${encodeURIComponent(token)}`)
       if (!res.ok) {
         setTickets([])
         return
@@ -195,7 +197,7 @@ function WorkerPageInner() {
     if (tokenSession) {
       setBusyKey(`${ticketId}:${status}`)
       try {
-        const res = await fetch('/api/worker/tickets', {
+        const res = await fetchWithTimeout('/api/worker/tickets', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -205,7 +207,7 @@ function WorkerPageInner() {
           }),
         })
         if (!res.ok) throw new Error('עדכון נכשל')
-        toast.success(status === 'CLOSED' ? 'התקלה סומנה כהושלמה' : 'בטיפול')
+        toast.success(status === 'CLOSED' ? TM.ticketClosed : TM.ticketUpdated)
         await loadTicketsToken(tokenSession.token)
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'עדכון נכשל')
@@ -233,7 +235,7 @@ function WorkerPageInner() {
         .eq('id', ticketId)
         .eq('client_id', clientId)
       if (error) throw error
-      toast.success(status === 'CLOSED' ? 'התקלה סומנה כהושלמה' : 'בטיפול')
+      toast.success(status === 'CLOSED' ? TM.ticketClosed : TM.ticketUpdated)
       await loadTicketsDashboard(workerId)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'עדכון נכשל')

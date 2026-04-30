@@ -408,3 +408,18 @@ button:focus-visible {
     grid-template-columns: 1fr !important;
   }
 }
+
+@keyframes bamakor-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.bamakor-skeleton-bar,
+.bamakor-skeleton-row .bamakor-skeleton-bar {
+  animation: bamakor-skeleton-pulse 1.2s ease-in-out infinite;
+}

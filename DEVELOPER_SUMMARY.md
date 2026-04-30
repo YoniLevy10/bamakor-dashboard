@@ -5,12 +5,18 @@
 **עדכון אחרון (אפריל 2026):**  
 - **Auth / login:** `/login` — Google בלבד (`app/login/login-client.tsx`), `redirectTo: <origin>/auth/callback` (ללא אימייל/סיסמה).  
 - **PWA:** `public/manifest.json`, `public/sw.js` (**גרסת מטמון v2**: Network First ל־HTML, Cache First לנכסים סטטיים, מחיקת מטמונים ישנים, `public/offline.html`), אייקונים ו־metadata מבוססים על **`/apple-icon.png`**, רישום SW ב־`RegisterServiceWorker` (`app/layout.tsx`).  
+  - **פיתוח (Dev):** ה־Service Worker **לא נרשם** (כדי למנוע cache של HTML/JS שיוצר Hydration mismatch / "נדרש התחברות"). אם כבר נרשם בעבר — להסיר ב־DevTools → Application → Service Workers → Unregister + Clear site data.  
 - **עובד שטח:** `workers.access_token` (מיגרציה 024); `/worker?token=` ציבורי (ללא Google); `GET /api/worker-auth`, `GET/PATCH /api/worker/tickets`; מסך עובדים — כפתור **העתק קישור**.  
 - **Rate limiting ציבורי:** טבלת `rate_limits` + RPC `bamakor_rate_limit_ip_endpoint` — עד **20 בקשות לדקה לכל IP** ל־`GET /api/public/projects` ול־`POST /api/create-ticket` (דיווח ציבורי בלבד); תשובת 429: `יותר מדי בקשות, נסה שוב בעוד דקה`.  
 - **Billing:** טבלת `billing_events` + טריגרים על INSERT ל־`tickets` / `residents` / `workers`; דף **`/billing`** + `GET /api/billing/summary`; קישור תחת **הגדרות** בניווט.  
 - **ייצוא Excel:** `/tickets` — כפתור **ייצוא Excel** לרשימה המסוננת (`xlsx`), שם קובץ `bamakor-tickets-<תאריך>.xlsx`, כותרות בעברית.  
 - **Web Push:** טבלת `push_subscriptions`, `POST /api/push/subscribe`, `lib/push-notifications.ts` (אחרי יצירת תקלה ב־`/api/create-ticket`), הגדרות — **הפעל התראות**; env: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, ובצד לקוח גם **`NEXT_PUBLIC_VAPID_PUBLIC_KEY`** (אותו ערך כמו הציבורי).  
 - **QR / דיווח ציבורי / Webhook:** כבסעיף הקודם — מיגרציה 023; webhook עם `after()`; תבניות 60 שניות.
+- **תפריט / ניווט (אחידות):** `app/components/ui.tsx` — סדר פריטים אחיד (לוח בקרה, תקלות, פרויקטים, דיירים, דיירים לאישור, קודי QR, יומן שגיאות, תבניות וואטסאפ, סיכום) + **"הגדרות" בתחתית בלבד**; ב־Mobile Bottom Nav — פריטים ברוחב אחיד עם גלילה ו"הגדרות" קבוע בצד.  
+- **Hydration mismatch:** ה־Sidebar לא נרנדר ב־SSR (רק אחרי mount) כדי להימנע מ־SSR/HMR mismatch ב־Dev (בעיקר עם SW/cache).  
+- **מיגרציה 025:** תיקון ייחודיות טלפון עובדים — `UNIQUE (phone, client_id)` (במקום ייחודי גלובלי).  
+- **מיגרציה 026:** Seed תבניות WhatsApp דיפולטיביות לכל לקוח, *רק אם* טבלת `whatsapp_templates` ריקה.  
+- **Onboarding `/api/create-worker` 500:** לוגים מפורטים + הודעת שגיאה ברורה כאשר `SUPABASE_SERVICE_ROLE_KEY` חסר.
 
 ---
 
@@ -191,7 +197,7 @@
 |------|------|-----------|
 | **Frontend** | ✅ | דפים עיקריים; `client_id` בדפדפן לפי ארגון המשתמש (`resolveBamakorClientIdForBrowser`). |
 | **API Routes** | ✅ | נתיבי דשבורד: `requireSessionClientId`; webhook: `resolveClientIdByWhatsAppPhoneNumberId`; דיווח ציבורי: `client_id` בטופס. |
-| **Supabase** | ✅ | מיגרציות 022–024: tenant, דיווח ציבורי, `whatsapp_business_phone`, עובד `access_token`, `rate_limits`, `billing_events`, `push_subscriptions`, טריגרי billing. |
+| **Supabase** | ✅ | מיגרציות 022–027: tenant, דיווח ציבורי, `whatsapp_business_phone`, עובד `access_token`, `rate_limits`, `billing_events`, `push_subscriptions`, טריגרי billing; 025–026 תיקונים/seed; **027** — לפני האינדקסים מוסיף `client_id` חסר ל־`tickets` / `error_logs` (ובמידת הצורך `workers` / `residents`) וממלא מ־`projects` / `organizations` / `details`, ואז יוצר את האינדקסים (`idx_tickets_*`, `idx_residents_client_id`, `idx_workers_client_id`, `idx_ticket_logs_ticket_id`, `idx_whatsapp_templates_lookup`, `idx_error_logs_client`). |
 | **Auth** | ✅ | Google OAuth + callback + middleware + onboarding + יציאה בתפריט. |
 | **WhatsApp** | ✅ | Webhook גדול, תבניות DB, retry cron, SLA cron. |
 | **Multi-tenant isolation** | ✅ | `client_id` נגזר מ־`organization_users` → `organizations` למשתמש מחובר; webhook לפי `whatsapp_phone_number_id`; `BAMAKOR_CLIENT_ID` / `NEXT_PUBLIC_*` רק fallback ב־development. |
@@ -207,3 +213,25 @@
 - [ ] Vercel / hosting: משתני סביבה `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, ואופציונלית `BAMAKOR_CLIENT_ID`.  
 - [ ] הרצת מיגרציה **024** (`024_worker_token_billing_push_rate_limits.sql`) בפרויקט Supabase.  
 - [ ] Web Push (אופציונלי): `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (אופציונלי, למשל `mailto:...`), ו־**`NEXT_PUBLIC_VAPID_PUBLIC_KEY`** זהה לציבורי — ליצירת זוג: `npx web-push generate-vapid-keys`.
+
+---
+
+## 9. UX, Toasts וביצועים (אפריל 2026)
+
+- **Toasts בעברית:** פעולות מפתח (טיקטים, פרויקטים, עובדים, דיירים, ייבוא CSV, אישור ממתינים, הגדרות, תבניות וואטסאפ, Excel) מציגות `toast.success` / `toast.error` עם ניסוח אחיד; טקסטים מרוכזים ב־`lib/toast-messages.ts` (`TM.*`).
+- **`fetch` עם timeout:** `lib/fetch-with-timeout.ts` — `fetchWithTimeout()` עם **10 שניות** ברירת־מחדל; בשימוש בדפי האפליקציה ובמודלים שקוראים ל־API (יצירת תקלה, שיבוץ, סגירה, billing, onboarding, worker, דיווח ציבורי, pending residents, ייבוא דיירים, וכו').
+- **Skeleton טעינה:** `app/components/page-skeleton.tsx` (`PageListSkeleton`, `PageKpiSkeleton`, `PageKpiSkeletonN`) + אנימציה `bamakor-skeleton-pulse` ב־`app/globals.css` — בשימוש בדשבורד, תקלות, פרויקטים, עובדים, דיירים, חיוב, דיירים לאישור, תבניות וואטסאפ.
+- **מיזוג קריאות Supabase:** טעינה ראשונית של פרויקטים — `Promise.all` לעובדים+פרויקטים; דשבורד — לוגים וצרופות למגירת תקלה במקביל; דיירים — פרויקטים + דיירים + `GET /api/pending-residents` במקביל.
+- **מיגרציה 027:** `supabase/migrations/027_perf_indexes.sql` — להריץ ב־Supabase: אם בפרויקט חסרה עמודת `client_id` ב־`tickets` (או ב־`error_logs`), הסקריפט מוסיף אותה וממלא לפני יצירת האינדקסים; כך נמנעת שגיאת `42703 column "client_id" does not exist` ב־SQL Editor.
+
+---
+
+## 10. יומן מפתחים — עדכון (30/04/2026)
+
+- **אבטחה — אין מפתחות hardcoded:** בוצעה סריקה בקוד כדי לוודא שאין `anon key`/`service role key` בתוך קבצים. כל המפתחות נצרכים רק מ־`process.env.*`. בנוסף `lib/supabase.ts` יושר לתבנית:  
+  `const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!`  
+  `const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!`
+- **Timeout לכל fetch:** נסגרו שאריות `fetch()` ללא timeout (כולל onboarding), ו־`lib/logging.ts` עודכן לשליחה מרחוק עם `fetchWithTimeout()` כדי למנוע תלייה ברשת.
+- **Promise.all ב־API:** `GET /api/pending-residents` עודכן כך שטעינת `projects` + `tickets` נעשית ב־`Promise.all` ולא בטור.
+- **מיגרציה 027 — אינדקסים + התאמה ל־DB חלקי:** 027 כוללת הוספה/backfill של `client_id` לטבלאות שעשויות להיות חסרות (בעיקר `tickets`, ולעיתים `error_logs`), לפני יצירת אינדקסים. שמות אינדקסי tickets עודכנו לשמות: `idx_tickets_client_id`, `idx_tickets_client_status`, `idx_tickets_client_created`.
+- **דוח ביקורת:** נוסף `AUDIT_REPORT.md` עם ממצאים, תיקונים שבוצעו, והמלצות לבדיקה ידנית לפרודקשן.

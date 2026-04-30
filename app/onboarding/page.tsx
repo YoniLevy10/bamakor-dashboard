@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState, type CSSProperties } from 'react'
 import { Card, Button, theme } from '../components/ui'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -21,7 +22,7 @@ export default function OnboardingPage() {
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/onboarding/organization', {
+      const res = await fetchWithTimeout('/api/onboarding/organization', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: orgName.trim() }),
@@ -42,7 +43,7 @@ export default function OnboardingPage() {
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/onboarding/project', {
+      const res = await fetchWithTimeout('/api/onboarding/project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -72,14 +73,14 @@ export default function OnboardingPage() {
     try {
       let oid = organizationId
       if (!oid) {
-        const me = await fetch('/api/onboarding/session')
+        const me = await fetchWithTimeout('/api/onboarding/session')
         const mj = await me.json()
         oid = mj.organization_id as string | null
       }
       if (!oid) {
         throw new Error('חסר מזהה ארגון — חזרו לשלב 1')
       }
-      const res = await fetch('/api/create-worker', {
+      const res = await fetchWithTimeout('/api/create-worker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

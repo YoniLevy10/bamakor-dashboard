@@ -13,6 +13,7 @@ import {
 } from '@/lib/whatsapp-template-keys'
 import { interpolateWhatsAppTemplate } from '@/lib/whatsapp-templates'
 import { toast } from '@/lib/error-handler'
+import { TM } from '@/lib/toast-messages'
 import {
   AppShell,
   MobileHeader,
@@ -23,6 +24,7 @@ import {
   LoadingSpinner,
   theme,
 } from '../../components/ui'
+import { PageListSkeleton } from '../../components/page-skeleton'
 
 const PREVIEW_SAMPLE: Record<(typeof WHATSAPP_TEMPLATE_VAR_NAMES)[number], string> = {
   project_name: 'מגדלי הים התיכון',
@@ -130,9 +132,9 @@ export default function WhatsappTemplatesPage() {
         { onConflict: 'client_id,template_key' }
       )
       if (error) throw error
-      toast.success('נשמר')
+      toast.success(TM.whatsappTemplatesSaved)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'שמירה נכשלה')
+      toast.error(e instanceof Error ? e.message : TM.genericSaveError)
     } finally {
       setSavingKey(null)
     }
@@ -196,7 +198,10 @@ export default function WhatsappTemplatesPage() {
 
         {loading ? (
           <div style={styles.loading}>
-            <LoadingSpinner />
+            <PageListSkeleton rows={6} />
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+              <LoadingSpinner size="md" />
+            </div>
           </div>
         ) : (
           <div style={styles.grid}>

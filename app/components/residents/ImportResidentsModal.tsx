@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx'
 import { Button, theme } from '../ui'
 import type { ResidentProjectRow } from './AddResidentModal'
 import { toast } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 
 type ParsedRow = Record<string, unknown>
 
@@ -177,7 +179,7 @@ export function ImportResidentsModal({
     setApiError('')
     try {
       const payloadRows = buildPayload()
-      const res = await fetch('/api/import-residents', {
+      const res = await fetchWithTimeout('/api/import-residents', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ rows: payloadRows }),
@@ -190,13 +192,15 @@ export function ImportResidentsModal({
             ? String((json as { error?: unknown }).error)
             : 'ייבוא נכשל'
         setApiError(errMsg)
+        toast.error(errMsg)
         return
       }
 
       const inserted = Number((json as { inserted?: unknown } | null)?.inserted || 0)
       const failed = Number((json as { failed?: unknown } | null)?.failed || 0)
-      if (inserted > 0) toast.success(`יובאו ${inserted} דיירים`)
-      if (failed > 0) toast.error(`${failed} שורות נכשלו — בדקו שגיאות`)
+      if (inserted > 0 && failed > 0) toast.success(TM.csvImportPartial(inserted, failed))
+      else if (inserted > 0) toast.success(TM.csvImported(inserted))
+      if (failed > 0 && inserted === 0) toast.error(`${failed} שורות נכשלו — בדקו שגיאות`)
 
       const residents = (json as { residents?: unknown } | null)?.residents
       if (Array.isArray(residents)) {
@@ -204,7 +208,9 @@ export function ImportResidentsModal({
       }
       close()
     } catch (e) {
-      setApiError(e instanceof Error ? e.message : 'ייבוא נכשל')
+      const msg = e instanceof Error ? e.message : TM.genericSaveError
+      setApiError(msg)
+      toast.error(msg)
     } finally {
       setImporting(false)
     }

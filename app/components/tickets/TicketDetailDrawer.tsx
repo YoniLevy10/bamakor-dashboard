@@ -194,6 +194,8 @@ export function TicketDetailDrawer({
                         alt={attachment.file_name}
                         style={styles.attachmentImg}
                         crossOrigin="anonymous"
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div style={styles.attachmentFile}>{attachment.file_name}</div>

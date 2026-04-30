@@ -12,6 +12,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
 import { toast, asyncHandler } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import {
   AppShell,
   MobileHeader,
@@ -161,7 +163,7 @@ function SettingsPageInner() {
           ;({ error } = await supabase.from('clients').update(payloadBase).eq('id', clientId))
         }
         if (error) throw error
-        toast.success('נשמר')
+        toast.success(TM.settingsSaved)
         await load()
         return true
       },
@@ -192,7 +194,7 @@ function SettingsPageInner() {
           ;({ error } = await supabase.from('clients').update(rest).eq('id', clientId))
         }
         if (error) throw error
-        toast.success('נשמר')
+        toast.success(TM.settingsSaved)
         await load()
         return true
       },
@@ -241,7 +243,7 @@ function SettingsPageInner() {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapid),
       })
-      const res = await fetch('/api/push/subscribe', {
+      const res = await fetchWithTimeout('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subscription: sub.toJSON() }),
@@ -261,7 +263,7 @@ function SettingsPageInner() {
     setTestingWa(true)
     await asyncHandler(
       async () => {
-        const res = await fetch('/api/settings/test-whatsapp', {
+        const res = await fetchWithTimeout('/api/settings/test-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
@@ -287,6 +289,14 @@ function SettingsPageInner() {
       )}
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
+      {isMobile && (
+        <div style={{ padding: '0 16px 12px', maxWidth: '100%', boxSizing: 'border-box' }}>
+          <Link href="/billing" style={styles.headerSecondaryLink}>
+            חיוב ושימוש
+          </Link>
+        </div>
+      )}
+
       <div
         style={{
           ...styles.content,
@@ -300,8 +310,8 @@ function SettingsPageInner() {
             title="הגדרות"
             subtitle="התראות ווואטסאפ"
             actions={
-              <Link href="/settings/whatsapp-templates" style={styles.templatesLink}>
-                תבניות הודעות וואטסאפ
+              <Link href="/billing" style={styles.headerSecondaryLink}>
+                חיוב ושימוש
               </Link>
             }
           />
@@ -330,14 +340,6 @@ function SettingsPageInner() {
                 </button>
               ))}
             </div>
-
-            {isMobile && (
-              <div style={{ marginBottom: '16px' }}>
-                <Link href="/settings/whatsapp-templates" style={styles.templatesLink}>
-                  תבניות הודעות וואטסאפ
-                </Link>
-              </div>
-            )}
 
             {activeTab === 'notifications' && (
               <Card noPadding>
@@ -585,7 +587,7 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     flexWrap: 'wrap',
   },
-  templatesLink: {
+  headerSecondaryLink: {
     fontSize: '14px',
     fontWeight: 600,
     color: theme.colors.primary,

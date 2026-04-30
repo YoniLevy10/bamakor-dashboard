@@ -1,9 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import {
   toastReporterClosedNotifyNetworkWarning,
   toastReporterClosedNotifySummary,
@@ -22,6 +24,7 @@ import {
 } from './components/ui'
 import { TicketDetailDrawer } from './components/tickets/TicketDetailDrawer'
 import { AddTicketModal } from './components/tickets/AddTicketModal'
+import { PageKpiSkeleton, PageListSkeleton } from './components/page-skeleton'
 import { getIsMobileViewport } from '@/lib/mobile-viewport'
 
 type TicketRow = {
@@ -118,11 +121,7 @@ export default function DashboardPage() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true)
     await asyncHandler(
       async () => {
@@ -207,10 +206,14 @@ export default function DashboardPage() {
         }
         return true
       },
-      { context: 'Failed to load dashboard data', showErrorToast: true }
+      { context: 'טעינת הדשבורד', showErrorToast: true }
     )
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
 
   function buildActivityFromLogs(
     data: unknown,
@@ -314,32 +317,32 @@ export default function DashboardPage() {
     return attachment.signed_url || attachment.file_url || ''
   }
 
-  async function loadTicketLogs(ticketId: string) {
+  async function loadTicketDrawerData(ticketId: string) {
     setDrawerLoading(true)
-    const { data } = await supabase
-      .from('ticket_logs')
-      .select('*')
-      .eq('ticket_id', ticketId)
-      .order('created_at', { ascending: false })
-    setTicketLogs((data as TicketLog[]) || [])
-    setDrawerLoading(false)
-  }
-
-  async function loadTicketAttachments(ticketId: string) {
+    setTicketLogs([])
+    setSelectedTicketAttachments([])
     try {
-      const { data } = await supabase
-        .from('ticket_attachments')
-        .select('id, ticket_id, file_name, file_url, mime_type, created_at')
-        .eq('ticket_id', ticketId)
-        .order('created_at', { ascending: false })
+      const [logsResult, attachResult] = await Promise.all([
+        supabase
+          .from('ticket_logs')
+          .select('*')
+          .eq('ticket_id', ticketId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('ticket_attachments')
+          .select('id, ticket_id, file_name, file_url, mime_type, created_at')
+          .eq('ticket_id', ticketId)
+          .order('created_at', { ascending: false }),
+      ])
 
+      setTicketLogs((logsResult.data as TicketLog[]) || [])
+
+      if (attachResult.error) throw attachResult.error
+      const data = attachResult.data
       if (data && data.length > 0) {
-        // Same as /tickets: bucket is public — getPublicUrl works; createSignedUrl often returns null for anon client.
         const attachmentsWithUrls = data.map((attachment: AttachmentRow) => {
           const filePath = attachment.file_url || ''
-          const { data: publicUrlData } = supabase.storage
-            .from('ticket-attachments')
-            .getPublicUrl(filePath)
+          const { data: publicUrlData } = supabase.storage.from('ticket-attachments').getPublicUrl(filePath)
           return { ...attachment, signed_url: publicUrlData?.publicUrl || null }
         })
         setSelectedTicketAttachments(attachmentsWithUrls)
@@ -347,7 +350,10 @@ export default function DashboardPage() {
         setSelectedTicketAttachments([])
       }
     } catch {
+      setTicketLogs([])
       setSelectedTicketAttachments([])
+    } finally {
+      setDrawerLoading(false)
     }
   }
 
@@ -356,8 +362,7 @@ export default function DashboardPage() {
     setDraftDescription(ticket.description || '')
     setDraftStatus(ticket.status)
     setDraftWorkerId(ticket.assigned_worker_id || '')
-    loadTicketLogs(ticket.id)
-    loadTicketAttachments(ticket.id)
+    void loadTicketDrawerData(ticket.id)
   }
 
   function closeDrawer() {
@@ -375,12 +380,23 @@ export default function DashboardPage() {
     await asyncHandler(
       async () => {
         const workerChanged = (selectedTicket.assigned_worker_id || '') !== (draftWorkerId || '')
+        let didAssign = false
         if (workerChanged && draftWorkerId) {
-          await fetch('/api/assign-ticket', {
+          const assignRes = await fetchWithTimeout('/api/assign-ticket', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ticket_id: selectedTicket.id, worker_id: draftWorkerId }),
           })
+          const assignBody = (await assignRes.json().catch(() => ({}))) as {
+            error?: string
+            worker_sms_sent?: boolean | null
+            worker_sms_note?: string
+          }
+          if (!assignRes.ok) throw new Error(assignBody.error || TM.genericSaveError)
+          if ((assignBody.worker_sms_sent === false || assignBody.worker_sms_sent === null) && assignBody.worker_sms_note) {
+            toast.error(assignBody.worker_sms_note)
+          }
+          didAssign = true
         }
         const payload: Record<string, string | null> = {
           description: draftDescription,
@@ -395,10 +411,12 @@ export default function DashboardPage() {
         const closedNow = draftStatus === 'CLOSED' && selectedTicket.status !== 'CLOSED'
         const { error } = await supabase.from('tickets').update(payload).eq('id', selectedTicket.id)
         if (error) throw error
-        toast.success('נשמר')
+        if (closedNow) toast.success(TM.ticketClosed)
+        else if (didAssign) toast.success(TM.workerAssigned)
+        else toast.success(TM.ticketUpdated)
         if (closedNow) {
           try {
-            const nRes = await fetch('/api/notify-reporter-ticket-closed', {
+            const nRes = await fetchWithTimeout('/api/notify-reporter-ticket-closed', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ticket_id: selectedTicket.id }),
@@ -416,7 +434,7 @@ export default function DashboardPage() {
         await loadData()
         return true
       },
-      { context: 'Failed to save ticket', showErrorToast: true }
+      { context: 'שמירת התקלה', showErrorToast: true }
     )
     setSavingTicket(false)
   }
@@ -426,7 +444,7 @@ export default function DashboardPage() {
     setSavingTicket(true)
     await asyncHandler(
       async () => {
-        const response = await fetch('/api/close-ticket', {
+        const response = await fetchWithTimeout('/api/close-ticket', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ticket_id: selectedTicket.id }),
@@ -435,15 +453,15 @@ export default function DashboardPage() {
           error?: string
         }
         if (!response.ok) {
-          throw new Error(closeBody.error || 'Failed to close ticket')
+          throw new Error(closeBody.error || TM.genericSaveError)
         }
-        toast.success('התקלה נסגרה')
+        toast.success(TM.ticketClosed)
         toastReporterClosedNotifySummary(closeBody)
         await loadData()
         closeDrawer()
         return true
       },
-      { context: 'Failed to close ticket', showErrorToast: true }
+      { context: 'סגירת התקלה', showErrorToast: true }
     )
     setSavingTicket(false)
   }
@@ -463,13 +481,13 @@ export default function DashboardPage() {
       if (addTicketReporterName) formData.append('reporter_name', addTicketReporterName)
       if (addTicketReporterPhone) formData.append('reporter_phone', addTicketReporterPhone)
       formData.append('source', 'manual')
-      const response = await fetch('/api/create-ticket', { method: 'POST', body: formData })
+      const response = await fetchWithTimeout('/api/create-ticket', { method: 'POST', body: formData })
       if (!response.ok) {
         const result = await response.json()
-        throw new Error(result.error || 'Failed to create ticket')
+        throw new Error(result.error || TM.genericSaveError)
       }
       const result = await response.json()
-      toast.success(`תקלה #${result.ticketNumber} נוצרה`)
+      toast.success(`טיקט #${result.ticketNumber} נוצר בהצלחה ✓`)
       setAddTicketProjectCode('')
       setAddTicketDescription('')
       setAddTicketReporterName('')
@@ -477,7 +495,7 @@ export default function DashboardPage() {
       setShowAddTicketModal(false)
       await loadData()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create ticket'
+      const message = err instanceof Error ? err.message : TM.genericSaveError
       setAddTicketError(message)
       toast.error(message)
     }
@@ -538,7 +556,11 @@ export default function DashboardPage() {
 
         {loading ? (
           <div style={styles.loadingContainer}>
-            <LoadingSpinner size="lg" />
+            {!isMobile && <PageKpiSkeleton />}
+            <PageListSkeleton rows={isMobile ? 6 : 10} />
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+              <LoadingSpinner size="md" />
+            </div>
           </div>
         ) : (
           <>

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { TM } from '@/lib/toast-messages'
 import { AddResidentModal, type ResidentProjectRow } from '../components/residents/AddResidentModal'
 import { ImportResidentsModal } from '../components/residents/ImportResidentsModal'
 import {
@@ -17,6 +19,7 @@ import {
   theme,
 } from '../components/ui'
 import { getIsMobileViewport } from '@/lib/mobile-viewport'
+import { PageListSkeleton } from '../components/page-skeleton'
 
 function mainTabStyle(active: boolean): CSSProperties {
   return {
@@ -98,7 +101,7 @@ export default function ResidentsPage() {
   async function loadPending() {
     setPendingLoading(true)
     try {
-      const res = await fetch('/api/pending-residents')
+      const res = await fetchWithTimeout('/api/pending-residents')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'טעינה נכשלה')
       const items = (data.items as typeof pendingItems) || []
@@ -116,33 +119,44 @@ export default function ResidentsPage() {
     setLoading(true)
     setResidentsTableMissing(false)
     try {
-      const pRes = await supabase
-        .from('projects')
-        .select('id, name, project_code, client_id')
-        .order('name')
+      const [pRes, rRes, pendingRes] = await Promise.all([
+        supabase.from('projects').select('id, name, project_code, client_id').order('name'),
+        supabase.from('residents').select('id, project_id, client_id, full_name, phone, apartment_number, notes').order('full_name'),
+        fetchWithTimeout('/api/pending-residents'),
+      ])
+
       if (pRes.error) throw pRes.error
       setProjects((pRes.data as ResidentProjectRow[]) || [])
-
-      const rRes = await supabase
-        .from('residents')
-        .select('id, project_id, client_id, full_name, phone, apartment_number, notes')
-        .order('full_name')
 
       if (rRes.error) {
         if (isResidentsTableMissingError(rRes.error)) {
           setResidents([])
           setResidentsTableMissing(true)
         } else {
-          toast.error(rRes.error.message || 'טעינת דיירים נכשלה')
+          toast.error(rRes.error.message || TM.genericLoadError)
         }
       } else {
         setResidents((rRes.data as ResidentRow[]) || [])
       }
+
+      try {
+        const data = await pendingRes.json()
+        if (pendingRes.ok) {
+          const items = (data.items as typeof pendingItems) || []
+          setPendingItems(items)
+          setPendingBadge(items.length)
+        } else {
+          setPendingItems([])
+          setPendingBadge(0)
+        }
+      } catch {
+        setPendingItems([])
+        setPendingBadge(0)
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'טעינת נתונים נכשלה')
+      toast.error(e instanceof Error ? e.message : TM.genericLoadError)
     }
     setLoading(false)
-    void loadPending()
   }
 
   function openAdd() {
@@ -234,14 +248,16 @@ export default function ResidentsPage() {
           .single()
 
         if (updateRes.error) {
-          setAddError(updateRes.error.message || 'עדכון דייר נכשל')
+          const msg = updateRes.error.message || TM.genericSaveError
+          setAddError(msg)
+          toast.error(msg)
           return
         }
 
         const row = updateRes.data as ResidentRow
         setResidents((prev) => prev.map((x) => (x.id === row.id ? row : x)))
         closeResidentModal()
-        toast.success('הדייר עודכן')
+        toast.success(TM.residentUpdated)
         return
       }
 
@@ -259,15 +275,19 @@ export default function ResidentsPage() {
         .single()
 
       if (insertRes.error) {
-        setAddError(insertRes.error.message || 'שמירת דייר נכשלה')
+        const msg = insertRes.error.message || TM.genericSaveError
+        setAddError(msg)
+        toast.error(msg)
         return
       }
 
       setResidents((prev) => [insertRes.data as ResidentRow, ...prev])
       closeResidentModal()
-      toast.success('דייר נוסף בהצלחה')
+      toast.success(TM.residentAdded)
     } catch (err) {
-      setAddError(err instanceof Error ? err.message : 'שמירת דייר נכשלה')
+      const msg = err instanceof Error ? err.message : TM.genericSaveError
+      setAddError(msg)
+      toast.error(msg)
     } finally {
       setSaving(false)
     }
@@ -302,7 +322,7 @@ export default function ResidentsPage() {
   async function approvePending(id: string) {
     setPendingBusyId(id)
     try {
-      const res = await fetch('/api/pending-residents', {
+      const res = await fetchWithTimeout('/api/pending-residents', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -313,7 +333,7 @@ export default function ResidentsPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error([data.error, data.hint].filter(Boolean).join('\n') || 'פעולה נכשלה')
-      toast.success('הדייר אושר')
+      toast.success(TM.residentApproved)
       await loadPending()
       await load()
     } catch (e) {
@@ -326,14 +346,14 @@ export default function ResidentsPage() {
   async function rejectPending(id: string) {
     setPendingBusyId(id)
     try {
-      const res = await fetch('/api/pending-residents', {
+      const res = await fetchWithTimeout('/api/pending-residents', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, action: 'reject' }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error([data.error, data.hint].filter(Boolean).join('\n') || 'פעולה נכשלה')
-      toast.success('הבקשה נדחתה')
+      toast.success(TM.residentRejected)
       await loadPending()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'פעולה נכשלה')
@@ -518,7 +538,10 @@ export default function ResidentsPage() {
 
           {loading ? (
             <div style={styles.loading}>
-              <LoadingSpinner />
+              <PageListSkeleton rows={10} />
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+                <LoadingSpinner size="md" />
+              </div>
             </div>
           ) : residentsTableMissing ? (
             <div style={styles.friendlyEmpty}>

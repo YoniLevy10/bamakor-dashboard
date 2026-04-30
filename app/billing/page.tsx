@@ -12,7 +12,9 @@ import {
   theme,
 } from '../components/ui'
 import { getIsMobileViewport } from '@/lib/mobile-viewport'
+import { PageKpiSkeletonN, PageListSkeleton } from '../components/page-skeleton'
 import { asyncHandler } from '@/lib/error-handler'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 
 type Summary = {
   ticketsThisMonth: number
@@ -39,7 +41,7 @@ export default function BillingPage() {
       setLoading(true)
       await asyncHandler(
         async () => {
-          const res = await fetch('/api/billing/summary')
+          const res = await fetchWithTimeout('/api/billing/summary')
           const json = (await res.json()) as Summary & { error?: string }
           if (!res.ok) throw new Error(json.error || 'טעינה נכשלה')
           setData({
@@ -50,7 +52,7 @@ export default function BillingPage() {
           })
           return true
         },
-        { context: 'billing summary', showErrorToast: true }
+        { context: 'טעינת חיוב', showErrorToast: true }
       )
       setLoading(false)
     })()
@@ -75,7 +77,11 @@ export default function BillingPage() {
 
         {loading ? (
           <div style={styles.loading}>
-            <LoadingSpinner />
+            <PageKpiSkeletonN columns={3} />
+            <PageListSkeleton rows={6} />
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+              <LoadingSpinner size="md" />
+            </div>
           </div>
         ) : !data ? null : (
           <>

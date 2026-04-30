@@ -1,3 +1,62 @@
+# AUDIT_REPORT (branch `saas`)
+
+תאריך: 2026-04-30
+
+## סיכום
+
+בוצעה סקירה סטטית (code audit) של טפסים/פעולות, כתיבות ל־Supabase, בידוד `client_id`, error handling, ו־UI feedback (toast). נמצאו ותוקנו מספר נקודות; שאר הסעיפים להלן הם מעקב/המלצות.
+
+## ממצאים ותיקונים שבוצעו
+
+### 1) `fetch` ללא timeout
+
+- נמצא `fetch` ללא timeout ב־`app/onboarding/page.tsx` (`/api/onboarding/project`) ותוקן ל־`fetchWithTimeout()` (10 שניות).
+- `lib/logging.ts` שלח לוגים מרחוק עם `fetch` ללא timeout ותוקן ל־`fetchWithTimeout()` (10 שניות).
+- `lib/fetch-timeout.ts` עודכן לברירת מחדל של 10 שניות (מ־8).
+
+### 2) Promise.all לקריאות Supabase באותו מסך
+
+- `app/api/pending-residents/route.ts` ביצע שתי קריאות (`projects` + `tickets`) אחת אחרי השנייה; עודכן ל־`Promise.all`.
+
+### 3) Audit logging עם `clientId`
+
+- ב־`app/api/assign-ticket/route.ts` היו קריאות ל־audit logger עם `clientId = 'unknown'` למרות ש־`clientId` כבר היה זמין מה-session.
+  עודכן כך שה־audit נכתב עם `clientId` האמיתי.
+
+### 4) מיגרציה 027 (Indexes) נשברה על DBs בלי `client_id`
+
+- כפי שעלה ב־Supabase Studio, בחלק מהפרויקטים חסרות עמודות `client_id` (בעיקר ב־`tickets`, ולעיתים גם ב־`error_logs`).
+- `supabase/migrations/027_perf_indexes.sql` עודכן כך שהוא מוסיף `client_id` חסר ומבצע backfill לפני יצירת האינדקסים.
+- שמות אינדקסים עודכנו לפי הדרישה העדכנית:
+  `idx_tickets_client_id`, `idx_tickets_client_status`, `idx_tickets_client_created`, וכו'.
+
+## ממצאים שדורשים תשומת לב (לא חוסם, אך חשוב)
+
+### A) כתיבות ל־Supabase בלי `client_id` בעמודה ייעודית
+
+- `error_logs`: כיום נשמר `client_id` בתוך `details.client_id` (לצורך WhatsApp retry) ולכן אפשר לבצע backfill לעמודה ייעודית.
+  אחרי הרצת 027, מומלץ להעביר בהמשך גם את ה־insert לכתוב `client_id` לעמודה (לא בוצע כאן כדי לא לשבור סביבות שעדיין לא הריצו את המיגרציה).
+
+### B) Toast / feedback
+
+- ברוב ה־CRUD העיקריים יש `toast.success` / `toast.error` בעברית, עם טקסטים מרוכזים ב־`lib/toast-messages.ts` (`TM`).
+- קיימות עדיין הודעות ייעודיות נקודתיות שאינן משתמשות ב־`TM` (למשל הודעות “מיזוג נכשל”, “תרגום נכשל”). זה תקין, אך אם רוצים אחידות מלאה אפשר להוסיף להן מפתחות ב־`TM`.
+
+### C) בדיקת “נשמר בפועל”
+
+- ברמת הקוד: בכל נתיבי ה־API שנבדקו (onboarding / assign / merge / pending residents / create ticket) קיימת בדיקת `error` של Supabase ו־`return` עם status מתאים.
+- מומלץ לוודא ידנית בפרודקשן (או Preview) את הפלוים הרגישים:
+  יצירת טיקט עם קבצים, שיוך עובד + SMS, אישור דייר ממתין, וייצוא Excel.
+
+## Test plan מומלץ (ידני)
+
+1. Dashboard: יצירת טיקט → מופיע toast הצלחה + נוצר row ב־`tickets`.
+2. Tickets: שיוך עובד → toast הצלחה + `assigned_worker_id` מתעדכן + `ticket_logs` נכתב.
+3. Residents: CSV import → toast הצלחה/חלקי + rows ב־`residents`.
+4. Pending residents: approve/reject → toast + סטטוס מתעדכן.
+5. Settings: שמירה + WhatsApp test → toast + הערכים נשמרים ב־`clients`.
+6. Supabase: הרצת מיגרציה 027 → אין יותר שגיאת `42703 column "client_id" does not exist`.
+
 # דוח ביקורת — branch `saas`
 
 ## סטטוס branch
