@@ -1,20 +1,37 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { sendWhatsAppTextMessageWithCredentials } from '@/lib/whatsapp-send'
+import { requireSessionClientId } from '@/lib/api-auth'
+import { checkRateLimitDistributed } from '@/lib/api-validation'
+import { getLogger, getAuditLogger } from '@/lib/logging'
 
 /**
  * Sends a test WhatsApp using credentials stored on `clients` (not .env).
  */
 export async function POST(req: Request) {
+  const logger = getLogger()
+  const audit = getAuditLogger()
+  const requestId = `test-whatsapp-${Date.now()}`
   try {
-    const body = await req.json().catch(() => ({}))
+    const auth = await requireSessionClientId()
+    if (!auth.ok) return auth.response
+    const clientId = auth.ctx.clientId
+
     const admin = getSupabaseAdmin()
-    const clientId =
-      typeof (body as { client_id?: unknown })?.client_id === 'string' &&
-      (body as { client_id: string }).client_id.trim()
-        ? (body as { client_id: string }).client_id.trim()
-        : await getSingletonClientId(admin)
+
+    // Rate limit to avoid abuse (sending messages)
+    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
+    const rl = await checkRateLimitDistributed({
+      supabaseAdmin: admin,
+      key: `ip:${ip}:settings:test-whatsapp`,
+      windowMs: 60_000,
+      maxRequests: 5,
+    })
+    if (rl.isLimited) {
+      audit.logFailedOperation('SEND', 'WHATSAPP_TEST', 'n/a', 'single-tenant', 'rate_limited')
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
+    }
+
     const { data: client, error } = await admin
       .from('clients')
       .select('name, whatsapp_phone_number_id, whatsapp_access_token, manager_phone')
@@ -22,7 +39,8 @@ export async function POST(req: Request) {
       .single()
 
     if (error || !client) {
-      return NextResponse.json({ error: 'לקוח לא נמצא' }, { status: 404 })
+      audit.logFailedOperation('READ', 'CLIENT', clientId, 'single-tenant', 'client_not_found')
+      return NextResponse.json({ error: 'לקוח לא נמצא', requestId }, { status: 404 })
     }
 
     const phoneNumberId = client.whatsapp_phone_number_id as string | null
@@ -31,14 +49,14 @@ export async function POST(req: Request) {
 
     if (!phoneNumberId || !accessToken) {
       return NextResponse.json(
-        { error: 'נדרשים מזהה מספר וואטסאפ וטוקן בהגדרות' },
+        { error: 'נדרשים מזהה מספר וואטסאפ וטוקן בהגדרות', requestId },
         { status: 400 }
       )
     }
 
     if (!to) {
       return NextResponse.json(
-        { error: 'נדרש מספר מנהל בהגדרות (התראות) לשליחת בדיקה' },
+        { error: 'נדרש מספר מנהל בהגדרות (התראות) לשליחת בדיקה', requestId },
         { status: 400 }
       )
     }
@@ -54,9 +72,12 @@ export async function POST(req: Request) {
       `✅ בדיקת חיבור מהמערכת — ${(client as { name?: string | null }).name || 'המערכת'}`
     )
 
-    return NextResponse.json({ success: true })
+    audit.logAction('SEND', 'WHATSAPP_TEST', 'n/a', 'single-tenant', 'dashboard', undefined, 'SUCCESS')
+    logger.info('SETTINGS', 'Test WhatsApp sent', { requestId, clientId })
+    return NextResponse.json({ success: true, requestId })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    logger.error('SETTINGS', 'Test WhatsApp failed', e instanceof Error ? e : new Error(String(e)), { requestId })
+    audit.logFailedOperation('SEND', 'WHATSAPP_TEST', 'n/a', 'single-tenant', 'exception', 'dashboard')
+    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
   }
 }

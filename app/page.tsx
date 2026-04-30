@@ -22,6 +22,7 @@ import {
 } from './components/ui'
 import { TicketDetailDrawer } from './components/tickets/TicketDetailDrawer'
 import { AddTicketModal } from './components/tickets/AddTicketModal'
+import { getIsMobileViewport } from '@/lib/mobile-viewport'
 
 type TicketRow = {
   id: string
@@ -29,6 +30,7 @@ type TicketRow = {
   project_id?: string
   project_code?: string
   project_name?: string
+  client_id?: string | null
   reporter_phone: string
   description: string
   status: string
@@ -110,7 +112,7 @@ export default function DashboardPage() {
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
+    const check = () => setIsMobile(getIsMobileViewport())
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
@@ -128,7 +130,7 @@ export default function DashboardPage() {
           supabase
             .from('tickets')
             .select(`
-              id, ticket_number, project_id, reporter_phone, description, 
+              id, ticket_number, project_id, client_id, reporter_phone, description, 
               status, priority, assigned_worker_id, created_at, closed_at,
               projects (project_code, name)
             `)
@@ -166,6 +168,7 @@ export default function DashboardPage() {
           id: row.id,
           ticket_number: row.ticket_number,
           project_id: row.project_id,
+          client_id: (row as { client_id?: string | null }).client_id ?? null,
           project_code: Array.isArray(row.projects) ? row.projects?.[0]?.project_code || '' : row.projects?.project_code || '',
           project_name: Array.isArray(row.projects) ? row.projects?.[0]?.name || '' : row.projects?.name || '',
           reporter_phone: row.reporter_phone,
@@ -496,9 +499,21 @@ export default function DashboardPage() {
 
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-      <div style={styles.content}>
+      <div
+        style={{
+          ...styles.content,
+          ...(isMobile
+            ? { padding: '16px 16px 8px', maxWidth: '100%', boxSizing: 'border-box' }
+            : {}),
+        }}
+      >
         <div style={styles.hero}>
-          <div style={styles.heroTop}>
+          <div
+            style={{
+              ...styles.heroTop,
+              ...(isMobile ? { flexDirection: 'column', alignItems: 'stretch' } : {}),
+            }}
+          >
             <div style={styles.heroText}>
               <h1 style={styles.heroTitle} suppressHydrationWarning>
                 {getGreeting()}
@@ -681,6 +696,7 @@ export default function DashboardPage() {
       <AddTicketModal
         open={showAddTicketModal}
         onClose={() => setShowAddTicketModal(false)}
+        isMobile={isMobile}
         projects={projects}
         projectCode={addTicketProjectCode}
         description={addTicketDescription}

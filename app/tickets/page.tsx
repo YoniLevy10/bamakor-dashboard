@@ -26,6 +26,7 @@ import {
   LoadingSpinner,
   theme
 } from '../components/ui'
+import { getIsMobileViewport } from '@/lib/mobile-viewport'
 
 type TicketRow = {
   id: string
@@ -133,7 +134,7 @@ export default function TicketsPage() {
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
+    const check = () => setIsMobile(getIsMobileViewport())
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
@@ -626,7 +627,14 @@ export default function TicketsPage() {
         </div>
       )}
 
-      <div style={{ ...styles.content, ...(isMobile ? { padding: '16px 16px 28px' } : {}) }}>
+      <div
+        style={{
+          ...styles.content,
+          ...(isMobile
+            ? { padding: '16px 16px 8px', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }
+            : {}),
+        }}
+      >
         {!isMobile && (
           <PageHeader
             title="תקלות"

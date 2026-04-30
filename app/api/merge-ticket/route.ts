@@ -1,24 +1,42 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getSingletonClientId } from '@/lib/singleton-client-server'
+import { checkRateLimitDistributed, sanitizeId } from '@/lib/api-validation'
+import { requireSessionClientId } from '@/lib/api-auth'
+import { getLogger, getAuditLogger } from '@/lib/logging'
 
 export async function POST(req: Request) {
+  const logger = getLogger()
+  const audit = getAuditLogger()
+  const requestId = `merge-ticket-${Date.now()}`
   try {
     const supabaseAdmin = getSupabaseAdmin()
-    const bamakorClientId = await getSingletonClientId(supabaseAdmin)
+    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
+    const rl = await checkRateLimitDistributed({
+      supabaseAdmin,
+      key: `ip:${ip}:merge-ticket`,
+      windowMs: 60_000,
+      maxRequests: 30,
+    })
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
+    }
+
+    const auth = await requireSessionClientId()
+    if (!auth.ok) return auth.response
+    const bamakorClientId = auth.ctx.clientId
     const body = await req.json()
-    const sourceTicketId = body?.source_ticket_id as string | undefined
-    const targetTicketId = body?.target_ticket_id as string | undefined
+    const sourceTicketId = sanitizeId((body as { source_ticket_id?: unknown })?.source_ticket_id)
+    const targetTicketId = sanitizeId((body as { target_ticket_id?: unknown })?.target_ticket_id)
 
     if (!sourceTicketId || !targetTicketId) {
       return NextResponse.json(
-        { error: 'נדרשים source_ticket_id ו-target_ticket_id' },
+        { error: 'נדרשים source_ticket_id ו-target_ticket_id', requestId },
         { status: 400 }
       )
     }
 
     if (sourceTicketId === targetTicketId) {
-      return NextResponse.json({ error: 'לא ניתן למזג תקלה לעצמה' }, { status: 400 })
+      return NextResponse.json({ error: 'לא ניתן למזג תקלה לעצמה', requestId }, { status: 400 })
     }
 
     const sourceQuery = supabaseAdmin
@@ -29,7 +47,7 @@ export async function POST(req: Request) {
     const { data: source, error: sErr } = await sourceQuery.single()
 
     if (sErr || !source) {
-      return NextResponse.json({ error: 'תקלת מקור לא נמצאה' }, { status: 404 })
+      return NextResponse.json({ error: 'תקלת מקור לא נמצאה', requestId }, { status: 404 })
     }
 
     const clientId = bamakorClientId
@@ -42,19 +60,19 @@ export async function POST(req: Request) {
       .single()
 
     if (tErr || !target) {
-      return NextResponse.json({ error: 'תקלת יעד לא נמצאה' }, { status: 404 })
+      return NextResponse.json({ error: 'תקלת יעד לא נמצאה', requestId }, { status: 404 })
     }
 
     if (source.project_id !== target.project_id) {
-      return NextResponse.json({ error: 'ניתן למזג רק תקלות מאותו בניין' }, { status: 400 })
+      return NextResponse.json({ error: 'ניתן למזג רק תקלות מאותו בניין', requestId }, { status: 400 })
     }
 
     if (source.status === 'CLOSED') {
-      return NextResponse.json({ error: 'תקלת המקור כבר סגורה' }, { status: 409 })
+      return NextResponse.json({ error: 'תקלת המקור כבר סגורה', requestId }, { status: 409 })
     }
 
     if (target.status === 'CLOSED') {
-      return NextResponse.json({ error: 'לא ניתן למזג לתקלה סגורה' }, { status: 409 })
+      return NextResponse.json({ error: 'לא ניתן למזג לתקלה סגורה', requestId }, { status: 409 })
     }
 
     const mergeNote = `מוזג לתקלה #${target.ticket_number}`
@@ -73,8 +91,10 @@ export async function POST(req: Request) {
       .eq('client_id', clientId)
 
     if (upErr) {
+      logger.error('TICKET_API', 'Merge update failed', new Error(upErr.message), { requestId, sourceTicketId, targetTicketId })
+      audit.logFailedOperation('MERGE', 'TICKET', sourceTicketId, clientId, upErr.message)
       return NextResponse.json(
-        { error: 'עדכון תקלה נכשל', details: upErr.message },
+        { error: 'עדכון תקלה נכשל', requestId },
         { status: 500 }
       )
     }
@@ -87,9 +107,10 @@ export async function POST(req: Request) {
       created_at: new Date().toISOString(),
     })
 
-    return NextResponse.json({ success: true, merged_into_ticket_number: target.ticket_number })
+    audit.logAction('MERGE', 'TICKET', sourceTicketId, clientId, 'dashboard')
+    return NextResponse.json({ success: true, merged_into_ticket_number: target.ticket_number, requestId })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    logger.error('TICKET_API', 'Unhandled merge-ticket error', e instanceof Error ? e : new Error(String(e)), { requestId })
+    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
   }
 }

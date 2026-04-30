@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { getLogger, getAuditLogger } from '@/lib/logging'
+import { requireSessionClientId } from '@/lib/api-auth'
+import { sanitizeId } from '@/lib/api-validation'
 import { whatsappDbPhoneKey } from '@/lib/whatsapp-test-phone'
 import { queuePendingResidentApproval } from '@/lib/pending-resident-from-ticket'
 
@@ -26,6 +27,8 @@ type TicketRequestBody = {
   source?: unknown
   project_code?: unknown
   building_number?: unknown
+  /** דיווח ציבורי: מזהה לקוח מהקישור (?client=) */
+  client_id?: unknown
 }
 
 async function uploadAttachments(
@@ -148,8 +151,6 @@ export async function POST(req: Request) {
       )
     }
 
-    const bamakorClientId = await getSingletonClientId(supabaseAdmin)
-
     // Check if request has FormData (multipart) or JSON
     const contentType = req.headers.get('content-type') || ''
     let body: TicketRequestBody
@@ -157,7 +158,7 @@ export async function POST(req: Request) {
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData()
-      
+
       // Extract text fields
       body = {
         message: formData.get('message') || '',
@@ -168,6 +169,7 @@ export async function POST(req: Request) {
         source: formData.get('source') || '',
         project_code: formData.get('project_code') || '',
         building_number: formData.get('building_number') || '',
+        client_id: formData.get('client_id') || '',
       }
 
       // Extract file attachments
@@ -189,6 +191,25 @@ export async function POST(req: Request) {
     const buildingNumberFromBody = body?.building_number
       ? String(body.building_number).trim()
       : null
+
+    const auth = await requireSessionClientId()
+    let bamakorClientId: string | null = null
+    if (auth.ok) {
+      bamakorClientId = auth.ctx.clientId
+    } else {
+      const fromBody = sanitizeId(body?.client_id)
+      if (fromBody) bamakorClientId = fromBody
+      else if (process.env.NODE_ENV === 'development') {
+        const env = (process.env.BAMAKOR_CLIENT_ID || '').trim()
+        if (env) bamakorClientId = env
+      }
+    }
+    if (!bamakorClientId) {
+      return NextResponse.json(
+        { error: 'נדרשת התחברות או קישור דיווח תקין (מזהה לקוח חסר)' },
+        { status: 401 }
+      )
+    }
 
     // MODE 1: WEB FORM
     if (projectCodeFromBody) {
@@ -324,6 +345,7 @@ export async function POST(req: Request) {
       .from('sessions')
       .select('id, phone_number, project_id, active_ticket_id, is_active')
       .eq('phone_number', phoneDbKey)
+      .eq('client_id', bamakorClientId)
       .eq('is_active', true)
       .maybeSingle()
 
@@ -485,6 +507,7 @@ export async function POST(req: Request) {
       .insert({
         phone_number: phoneDbKey,
         project_id: project.id,
+        client_id: project.client_id as string,
         active_ticket_id: createdTicket.id,
         is_active: true,
         last_activity_at: new Date().toISOString(),

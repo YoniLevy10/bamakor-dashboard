@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
+import { resolveWhatsAppTemplateMessage } from '@/lib/whatsapp-templates'
 
 export type ReporterClosedNotifyResult = {
   whatsappSent: boolean
@@ -26,7 +27,8 @@ export async function notifyReporterTicketClosed(
   }
 
   const building = opts.projectName?.trim() || 'הבניין'
-  const waBody = `✅ שלום! התקלה שדיווחת בבניין ${building} טופלה וסגורה.\n\nאם יש בעיה נוספת, ניתן לפנות אלינו בכל עת 🙏`
+  const waFallback =
+    '✅ שלום! התקלה שדיווחת בבניין {{project_name}} טופלה וסגורה.\n\nאם יש בעיה נוספת, ניתן לפנות אלינו בכל עת 🙏'
 
   const { data: waClient } = await supabaseAdmin
     .from('clients')
@@ -40,7 +42,14 @@ export async function notifyReporterTicketClosed(
   }
 
   try {
-    await sendWhatsAppTextMessage(reporterPhone, waBody, residentWhatsAppCreds)
+    const waBody = await resolveWhatsAppTemplateMessage(
+      supabaseAdmin,
+      clientId,
+      'ticket_closed',
+      waFallback,
+      { project_name: building }
+    )
+    await sendWhatsAppTextMessage(reporterPhone, waBody, residentWhatsAppCreds, { clientId })
     result.whatsappSent = true
   } catch (e) {
     result.whatsappError = e instanceof Error ? e.message : String(e)

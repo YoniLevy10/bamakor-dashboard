@@ -21,6 +21,7 @@ import {
   LoadingSpinner,
   theme
 } from '../components/ui'
+import { getIsMobileViewport } from '@/lib/mobile-viewport'
 
 type WorkerRow = {
   id: string
@@ -118,7 +119,7 @@ export default function WorkersPage() {
   }
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
+    const check = () => setIsMobile(getIsMobileViewport())
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
@@ -358,7 +359,14 @@ export default function WorkersPage() {
 
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-      <div style={styles.content}>
+      <div
+        style={{
+          ...styles.content,
+          ...(isMobile
+            ? { padding: '16px 16px 8px', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }
+            : {}),
+        }}
+      >
         {!isMobile && (
           <PageHeader
             title="עובדים"

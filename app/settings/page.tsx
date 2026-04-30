@@ -7,6 +7,7 @@
  */
 
 import { Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
@@ -21,6 +22,7 @@ import {
   LoadingSpinner,
   theme,
 } from '../components/ui'
+import { getIsMobileViewport } from '@/lib/mobile-viewport'
 
 type ClientRow = {
   id: string
@@ -73,7 +75,7 @@ function SettingsPageInner() {
   const [origin, setOrigin] = useState('')
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
+    const check = () => setIsMobile(getIsMobileViewport())
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
@@ -226,9 +228,24 @@ function SettingsPageInner() {
       )}
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-      <div style={styles.content}>
+      <div
+        style={{
+          ...styles.content,
+          ...(isMobile
+            ? { padding: '16px 16px 8px', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }
+            : {}),
+        }}
+      >
         {!isMobile && (
-          <PageHeader title="הגדרות" subtitle="התראות ווואטסאפ" />
+          <PageHeader
+            title="הגדרות"
+            subtitle="התראות ווואטסאפ"
+            actions={
+              <Link href="/settings/whatsapp-templates" style={styles.templatesLink}>
+                תבניות הודעות וואטסאפ
+              </Link>
+            }
+          />
         )}
 
         {loading ? (
@@ -237,7 +254,7 @@ function SettingsPageInner() {
           </div>
         ) : (
           <>
-            <div style={styles.tabBar} role="tablist" aria-label="הגדרות">
+            <div className="app-error-log-tabs" style={styles.tabBar} role="tablist" aria-label="הגדרות">
               {TABS.map((t) => (
                 <button
                   key={t.id}
@@ -254,6 +271,14 @@ function SettingsPageInner() {
                 </button>
               ))}
             </div>
+
+            {isMobile && (
+              <div style={{ marginBottom: '16px' }}>
+                <Link href="/settings/whatsapp-templates" style={styles.templatesLink}>
+                  תבניות הודעות וואטסאפ
+                </Link>
+              </div>
+            )}
 
             {activeTab === 'notifications' && (
               <Card noPadding>
@@ -427,11 +452,14 @@ const styles: Record<string, CSSProperties> = {
     color: theme.colors.textSecondary,
   },
   input: {
+    width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
     padding: '12px 14px',
     borderRadius: theme.radius.md,
     border: `1px solid ${theme.colors.border}`,
     background: theme.colors.surface,
-    fontSize: '15px',
+    fontSize: '16px',
     color: theme.colors.textPrimary,
   },
   formHint: {
@@ -465,5 +493,11 @@ const styles: Record<string, CSSProperties> = {
     gap: '10px',
     alignItems: 'center',
     flexWrap: 'wrap',
+  },
+  templatesLink: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: theme.colors.primary,
+    textDecoration: 'none',
   },
 }

@@ -11,11 +11,20 @@ type ProjectRow = {
   id: string
   name: string
   project_code: string
+  client_id?: string
 }
 
 function ReportPageContent() {
   const searchParams = useSearchParams()
   const paramProjectCode = (searchParams.get('project') || '').toUpperCase()
+  const clientFromUrl = (searchParams.get('client') || '').trim()
+  const effectiveClientId = useMemo(() => {
+    if (clientFromUrl) return clientFromUrl
+    if (process.env.NODE_ENV === 'development') {
+      return (process.env.NEXT_PUBLIC_BAMAKOR_CLIENT_ID || '').trim()
+    }
+    return ''
+  }, [clientFromUrl])
 
   const [description, setDescription] = useState('')
   const [reporterName, setReporterName] = useState('')
@@ -37,9 +46,14 @@ function ReportPageContent() {
     async function loadProjects() {
       await asyncHandler(
         async () => {
+          if (!effectiveClientId) {
+            setProjects([])
+            return
+          }
           const { data, error } = await supabase
             .from('projects')
-            .select('id, name, project_code')
+            .select('id, name, project_code, client_id')
+            .eq('client_id', effectiveClientId)
             .order('project_code', { ascending: true })
 
           if (error) throw new Error(error.message)
@@ -53,7 +67,7 @@ function ReportPageContent() {
     }
 
     loadProjects()
-  }, [])
+  }, [effectiveClientId])
 
   // Only search if input is 2+ characters
   const searchResults = useMemo(() => {
@@ -134,11 +148,17 @@ function ReportPageContent() {
       return
     }
 
+    if (!effectiveClientId) {
+      setErrorMessage('קישור הדיווח לא תקין — חסר מזהה לקוח (?client=). השתמשו בקישור מהבניין.')
+      return
+    }
+
     setLoading(true)
 
     const result = await asyncHandler(
       async () => {
         const formData = new FormData()
+        formData.append('client_id', effectiveClientId)
         formData.append('project_code', selectedProjectCode)
         formData.append('description', description.trim())
         formData.append('reporter_name', reporterName.trim() || '')
@@ -277,6 +297,12 @@ function ReportPageContent() {
 
           {successMessage && <div style={styles.successBox}>{successMessage}</div>}
           {errorMessage && <div style={styles.errorBox}>{errorMessage}</div>}
+          {!effectiveClientId && (
+            <div style={styles.errorBox} role="alert">
+              Open this page from your building QR link. The link must include a tenant id (
+              <code style={{ fontSize: 12 }}>?client=…</code>).
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} style={styles.form}>
             <div style={styles.field}>

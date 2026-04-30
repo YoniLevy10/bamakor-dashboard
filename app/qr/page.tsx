@@ -19,6 +19,7 @@ import {
   LoadingSpinner,
   theme
 } from '../components/ui'
+import { getIsMobileViewport } from '@/lib/mobile-viewport'
 
 type ProjectRow = {
   id: string
@@ -61,7 +62,7 @@ export default function QrPage() {
   }
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
+    const check = () => setIsMobile(getIsMobileViewport())
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
@@ -91,7 +92,7 @@ export default function QrPage() {
 
   function buildReportLink(project: ProjectRow) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '')
-    return `${baseUrl}/report?project=${encodeURIComponent(project.project_code)}`
+    return `${baseUrl}/report?project=${encodeURIComponent(project.project_code)}&client=${encodeURIComponent(project.client_id)}`
   }
 
   function downloadQr(projectCode: string) {
@@ -152,7 +153,14 @@ export default function QrPage() {
 
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-      <div style={styles.content}>
+      <div
+        style={{
+          ...styles.content,
+          ...(isMobile
+            ? { padding: '16px 16px 8px', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }
+            : {}),
+        }}
+      >
         {!isMobile && (
           <PageHeader
             title="קודי QR"

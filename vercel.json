@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sla-check",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/whatsapp-retry",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

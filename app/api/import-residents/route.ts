@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getSingletonClientId } from '@/lib/singleton-client-server'
+import { checkRateLimitDistributed, sanitizeString } from '@/lib/api-validation'
+import { requireSessionClientId } from '@/lib/api-auth'
+import { getLogger, getAuditLogger } from '@/lib/logging'
 
 type ImportRow = {
   full_name?: unknown
@@ -20,13 +22,30 @@ function normalizeProjectCode(v: unknown): string {
 }
 
 export async function POST(req: Request) {
+  const logger = getLogger()
+  const audit = getAuditLogger()
+  const requestId = `import-residents-${Date.now()}`
   try {
     const supabase = getSupabaseAdmin()
-    const bamakorClientId = await getSingletonClientId(supabase)
+    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
+    const rl = await checkRateLimitDistributed({
+      supabaseAdmin: supabase,
+      key: `ip:${ip}:import-residents`,
+      windowMs: 60_000,
+      maxRequests: 10,
+    })
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
+    }
+
+    const auth = await requireSessionClientId()
+    if (!auth.ok) return auth.response
+    const bamakorClientId = auth.ctx.clientId
+
     const body = (await req.json()) as { rows?: ImportRow[] } | null
     const rows = body?.rows
     if (!Array.isArray(rows) || rows.length === 0) {
-      return NextResponse.json({ error: 'rows is required' }, { status: 400 })
+      return NextResponse.json({ error: 'rows is required', requestId }, { status: 400 })
     }
 
     // Load projects once for matching
@@ -37,7 +56,8 @@ export async function POST(req: Request) {
       .order('name')
 
     if (pErr) {
-      return NextResponse.json({ error: pErr.message }, { status: 500 })
+      logger.error('RESIDENTS_API', 'Load projects failed', new Error(pErr.message), { requestId, clientId: bamakorClientId })
+      return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
     }
 
     const byCode = new Map<string, { id: string; name: string }>()
@@ -59,7 +79,7 @@ export async function POST(req: Request) {
     const errors: { rowIndex: number; error: string }[] = []
 
     rows.forEach((r, idx) => {
-      const fullName = normalizeString(r.full_name)
+      const fullName = sanitizeString(r.full_name) || normalizeString(r.full_name)
       if (!fullName) {
         errors.push({ rowIndex: idx, error: 'שם מלא חסר' })
         return
@@ -81,7 +101,7 @@ export async function POST(req: Request) {
         full_name: fullName,
         phone: normalizeString(r.phone) || null,
         apartment_number: normalizeString(r.apartment_number) || null,
-        notes: normalizeString(r.notes) || null,
+        notes: sanitizeString(r.notes) || normalizeString(r.notes) || null,
       })
     })
 
@@ -99,7 +119,9 @@ export async function POST(req: Request) {
       .select('id, project_id, client_id, full_name, phone, apartment_number, notes')
 
     if (insErr) {
-      return NextResponse.json({ error: insErr.message }, { status: 500 })
+      logger.error('RESIDENTS_API', 'Bulk insert residents failed', new Error(insErr.message), { requestId, clientId: bamakorClientId })
+      audit.logFailedOperation('IMPORT', 'RESIDENTS', 'bulk', bamakorClientId, insErr.message)
+      return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -107,10 +129,11 @@ export async function POST(req: Request) {
       failed: errors.length,
       errors,
       residents: insertedRows,
+      requestId,
     })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    logger.error('RESIDENTS_API', 'Unhandled import-residents error', e instanceof Error ? e : new Error(String(e)), { requestId })
+    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
   }
 }
 

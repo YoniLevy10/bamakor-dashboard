@@ -1,11 +1,21 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
+import { resolveClientIdForUserId } from '@/lib/tenant-resolution'
+
+/** משתמש "חדש" להפניה ל-onboarding: נרשם ב־30 הימים האחרונים */
+const NEW_USER_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // Public routes: do not block WhatsApp webhook or login screen
-  if (pathname.startsWith('/api/webhook/whatsapp') || pathname.startsWith('/login')) {
+  if (
+    pathname.startsWith('/api/webhook/whatsapp') ||
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/auth/callback') ||
+    pathname.startsWith('/api/cron/')
+  ) {
     return NextResponse.next()
   }
 
@@ -50,6 +60,48 @@ export async function middleware(req: NextRequest) {
     url.pathname = '/login'
     url.searchParams.set('redirectTo', pathname)
     return NextResponse.redirect(url)
+  }
+
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  if (serviceKey && supabaseUrl && !pathname.startsWith('/api/')) {
+    try {
+      const admin = createClient(supabaseUrl, serviceKey)
+      const clientId = await resolveClientIdForUserId(admin, user.id)
+
+      if (!clientId && !pathname.startsWith('/onboarding') && !pathname.startsWith('/login')) {
+        const url = req.nextUrl.clone()
+        url.pathname = '/onboarding'
+        return NextResponse.redirect(url)
+      }
+
+      if (
+        clientId &&
+        !pathname.startsWith('/onboarding') &&
+        !pathname.startsWith('/login')
+      ) {
+        const { count, error: cErr } = await admin
+          .from('projects')
+          .select('*', { count: 'exact', head: true })
+          .eq('client_id', clientId)
+          .eq('is_active', true)
+
+        if (cErr) {
+          return res
+        }
+
+        const createdMs = user.created_at ? new Date(user.created_at).getTime() : 0
+        const isNewUser =
+          createdMs > 0 && Date.now() - createdMs < NEW_USER_MAX_AGE_MS
+
+        if (isNewUser && (count ?? 0) === 0) {
+          const url = req.nextUrl.clone()
+          url.pathname = '/onboarding'
+          return NextResponse.redirect(url)
+        }
+      }
+    } catch {
+      /* ignore onboarding redirect if admin client unavailable */
+    }
   }
 
   return res

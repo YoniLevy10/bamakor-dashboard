@@ -1,8 +1,9 @@
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getSingletonClientId } from '@/lib/singleton-client-server'
 import { NextResponse } from 'next/server'
+import { requireSessionClientId } from '@/lib/api-auth'
 import { getLogger } from '@/lib/logging'
 import { notifyReporterTicketClosed } from '@/lib/reporter-ticket-closed-notify'
+import { checkRateLimitDistributed, sanitizeId } from '@/lib/api-validation'
 
 export async function POST(req: Request) {
   const logger = getLogger()
@@ -24,15 +25,28 @@ export async function POST(req: Request) {
       )
     }
 
-    const bamakorClientId = await getSingletonClientId(supabaseAdmin)
+    const auth = await requireSessionClientId()
+    if (!auth.ok) return auth.response
+    const bamakorClientId = auth.ctx.clientId
 
     const body = await req.json()
-    const { ticket_id } = body
+    const ticket_id = sanitizeId((body as { ticket_id?: unknown })?.ticket_id)
+
+    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
+    const rl = await checkRateLimitDistributed({
+      supabaseAdmin,
+      key: `ip:${ip}:close-ticket`,
+      windowMs: 60_000,
+      maxRequests: 60,
+    })
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
+    }
 
     if (!ticket_id) {
       logger.error('TICKET_API', 'Missing ticket_id parameter', undefined, { requestId })
       return NextResponse.json(
-        { error: 'ticket_id is required' },
+        { error: 'ticket_id is required', requestId },
         { status: 400 }
       )
     }
@@ -49,7 +63,7 @@ export async function POST(req: Request) {
       console.warn('Ticket not found:', ticket_id)
       logger.error('TICKET_API', 'Ticket not found', ticketError, { requestId, ticket_id })
       return NextResponse.json(
-        { error: 'Ticket not found' },
+        { error: 'Ticket not found', requestId },
         { status: 404 }
       )
     }
@@ -57,7 +71,7 @@ export async function POST(req: Request) {
     if (ticket.status === 'CLOSED') {
       logger.warn('TICKET_API', 'Ticket already closed', { requestId, ticket_id })
       return NextResponse.json(
-        { error: 'Ticket is already closed', code: 'ALREADY_CLOSED' },
+        { error: 'Ticket is already closed', code: 'ALREADY_CLOSED', requestId },
         { status: 409 }
       )
     }
@@ -82,7 +96,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: 'Failed to close ticket',
-          details: process.env.NODE_ENV === 'development' ? updateError.message : undefined,
+          requestId,
         },
         { status: 500 }
       )
@@ -149,6 +163,7 @@ export async function POST(req: Request) {
       ticket: updatedTicket,
       reporter_has_phone: Boolean(trow.reporter_phone?.trim()),
       whatsapp_sent: notify.whatsappSent,
+      requestId,
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
@@ -157,7 +172,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error: 'Server error',
-        details: process.env.NODE_ENV === 'development' ? String(error) : undefined,
+        requestId,
       },
       { status: 500 }
     )
