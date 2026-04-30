@@ -32,6 +32,7 @@ type WorkerRow = {
   is_active: boolean
   created_at: string
   client_id: string
+  access_token?: string | null
 }
 
 type TicketRow = {
@@ -347,6 +348,20 @@ export default function WorkersPage() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
+  function copyWorkerFieldLink(worker: WorkerRow, e?: React.MouseEvent) {
+    e?.stopPropagation()
+    const token = worker.access_token
+    if (!token) {
+      toast.error('אין טוקן לעובד')
+      return
+    }
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/worker?token=${encodeURIComponent(token)}`
+    void navigator.clipboard.writeText(url).then(
+      () => toast.success('הקישור הועתק'),
+      () => toast.error('העתקה נכשלה')
+    )
+  }
+
   return (
     <AppShell isMobile={isMobile}>
       {isMobile && (
@@ -471,6 +486,9 @@ export default function WorkersPage() {
                   <div style={styles.workerActions} onClick={(e) => e.stopPropagation()}>
                     <Button variant="secondary" size="sm" onClick={() => openEditDrawer(worker)}>
                       עריכה
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={(e) => copyWorkerFieldLink(worker, e)}>
+                      העתק קישור
                     </Button>
                     <Button variant="secondary" size="sm" onClick={() => toggleWorkerStatus(worker)}>
                       {worker.is_active ? 'השבתה' : 'הפעלה'}
@@ -628,6 +646,9 @@ export default function WorkersPage() {
             </div>
 
             <div style={styles.drawerActions}>
+              <Button variant="secondary" onClick={() => copyWorkerFieldLink(selectedWorker)}>
+                העתק קישור
+              </Button>
               <Button variant="secondary" onClick={() => openEditDrawer(selectedWorker)}>
                 עריכת עובד
               </Button>

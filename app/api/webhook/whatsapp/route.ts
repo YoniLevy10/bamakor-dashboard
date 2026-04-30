@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { resolveClientIdByWhatsAppPhoneNumberId } from '@/lib/tenant-resolution'
@@ -6,6 +7,7 @@ import {
   parseIncomingWhatsAppMessage,
   isAddressLikeText,
   extractWhatsAppPhoneNumberId,
+  type ParsedWhatsAppMessage,
 } from '@/lib/whatsapp-parser'
 import { webhookDedupeMessageId } from '@/lib/whatsapp-webhook-dedupe'
 import { isUrgentAngryMessage } from '@/lib/whatsapp-intent'
@@ -495,83 +497,17 @@ async function appendFollowUpToOpenTicket(
   await logIncomingFreeTextToTicket(ticketId, from, text, supabaseAdmin)
 }
 
-export async function GET(req: NextRequest) {
-  const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || ''
-  const searchParams = req.nextUrl.searchParams
-  const mode = searchParams.get('hub.mode')
-  const token = searchParams.get('hub.verify_token')
-  const challenge = searchParams.get('hub.challenge')
-
-  if (!VERIFY_TOKEN) {
-    return new NextResponse('Server configuration error', { status: 500 })
-  }
-
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    return new NextResponse(challenge || 'OK', { status: 200 })
-  }
-
-  return new NextResponse('Verification failed', { status: 403 })
-}
-
-export async function POST(req: NextRequest) {
-  const requestId = `webhook-whatsapp-${Date.now()}`
-  logger.info('WEBHOOK', 'WhatsApp webhook POST received', { requestId })
-  
+async function runWhatsAppInboundBackground(
+  body: unknown,
+  requestId: string,
+  parsedMessage: ParsedWhatsAppMessage,
+  supabaseAdmin: SupabaseClient
+): Promise<void> {
   try {
-    let supabaseAdmin: SupabaseClient
-    try {
-      supabaseAdmin = getSupabaseAdmin()
-    } catch (envError) {
-      const error = envError instanceof Error ? envError : new Error(String(envError))
-      logger.error('WEBHOOK', 'Failed to initialize Supabase admin', error, { requestId })
-      console.error('❌ Environment configuration error:', envError)
-      return NextResponse.json(
-        {
-          error: 'Server configuration error',
-          details: process.env.NODE_ENV === 'development' ? String(envError) : undefined,
-        },
-        { status: 500 }
-      )
-    }
-
-    const body = await req.json()
-
-    // Avoid logging full payload in production (may contain PII/tokens).
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('✅ WEBHOOK DB VERSION ACTIVE')
-      console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
-      logger.debug('WEBHOOK', 'Full webhook payload (dev only)', { requestId, payload: body })
-    } else {
-      logger.debug('WEBHOOK', 'Webhook payload received', {
-        requestId,
-        hasEntry: Array.isArray((body as { entry?: unknown }).entry),
-      })
-    }
-
-    const parsedMessage = parseIncomingWhatsAppMessage(body)
-
-    if (!parsedMessage) {
-      console.log('ℹ️ No incoming user message in payload')
-      logger.debug('WEBHOOK', 'No incoming message in payload', { requestId })
-      return NextResponse.json({ received: true }, { status: 200 })
-    }
-
-    const dedupeMessageId = webhookDedupeMessageId(parsedMessage)
-    const { error: dupErr } = await supabaseAdmin.from('processed_webhooks').insert({
-      message_id: dedupeMessageId,
-    })
-    if (dupErr && dupErr.code === '23505') {
-      console.log('⚠️ Duplicate webhook, skipping:', dedupeMessageId)
-      return NextResponse.json({ received: true }, { status: 200 })
-    }
-    if (dupErr) {
-      console.error('⚠️ processed_webhooks insert (non-blocking):', dupErr)
-    }
-
     const phoneNumberId = extractWhatsAppPhoneNumberId(body)
     if (!phoneNumberId) {
       console.error('❌ Missing WhatsApp phone_number_id in webhook metadata')
-      return NextResponse.json({ received: true }, { status: 200 })
+      return
     }
 
     const waResolved = await resolveClientIdByWhatsAppPhoneNumberId(supabaseAdmin, phoneNumberId)
@@ -582,7 +518,7 @@ export async function POST(req: NextRequest) {
         new Error('no_client_for_phone_number_id'),
         { requestId, phoneNumberId }
       )
-      return NextResponse.json({ received: true }, { status: 200 })
+      return
     }
     const webhookClientId = waResolved.clientId
     const waClient = waResolved.row as {
@@ -666,7 +602,7 @@ export async function POST(req: NextRequest) {
       } catch (sendError) {
         console.error('⚠️ Failed to send non-text flow guidance:', sendError)
       }
-      return NextResponse.json({ received: true, type: 'non_text_guidance' }, { status: 200 })
+      return
     }
 
     // HANDLE IMAGE MESSAGES
@@ -757,15 +693,7 @@ export async function POST(req: NextRequest) {
 
               // Product rule: after image confirmation, reset to default state
               await resetSessionCompletely(from, supabaseAdmin, webhookClientId, 'image_processed_success')
-              return NextResponse.json(
-                {
-                  received: true,
-                  type: 'image_attached_to_existing_ticket',
-                  ticketId,
-                  status: 'SUCCESS',
-                },
-                { status: 200 }
-              )
+              return
             } else {
               failureReason = 'DB_INSERT_FAILED'
               console.error(`❌ PIPELINE_FAILURE: Step 3 DB_INSERT - Attachment record creation failed`, {
@@ -805,16 +733,7 @@ export async function POST(req: NextRequest) {
 
         // Product rule: reset to default state after image attempt
         await resetSessionCompletely(from, supabaseAdmin, webhookClientId, 'image_processed_failure')
-        return NextResponse.json(
-          {
-            received: true,
-            type: 'image_failed_but_ticket_ok',
-            ticketId,
-            status: 'PARTIAL_FAILURE',
-            failureReason,
-          },
-          { status: 200 }
-        )
+        return
       }
 
       // Case A5: Building known (session) but ticket not created yet — keep image until first text opens ticket
@@ -843,10 +762,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        return NextResponse.json(
-          { received: true, type: 'image_queued_before_description', sessionId: session.id },
-          { status: 200 }
-        )
+        return
       }
 
       // Case B: No session/ticket context - attach to most recent ticket for this phone (short window)
@@ -899,10 +815,7 @@ export async function POST(req: NextRequest) {
 
               await resetSessionCompletely(from, supabaseAdmin, webhookClientId, 'recent_ticket_image_processed_success')
 
-              return NextResponse.json(
-                { received: true, type: 'image_attached_to_recent_ticket', ticketId, status: 'SUCCESS' },
-                { status: 200 }
-              )
+              return
             } else {
               failureReason = 'DB_INSERT_FAILED'
             }
@@ -925,10 +838,7 @@ export async function POST(req: NextRequest) {
 
         await resetSessionCompletely(from, supabaseAdmin, webhookClientId, 'recent_ticket_image_processed_failure')
 
-        return NextResponse.json(
-          { received: true, type: 'image_failed_recent_ticket', ticketId, status: 'PARTIAL_FAILURE', failureReason },
-          { status: 200 }
-        )
+        return
       }
 
       // Case C: No context and no recent ticket - guide user to start flow
@@ -940,13 +850,7 @@ export async function POST(req: NextRequest) {
         console.error('⚠️ Failed to send image-context-needed message:', sendError)
       }
 
-      return NextResponse.json(
-        {
-          received: true,
-          type: 'image_received_no_context',
-        },
-        { status: 200 }
-      )
+      return
     }
 
     if (!textBody) {
@@ -956,9 +860,9 @@ export async function POST(req: NextRequest) {
         } catch (sendError) {
           console.error('⚠️ Failed to send reaction reply:', sendError)
         }
-        return NextResponse.json({ received: true, type: 'reaction_received' }, { status: 200 })
+        return
       }
-      return NextResponse.json({ received: true }, { status: 200 })
+      return
     }
 
     // Product rule: WhatsApp session is single-purpose and short-lived.
@@ -979,14 +883,7 @@ export async function POST(req: NextRequest) {
           console.error('⚠️ Failed to send invalid-start-code reply:', sendError)
         }
 
-        return NextResponse.json(
-          {
-            received: true,
-            type: 'invalid_start_code',
-            from,
-          },
-          { status: 200 }
-        )
+        return
       }
 
       const { projectCode, buildingNumber } = parsedStart
@@ -1003,7 +900,7 @@ export async function POST(req: NextRequest) {
 
       if (projectError) {
         console.error('❌ Error fetching project:', projectError)
-        return NextResponse.json({ error: 'Project lookup failed' }, { status: 500 })
+        return
       }
 
       if (!project) {
@@ -1020,14 +917,7 @@ export async function POST(req: NextRequest) {
           console.error('⚠️ Failed to send project-not-found reply:', sendError)
         }
 
-        return NextResponse.json(
-          {
-            received: true,
-            projectFound: false,
-            projectCode,
-          },
-          { status: 200 }
-        )
+        return
       }
 
       const { error: deactivateError } = await supabaseAdmin
@@ -1042,7 +932,7 @@ export async function POST(req: NextRequest) {
 
       if (deactivateError) {
         console.error('❌ Error deactivating old sessions:', deactivateError)
-        return NextResponse.json({ error: 'Session cleanup failed' }, { status: 500 })
+        return
       }
 
       const { data: createdSession, error: sessionInsertError } = await supabaseAdmin
@@ -1060,7 +950,7 @@ export async function POST(req: NextRequest) {
 
       if (sessionInsertError) {
         console.error('❌ Error creating session:', sessionInsertError)
-        return NextResponse.json({ error: 'Session creation failed' }, { status: 500 })
+        return
       }
 
       console.log('✅ Session created:', createdSession.id)
@@ -1080,18 +970,7 @@ export async function POST(req: NextRequest) {
         console.error('⚠️ Failed to send start-flow reply:', sendError)
       }
 
-      return NextResponse.json(
-        {
-          received: true,
-          type: 'start_flow',
-          from,
-          projectCode,
-          buildingNumber,
-          projectId: project.id,
-          sessionId: createdSession.id,
-        },
-        { status: 200 }
-      )
+      return
     }
 
     let ticketPriority: 'HIGH' | 'MEDIUM' = 'MEDIUM'
@@ -1144,10 +1023,7 @@ export async function POST(req: NextRequest) {
 
           if (sessionCreateError) {
             console.error('❌ Error creating session from selection:', sessionCreateError)
-            return NextResponse.json(
-              { error: 'Session creation failed' },
-              { status: 500 }
-            )
+            return
           }
 
           // Clear pending selection
@@ -1166,16 +1042,7 @@ export async function POST(req: NextRequest) {
             console.error('⚠️ Failed to send selection confirmation:', sendError)
           }
 
-          return NextResponse.json(
-            {
-              received: true,
-              type: 'selection_confirmed',
-              from,
-              projectId: selectedProject.id,
-              sessionId: createdSession.id,
-            },
-            { status: 200 }
-          )
+          return
         }
       }
 
@@ -1194,14 +1061,7 @@ export async function POST(req: NextRequest) {
           console.error('⚠️ Failed to send invalid-selection message:', sendError)
         }
 
-        return NextResponse.json(
-          {
-            received: true,
-            type: 'invalid_selection',
-            from,
-          },
-          { status: 200 }
-        )
+        return
       }
 
       // Pending selection + non-numeric: either refine search (address-like) or remind to pick 1/2/3
@@ -1224,14 +1084,7 @@ export async function POST(req: NextRequest) {
             console.error('⚠️ Failed to send pending-reminder message:', sendError)
           }
 
-          return NextResponse.json(
-            {
-              received: true,
-              type: 'pending_reminder',
-              from,
-            },
-            { status: 200 }
-          )
+          return
         }
       }
 
@@ -1261,15 +1114,7 @@ export async function POST(req: NextRequest) {
           session: null,
         })
 
-        return NextResponse.json(
-          {
-            received: true,
-            type: 'search_no_match',
-            from,
-            reason: 'text_not_address_like',
-          },
-          { status: 200 }
-        )
+        return
       }
 
       console.log('ℹ️ Address-like text detected; attempting building search...')
@@ -1297,14 +1142,7 @@ export async function POST(req: NextRequest) {
           console.error('⚠️ Failed to send no-match message:', sendError)
         }
 
-        return NextResponse.json(
-          {
-            received: true,
-            type: 'search_no_match',
-            from,
-          },
-          { status: 200 }
-        )
+        return
       }
 
       if (searchResults.length === 1) {
@@ -1335,10 +1173,7 @@ export async function POST(req: NextRequest) {
 
         if (sessionCreateError) {
           console.error('❌ Error creating session from search match:', sessionCreateError)
-          return NextResponse.json(
-            { error: 'Session creation failed' },
-            { status: 500 }
-          )
+          return
         }
 
         // Send confirmation message with project name
@@ -1354,17 +1189,7 @@ export async function POST(req: NextRequest) {
           console.error('⚠️ Failed to send search-match confirmation:', sendError)
         }
 
-        return NextResponse.json(
-          {
-            received: true,
-            type: 'search_auto_match',
-            from,
-            projectId: matchedProject.id,
-            sessionId: createdSession.id,
-            buildingName: matchedProject.name,
-          },
-          { status: 200 }
-        )
+        return
       }
 
       // Multiple matches (2-3) - store pending selection and send numbered list
@@ -1392,14 +1217,7 @@ export async function POST(req: NextRequest) {
           console.error('⚠️ Failed to send error message:', sendError)
         }
 
-        return NextResponse.json(
-          {
-            received: true,
-            type: 'search_error',
-            from,
-          },
-          { status: 200 }
-        )
+        return
       }
 
       // Build and send numbered list
@@ -1417,15 +1235,7 @@ export async function POST(req: NextRequest) {
         console.error('⚠️ Failed to send multi-match list:', sendError)
       }
 
-      return NextResponse.json(
-        {
-          received: true,
-          type: 'search_multiple_matches',
-          from,
-          matchCount: searchResults.length,
-        },
-        { status: 200 }
-      )
+      return
     }
 
     if (isUrgentAngryMessage(textBody)) {
@@ -1466,15 +1276,7 @@ export async function POST(req: NextRequest) {
         } catch (sendError) {
           console.error('⚠️ Failed to send duplicate-follow-up reply:', sendError)
         }
-        return NextResponse.json(
-          {
-            received: true,
-            type: 'ticket_follow_up_appended',
-            ticketId: dupTicket.id,
-            ticketNumber: dupTicket.ticket_number,
-          },
-          { status: 200 }
-        )
+        return
       }
     }
 
@@ -1516,7 +1318,7 @@ export async function POST(req: NextRequest) {
 
     if (ticketError) {
       console.error('❌ Error creating ticket:', ticketError)
-      return NextResponse.json({ error: 'Ticket creation failed' }, { status: 500 })
+      return
     }
 
     const pendingImageAttached = await attachPendingWhatsAppImageToTicketIfAny(
@@ -1655,17 +1457,98 @@ export async function POST(req: NextRequest) {
     // If an image is sent right after, it will attach via recent-ticket lookup (short window).
     await resetSessionCompletely(from, supabaseAdmin, webhookClientId, 'ticket_created_text_flow_reset')
 
-    return NextResponse.json(
-      {
-        received: true,
-        type: 'ticket_created',
-        from,
-        ticketId: createdTicket.id,
-        ticketNumber: createdTicket.ticket_number,
-        buildingNumber,
-      },
-      { status: 200 }
-    )
+    return
+
+  } catch (err) {
+    const e = err instanceof Error ? err : new Error(String(err))
+    logger.error('WEBHOOK', 'Inbound background error', e, { requestId })
+  }
+}
+
+export async function GET(req: NextRequest) {
+  const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || ''
+  const searchParams = req.nextUrl.searchParams
+  const mode = searchParams.get('hub.mode')
+  const token = searchParams.get('hub.verify_token')
+  const challenge = searchParams.get('hub.challenge')
+
+  if (!VERIFY_TOKEN) {
+    return new NextResponse('Server configuration error', { status: 500 })
+  }
+
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    return new NextResponse(challenge || 'OK', { status: 200 })
+  }
+
+  return new NextResponse('Verification failed', { status: 403 })
+}
+
+export async function POST(req: NextRequest) {
+  const requestId = `webhook-whatsapp-${Date.now()}`
+  logger.info('WEBHOOK', 'WhatsApp webhook POST received', { requestId })
+  
+  try {
+    let supabaseAdmin: SupabaseClient
+    try {
+      supabaseAdmin = getSupabaseAdmin()
+    } catch (envError) {
+      const error = envError instanceof Error ? envError : new Error(String(envError))
+      logger.error('WEBHOOK', 'Failed to initialize Supabase admin', error, { requestId })
+      console.error('❌ Environment configuration error:', envError)
+      return NextResponse.json(
+        {
+          error: 'Server configuration error',
+          details: process.env.NODE_ENV === 'development' ? String(envError) : undefined,
+        },
+        { status: 500 }
+      )
+    }
+
+    const body = await req.json()
+
+    // Avoid logging full payload in production (may contain PII/tokens).
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('✅ WEBHOOK DB VERSION ACTIVE')
+      console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
+      logger.debug('WEBHOOK', 'Full webhook payload (dev only)', { requestId, payload: body })
+    } else {
+      logger.debug('WEBHOOK', 'Webhook payload received', {
+        requestId,
+        hasEntry: Array.isArray((body as { entry?: unknown }).entry),
+      })
+    }
+
+    const parsedMessage = parseIncomingWhatsAppMessage(body)
+
+    if (!parsedMessage) {
+      console.log('ℹ️ No incoming user message in payload')
+      logger.debug('WEBHOOK', 'No incoming message in payload', { requestId })
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
+    const dedupeMessageId = webhookDedupeMessageId(parsedMessage)
+    const { error: dupErr } = await supabaseAdmin.from('processed_webhooks').insert({
+      message_id: dedupeMessageId,
+    })
+    if (dupErr && dupErr.code === '23505') {
+      console.log('⚠️ Duplicate webhook, skipping:', dedupeMessageId)
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+    if (dupErr) {
+      console.error('⚠️ processed_webhooks insert (non-blocking):', dupErr)
+    }
+
+    after(() => {
+      void runWhatsAppInboundBackground(body, requestId, parsedMessage, supabaseAdmin).catch((err) => {
+        logger.error(
+          'WEBHOOK',
+          'Background inbound failed',
+          err instanceof Error ? err : new Error(String(err)),
+          { requestId }
+        )
+      })
+    })
+    return NextResponse.json({ status: 'ok' }, { status: 200 })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
     logger.error('WEBHOOK', 'WhatsApp webhook POST error', err, { requestId })

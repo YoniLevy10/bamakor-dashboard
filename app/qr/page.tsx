@@ -20,6 +20,8 @@ import {
   theme
 } from '../components/ui'
 import { getIsMobileViewport } from '@/lib/mobile-viewport'
+import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
+import { digitsForWaMeLink } from '@/lib/wa-me-phone'
 
 type ProjectRow = {
   id: string
@@ -32,10 +34,10 @@ type ProjectRow = {
   created_at?: string
 }
 
-const WHATSAPP_NUMBER = '972559740732'
-
 export default function QrPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([])
+  const [waMeDigits, setWaMeDigits] = useState<string | null>(null)
+  const [waPhoneLoading, setWaPhoneLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [isMobile, setIsMobile] = useState(false)
@@ -73,6 +75,37 @@ export default function QrPage() {
     void loadProjects()
   }, [])
 
+  useEffect(() => {
+    void (async () => {
+      setWaPhoneLoading(true)
+      try {
+        const clientId = await resolveBamakorClientIdForBrowser()
+        const { data, error } = await supabase
+          .from('clients')
+          .select('whatsapp_business_phone, manager_phone, default_worker_phone')
+          .eq('id', clientId)
+          .maybeSingle()
+
+        if (error) throw error
+        const row = data as {
+          whatsapp_business_phone?: string | null
+          manager_phone?: string | null
+          default_worker_phone?: string | null
+        } | null
+        const raw =
+          row?.whatsapp_business_phone?.trim() ||
+          row?.manager_phone?.trim() ||
+          row?.default_worker_phone?.trim() ||
+          null
+        setWaMeDigits(digitsForWaMeLink(raw))
+      } catch {
+        setWaMeDigits(null)
+      } finally {
+        setWaPhoneLoading(false)
+      }
+    })()
+  }, [])
+
   async function copyText(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value)
@@ -87,7 +120,8 @@ export default function QrPage() {
   }
 
   function buildWhatsAppLink(project: ProjectRow) {
-    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(buildStartCode(project))}`
+    if (!waMeDigits) return '#'
+    return `https://wa.me/${waMeDigits}?text=${encodeURIComponent(buildStartCode(project))}`
   }
 
   function buildReportLink(project: ProjectRow) {
@@ -194,6 +228,24 @@ export default function QrPage() {
             </div>
           </div>
         </div>
+
+        {!waPhoneLoading && !waMeDigits ? (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: '14px 16px',
+              borderRadius: 12,
+              background: '#FEF3C7',
+              border: '1px solid #FCD34D',
+              color: '#92400E',
+              fontWeight: 600,
+              fontSize: 14,
+            }}
+            role="status"
+          >
+            לא הוגדר מספר וואטסאפ — פנה להגדרות (מספר עסקי ל־wa.me או מספר מנהל).
+          </div>
+        ) : null}
 
         {/* Search + Grid */}
         <Card noPadding>

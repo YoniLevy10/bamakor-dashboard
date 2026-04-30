@@ -322,6 +322,29 @@ export function checkRateLimitMemory(key: string, windowMs = 60_000, maxRequests
   return existing
 }
 
+/** Rate limit by IP + endpoint (table `rate_limits`, RPC `bamakor_rate_limit_ip_endpoint`). */
+export async function checkRateLimitIpEndpoint(params: {
+  supabaseAdmin: SupabaseClient
+  ip: string
+  endpoint: string
+  maxRequests?: number
+}): Promise<{ isLimited: boolean; currentCount?: number }> {
+  const max = params.maxRequests ?? 20
+  const { data, error } = await params.supabaseAdmin.rpc('bamakor_rate_limit_ip_endpoint', {
+    p_ip: params.ip,
+    p_endpoint: params.endpoint,
+    p_max: max,
+  })
+  if (error) {
+    return { isLimited: false }
+  }
+  const row = Array.isArray(data) ? data[0] : data
+  return {
+    isLimited: !!row?.is_limited,
+    currentCount: typeof row?.current_count === 'number' ? row.current_count : undefined,
+  }
+}
+
 export async function checkRateLimitDistributed(params: {
   supabaseAdmin: SupabaseClient
   key: string
@@ -402,10 +425,11 @@ export function sanitizeString(input: unknown): string {
 }
 
 export function sanitizeId(input: unknown): string | null {
-  if (typeof input !== 'string') return null;
+  if (typeof input !== 'string') return null
+  const s = input.trim().toLowerCase()
   // UUID format validation
-  if (!/^[a-f0-9-]{36}$/.test(input)) return null;
-  return input;
+  if (!/^[a-f0-9-]{36}$/.test(s)) return null
+  return s
 }
 
 export function sanitizeEmail(input: unknown): string | null {

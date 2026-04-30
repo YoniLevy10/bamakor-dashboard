@@ -271,11 +271,32 @@ export function Sidebar() {
             href="/settings"
             style={{
               ...sidebarStyles.navLink,
-              ...(pathname === '/settings' ? sidebarStyles.navLinkActive : {}),
+              ...(pathname === '/settings' ||
+              pathname.startsWith('/settings/') ||
+              pathname === '/billing'
+                ? sidebarStyles.navLinkActive
+                : {}),
             }}
           >
-            <NavIcon type="settings" active={pathname === '/settings'} />
-            <span style={pathname === '/settings' ? { color: theme.colors.primary } : {}}>הגדרות</span>
+            <NavIcon
+              type="settings"
+              active={
+                pathname === '/settings' ||
+                pathname.startsWith('/settings/') ||
+                pathname === '/billing'
+              }
+            />
+            <span
+              style={
+                pathname === '/settings' ||
+                pathname.startsWith('/settings/') ||
+                pathname === '/billing'
+                  ? { color: theme.colors.primary }
+                  : {}
+              }
+            >
+              הגדרות
+            </span>
           </Link>
           <Link
             href="/settings/whatsapp-templates"
@@ -293,6 +314,24 @@ export function Sidebar() {
               }
             >
               תבניות וואטסאפ
+            </span>
+          </Link>
+          <Link
+            href="/billing"
+            style={{
+              ...sidebarStyles.navLink,
+              ...sidebarStyles.settingsSubLink,
+              ...(pathname === '/billing' ? sidebarStyles.navLinkActive : {}),
+            }}
+          >
+            <span
+              style={
+                pathname === '/billing'
+                  ? { color: theme.colors.primary, fontWeight: 600, fontSize: '13px' }
+                  : { fontSize: '13px', color: theme.colors.textMuted }
+              }
+            >
+              חיוב ושימוש
             </span>
           </Link>
           <NavSignOutButton />
@@ -493,7 +532,7 @@ const BOTTOM_NAV_ROUTES = new Set([
 
 function showMobileBottomNavForPath(pathname: string): boolean {
   if (BOTTOM_NAV_ROUTES.has(pathname)) return true
-  if (pathname === '/settings' || pathname.startsWith('/settings/')) return true
+  if (pathname === '/settings' || pathname.startsWith('/settings/') || pathname === '/billing') return true
   return false
 }
 
@@ -516,7 +555,9 @@ export function MobileBottomNav() {
       {bottomNavItems.map((item) => {
         const active =
           item.href === '/settings'
-            ? pathname === '/settings' || pathname.startsWith('/settings/')
+            ? pathname === '/settings' ||
+              pathname.startsWith('/settings/') ||
+              pathname === '/billing'
             : pathname === item.href
         return (
           <Link
@@ -770,10 +811,21 @@ export function MobileMenu({
               onClick={onClose}
               style={{
                 ...mobileMenuStyles.navLink,
-                ...(pathname === '/settings' ? mobileMenuStyles.navLinkActive : {}),
+                ...(pathname === '/settings' ||
+                pathname.startsWith('/settings/') ||
+                pathname === '/billing'
+                  ? mobileMenuStyles.navLinkActive
+                  : {}),
               }}
             >
-              <NavIcon type="settings" active={pathname === '/settings'} />
+              <NavIcon
+                type="settings"
+                active={
+                  pathname === '/settings' ||
+                  pathname.startsWith('/settings/') ||
+                  pathname === '/billing'
+                }
+              />
               <span>הגדרות</span>
             </Link>
             <Link
@@ -786,6 +838,17 @@ export function MobileMenu({
               }}
             >
               <span style={{ fontSize: '14px' }}>תבניות וואטסאפ</span>
+            </Link>
+            <Link
+              href="/billing"
+              onClick={onClose}
+              style={{
+                ...mobileMenuStyles.navLink,
+                ...mobileMenuStyles.settingsSubLink,
+                ...(pathname === '/billing' ? mobileMenuStyles.navLinkActive : {}),
+              }}
+            >
+              <span style={{ fontSize: '14px' }}>חיוב ושימוש</span>
             </Link>
             <div style={{ paddingInline: '8px', paddingTop: '8px' }}>
               <NavSignOutButton onAfterSignOut={onClose} />

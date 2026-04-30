@@ -130,7 +130,6 @@ export default function TicketsPage() {
   const [translating, setTranslating] = useState(false)
   const [mergeCandidates, setMergeCandidates] = useState<TicketRow[]>([])
   const [mergeLoading, setMergeLoading] = useState(false)
-  const [exportProject, setExportProject] = useState('ALL')
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
 
   useEffect(() => {
@@ -269,16 +268,27 @@ export default function TicketsPage() {
     return worker?.full_name || 'לא ידוע'
   }
 
-  function exportToExcel() {
-    const list =
-      exportProject === 'ALL'
-        ? filteredTickets
-        : filteredTickets.filter((t) => t.project_code === exportProject)
+  const statusLabelHe: Record<string, string> = {
+    NEW: 'חדש',
+    ASSIGNED: 'משויך',
+    IN_PROGRESS: 'בטיפול',
+    WAITING_PARTS: 'ממתין לחלקים',
+    CLOSED: 'סגור',
+  }
+  const priorityLabelHe: Record<string, string> = {
+    HIGH: 'גבוהה',
+    MEDIUM: 'בינונית',
+    LOW: 'נמוכה',
+  }
 
+  function exportToExcel() {
+    const list = filteredTickets
     const rows = list.map((t) => ({
-      'מספר תקלה': t.ticket_number,
+      'מספר טיקט': t.ticket_number,
       תיאור: t.description || '',
-      סטטוס: t.status,
+      סטטוס: statusLabelHe[t.status] || t.status,
+      עדיפות: priorityLabelHe[(t.priority || 'MEDIUM').toUpperCase()] || (t.priority || ''),
+      פרויקט: t.project_name || t.project_code || '',
       'עובד משויך': getWorkerName(t.assigned_worker_id),
       'תאריך פתיחה': t.created_at ? new Date(t.created_at).toLocaleString('he-IL') : '',
       'תאריך סגירה': t.closed_at ? new Date(t.closed_at).toLocaleString('he-IL') : '',
@@ -286,9 +296,9 @@ export default function TicketsPage() {
 
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Tickets')
-    const name = exportProject === 'ALL' ? 'tickets-all' : `tickets-${exportProject}`
-    XLSX.writeFile(wb, `${name}.xlsx`)
+    XLSX.utils.book_append_sheet(wb, ws, 'תקלות')
+    const day = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `bamakor-tickets-${day}.xlsx`)
     toast.success('קובץ הורד')
   }
 
@@ -594,16 +604,6 @@ export default function TicketsPage() {
               margin: '4px 0',
             }}
           />
-          <div style={{ fontSize: '12px', fontWeight: 600, color: theme.colors.textMuted }}>ייצוא לאקסל</div>
-          <Select
-            value={exportProject}
-            onChange={setExportProject}
-            options={[
-              { label: 'כל הפרויקטים', value: 'ALL' },
-              ...projects.map((p) => ({ label: p.name, value: p.project_code })),
-            ]}
-            style={{ width: '100%', minWidth: 0 }}
-          />
           <Button
             variant="secondary"
             size="md"
@@ -614,7 +614,7 @@ export default function TicketsPage() {
               setMobileToolsOpen(false)
             }}
           >
-            הורד Excel
+            ייצוא Excel
           </Button>
         </div>
       </Drawer>
@@ -698,27 +698,9 @@ export default function TicketsPage() {
                 placeholder="חיפוש תקלות..."
                 style={{ flex: 1, maxWidth: '320px' }}
               />
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <Select
-                  value={exportProject}
-                  onChange={setExportProject}
-                  options={[
-                    { label: 'ייצוא: כל הפרויקטים', value: 'ALL' },
-                    ...projects.map((p) => ({ label: `ייצוא: ${p.name}`, value: p.project_code })),
-                  ]}
-                  style={{ minWidth: '200px' }}
-                />
-                <Button variant="secondary" size="sm" type="button" onClick={exportToExcel}>
-                  ייצא ל-Excel
-                </Button>
-              </div>
+              <Button variant="secondary" size="sm" type="button" onClick={exportToExcel}>
+                ייצוא Excel
+              </Button>
               <div style={{
                 ...styles.filterGroup,
                 flexWrap: 'nowrap',

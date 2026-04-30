@@ -1,11 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { toast } from '@/lib/error-handler'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
 import { getIsMobileViewport } from '@/lib/mobile-viewport'
 import { Button, Card, LoadingSpinner, StatusBadge, theme, MobileBottomNav } from '../components/ui'
+
+const WORKER_TOKEN_KEY = 'bamakor_worker_token'
 
 type Worker = { id: string; full_name: string }
 type Ticket = {
@@ -16,7 +19,13 @@ type Ticket = {
   created_at: string
 }
 
-export default function WorkerPage() {
+type TokenSession = { token: string; workerId: string; clientId: string; fullName: string }
+
+function WorkerPageInner() {
+  const searchParams = useSearchParams()
+  const [tokenSession, setTokenSession] = useState<TokenSession | null>(null)
+  const [tokenChecked, setTokenChecked] = useState(false)
+  const [sessionResolved, setSessionResolved] = useState(false)
   const [clientId, setClientId] = useState<string | null>(null)
   const [workers, setWorkers] = useState<Worker[]>([])
   const [workerId, setWorkerId] = useState('')
@@ -33,17 +42,71 @@ export default function WorkerPage() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
+  /** Deep link ?token= or sessionStorage — no Google login */
   useEffect(() => {
+    void (async () => {
+      const fromUrl = searchParams.get('token')?.trim()
+      const fromStore = typeof window !== 'undefined' ? sessionStorage.getItem(WORKER_TOKEN_KEY) : null
+      const raw = fromUrl || fromStore || ''
+      const token = /^[a-f0-9-]{36}$/i.test(raw) ? raw.toLowerCase() : ''
+
+      if (fromUrl && token) {
+        sessionStorage.setItem(WORKER_TOKEN_KEY, token)
+        window.history.replaceState(null, '', '/worker')
+      }
+
+      if (!token) {
+        setTokenSession(null)
+        setTokenChecked(true)
+        return
+      }
+
+      try {
+        const res = await fetch(`/api/worker-auth?token=${encodeURIComponent(token)}`)
+        if (!res.ok) {
+          sessionStorage.removeItem(WORKER_TOKEN_KEY)
+          setTokenSession(null)
+          setTokenChecked(true)
+          return
+        }
+        const data = (await res.json()) as { worker_id?: string; client_id?: string; full_name?: string }
+        if (!data.worker_id || !data.client_id) {
+          sessionStorage.removeItem(WORKER_TOKEN_KEY)
+          setTokenSession(null)
+          setTokenChecked(true)
+          return
+        }
+        setTokenSession({
+          token,
+          workerId: data.worker_id,
+          clientId: data.client_id,
+          fullName: data.full_name || '',
+        })
+      } catch {
+        sessionStorage.removeItem(WORKER_TOKEN_KEY)
+        setTokenSession(null)
+      } finally {
+        setTokenChecked(true)
+      }
+    })()
+  }, [searchParams])
+
+  useEffect(() => {
+    if (tokenSession) {
+      setSessionResolved(true)
+      return
+    }
     void (async () => {
       try {
         const cid = await resolveBamakorClientIdForBrowser()
         setClientId(cid)
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'לא ניתן לזהות ארגון')
+      } catch {
         setClientId(null)
+      } finally {
+        setSessionResolved(true)
       }
     })()
-  }, [])
+  }, [tokenSession])
 
   const loadWorkers = useCallback(async () => {
     if (!clientId) {
@@ -68,7 +131,7 @@ export default function WorkerPage() {
     }
   }, [clientId])
 
-  const loadTickets = useCallback(
+  const loadTicketsDashboard = useCallback(
     async (wid: string) => {
       if (!wid || !clientId) {
         setTickets([])
@@ -94,19 +157,64 @@ export default function WorkerPage() {
     [clientId]
   )
 
+  const loadTicketsToken = useCallback(async (token: string) => {
+    setLoadingTickets(true)
+    try {
+      const res = await fetch(`/api/worker/tickets?token=${encodeURIComponent(token)}`)
+      if (!res.ok) {
+        setTickets([])
+        return
+      }
+      const data = (await res.json()) as { tickets?: Ticket[] }
+      setTickets(data.tickets || [])
+    } catch {
+      setTickets([])
+    } finally {
+      setLoadingTickets(false)
+    }
+  }, [])
+
   useEffect(() => {
     void loadWorkers()
   }, [loadWorkers])
 
   useEffect(() => {
-    void loadTickets(workerId)
-  }, [workerId, loadTickets])
+    if (tokenSession) {
+      void loadTicketsToken(tokenSession.token)
+      return
+    }
+    void loadTicketsDashboard(workerId)
+  }, [workerId, loadTicketsDashboard, tokenSession, loadTicketsToken])
 
   const selectedName = useMemo(() => {
+    if (tokenSession) return tokenSession.fullName
     return workers.find((w) => w.id === workerId)?.full_name || ''
-  }, [workers, workerId])
+  }, [workers, workerId, tokenSession])
 
   async function setTicketStatus(ticketId: string, status: 'IN_PROGRESS' | 'CLOSED') {
+    if (tokenSession) {
+      setBusyKey(`${ticketId}:${status}`)
+      try {
+        const res = await fetch('/api/worker/tickets', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: tokenSession.token,
+            ticket_id: ticketId,
+            status,
+          }),
+        })
+        if (!res.ok) throw new Error('עדכון נכשל')
+        toast.success(status === 'CLOSED' ? 'התקלה סומנה כהושלמה' : 'בטיפול')
+        await loadTicketsToken(tokenSession.token)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'עדכון נכשל')
+      } finally {
+        setBusyKey(null)
+      }
+      return
+    }
+
     if (!clientId) {
       toast.error('מזהה לקוח לא זמין — התחברו מחדש')
       return
@@ -126,13 +234,48 @@ export default function WorkerPage() {
         .eq('client_id', clientId)
       if (error) throw error
       toast.success(status === 'CLOSED' ? 'התקלה סומנה כהושלמה' : 'בטיפול')
-      await loadTickets(workerId)
+      await loadTicketsDashboard(workerId)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'עדכון נכשל')
     } finally {
       setBusyKey(null)
     }
   }
+
+  if (!tokenChecked || (!tokenSession && !sessionResolved)) {
+    return (
+      <div style={{ ...styles.shell, maxWidth: isMobile ? '100%' : styles.shell.maxWidth }} dir="rtl">
+        <div style={styles.center}>
+          <LoadingSpinner />
+        </div>
+      </div>
+    )
+  }
+
+  if (!tokenSession && !clientId) {
+    return (
+      <div
+        style={{
+          ...styles.shell,
+          maxWidth: isMobile ? '100%' : styles.shell.maxWidth,
+          paddingBottom: isMobile ? 'calc(16px + 56px + env(safe-area-inset-bottom, 0px))' : undefined,
+        }}
+        dir="rtl"
+      >
+        <header style={styles.header}>
+          <h1 style={styles.h1}>מסך עובד</h1>
+          <p style={styles.sub}>בקשו מהמנהל קישור אישי עם טוקן גישה — אין צורך בהתחברות Google.</p>
+        </header>
+        <Card title="אין גישה" noPadding>
+          <div style={styles.pad}>
+            <p style={styles.muted}>בקש קישור מהמנהל (מסך עובדים → &quot;העתק קישור&quot;).</p>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  const showTicketList = tokenSession || workerId
 
   return (
     <div
@@ -146,34 +289,40 @@ export default function WorkerPage() {
     >
       <header style={styles.header}>
         <h1 style={styles.h1}>מסך עובד</h1>
-        <p style={styles.sub}>בחרו עובד ועדכנו תקלות פתוחות</p>
+        <p style={styles.sub}>
+          {tokenSession ? `שלום ${selectedName || 'עובד'}` : 'בחרו עובד ועדכנו תקלות פתוחות'}
+        </p>
       </header>
 
       <div style={styles.inner}>
-        {loadingList ? (
-          <div style={styles.center}>
-            <LoadingSpinner />
-          </div>
-        ) : (
-          <Card title="עובד" noPadding style={{ marginBottom: '16px' }}>
-            <div style={styles.pad}>
-              <select
-                value={workerId}
-                onChange={(e) => setWorkerId(e.target.value)}
-                style={styles.select}
-              >
-                <option value="">בחרו עובד…</option>
-                {workers.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.full_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </Card>
+        {!tokenSession && (
+          <>
+            {loadingList ? (
+              <div style={styles.center}>
+                <LoadingSpinner />
+              </div>
+            ) : (
+              <Card title="עובד" noPadding style={{ marginBottom: '16px' }}>
+                <div style={styles.pad}>
+                  <select
+                    value={workerId}
+                    onChange={(e) => setWorkerId(e.target.value)}
+                    style={styles.select}
+                  >
+                    <option value="">בחרו עובד…</option>
+                    {workers.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </Card>
+            )}
+          </>
         )}
 
-        {workerId && (
+        {showTicketList && (
           <Card title={`תקלות פתוחות — ${selectedName}`} noPadding>
             <div style={styles.pad}>
               {loadingTickets ? (
@@ -219,7 +368,7 @@ export default function WorkerPage() {
           </Card>
         )}
       </div>
-      {isMobile ? <MobileBottomNav /> : null}
+      {isMobile && !tokenSession ? <MobileBottomNav /> : null}
     </div>
   )
 }
@@ -258,4 +407,20 @@ const styles: Record<string, CSSProperties> = {
   tn: { fontWeight: 700, color: theme.colors.primary },
   desc: { fontSize: '14px', margin: '0 0 12px', lineHeight: 1.45, color: theme.colors.textPrimary },
   actions: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
+}
+
+export default function WorkerPage() {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ ...styles.shell, minHeight: '100vh' }} dir="rtl">
+          <div style={styles.center}>
+            <LoadingSpinner />
+          </div>
+        </div>
+      }
+    >
+      <WorkerPageInner />
+    </Suspense>
+  )
 }

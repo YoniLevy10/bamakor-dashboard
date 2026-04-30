@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { toast, asyncHandler, validateResponse } from '@/lib/error-handler'
 import { validateRequired, validateMinLength } from '@/lib/validators'
 
@@ -37,10 +36,16 @@ function ReportPageContent() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [imageUploadError, setImageUploadError] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   const SUPPORTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
   const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
   const MAX_FILES = 3
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 350)
+    return () => clearTimeout(t)
+  }, [searchInput])
 
   useEffect(() => {
     async function loadProjects() {
@@ -50,14 +55,21 @@ function ReportPageContent() {
             setProjects([])
             return
           }
-          const { data, error } = await supabase
-            .from('projects')
-            .select('id, name, project_code, client_id')
-            .eq('client_id', effectiveClientId)
-            .order('project_code', { ascending: true })
+          const url = new URL('/api/public/projects', window.location.origin)
+          url.searchParams.set('client_id', effectiveClientId)
+          if (debouncedSearch.length >= 2) {
+            url.searchParams.set('q', debouncedSearch)
+          } else if (paramProjectCode) {
+            url.searchParams.set('project', paramProjectCode)
+          }
 
-          if (error) throw new Error(error.message)
-          setProjects((data as ProjectRow[]) || [])
+          const res = await fetch(url.toString())
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}))
+            throw new Error((j as { error?: string }).error || 'Failed to load buildings')
+          }
+          const j = (await res.json()) as { projects?: ProjectRow[] }
+          setProjects(j.projects || [])
         },
         {
           context: 'Failed to load buildings',
@@ -67,7 +79,7 @@ function ReportPageContent() {
     }
 
     loadProjects()
-  }, [effectiveClientId])
+  }, [effectiveClientId, paramProjectCode, debouncedSearch])
 
   // Only search if input is 2+ characters
   const searchResults = useMemo(() => {

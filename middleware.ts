@@ -12,9 +12,16 @@ export async function middleware(req: NextRequest) {
   // Public routes: do not block WhatsApp webhook or login screen
   if (
     pathname.startsWith('/api/webhook/whatsapp') ||
+    pathname.startsWith('/api/public/') ||
+    pathname.startsWith('/api/worker-auth') ||
+    pathname.startsWith('/api/worker/') ||
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth/callback') ||
-    pathname.startsWith('/api/cron/')
+    pathname.startsWith('/api/cron/') ||
+    pathname.startsWith('/report') ||
+    pathname === '/worker' ||
+    pathname.startsWith('/worker/') ||
+    pathname === '/offline.html'
   ) {
     return NextResponse.next()
   }
@@ -25,7 +32,9 @@ export async function middleware(req: NextRequest) {
     pathname === '/favicon.ico' ||
     pathname === '/icon.png' ||
     pathname === '/apple-icon.png' ||
-    pathname === '/manifest.json'
+    pathname === '/manifest.json' ||
+    pathname === '/sw.js' ||
+    pathname === '/offline.html'
   ) {
     return NextResponse.next()
   }

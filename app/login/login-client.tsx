@@ -1,10 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { theme } from '@/app/components/ui'
 
 function GoogleIcon() {
   return (
@@ -32,14 +31,6 @@ function GoogleIcon() {
 export function LoginClient() {
   const searchParams = useSearchParams()
 
-  const redirectTo = useMemo(() => {
-    const v = searchParams.get('redirectTo')
-    if (!v) return '/'
-    if (!v.startsWith('/')) return '/'
-    if (v.startsWith('//')) return '/'
-    return v
-  }, [searchParams])
-
   const authError = searchParams.get('error')
 
   const [loading, setLoading] = useState(false)
@@ -50,7 +41,8 @@ export function LoginClient() {
     setLoading(true)
     try {
       const supabase = createClient()
-      const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
+      const origin = window.location.origin
+      const callbackUrl = `${origin}/auth/callback`
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -80,40 +72,44 @@ export function LoginClient() {
         padding: '32px 20px',
         paddingTop: 'calc(32px + env(safe-area-inset-top, 0px))',
         paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
-        background: theme.colors.background,
+        background: 'linear-gradient(180deg, #F8FAFC 0%, #EFF6FF 100%)',
         boxSizing: 'border-box',
       }}
     >
       <div
         style={{
           width: '100%',
-          maxWidth: '400px',
+          maxWidth: '420px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           gap: '28px',
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-          <Image
-            src="/apple-icon.png"
-            alt="במקור"
-            width={72}
-            height={72}
-            priority
-            style={{ borderRadius: theme.radius.lg }}
-          />
+        <Image
+          src="/apple-icon.png"
+          alt="במקור"
+          width={88}
+          height={88}
+          priority
+          style={{ borderRadius: 20, boxShadow: '0 8px 24px rgba(37, 99, 235, 0.25)' }}
+        />
+
+        <div style={{ textAlign: 'center' }}>
           <h1
             style={{
-              margin: 0,
-              fontSize: '26px',
-              fontWeight: 700,
-              color: theme.colors.textPrimary,
+              margin: '0 0 8px 0',
+              fontSize: '32px',
+              fontWeight: 800,
+              color: '#0f172a',
               letterSpacing: '-0.02em',
             }}
           >
             במקור
           </h1>
+          <p style={{ margin: 0, fontSize: '17px', color: '#475569', lineHeight: 1.5, fontWeight: 500 }}>
+            מערכת ניהול תקלות לבניינים
+          </p>
         </div>
 
         <button
@@ -127,16 +123,16 @@ export function LoginClient() {
             gap: '12px',
             width: '100%',
             maxWidth: '320px',
-            minHeight: '48px',
-            padding: '12px 20px',
-            borderRadius: theme.radius.md,
-            border: `1px solid ${theme.colors.border}`,
-            background: theme.colors.surface,
-            color: theme.colors.textPrimary,
+            minHeight: '52px',
+            padding: '14px 22px',
+            borderRadius: 12,
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            color: '#0f172a',
             fontSize: '16px',
-            fontWeight: 600,
+            fontWeight: 700,
             cursor: loading ? 'wait' : 'pointer',
-            boxShadow: theme.shadows.sm,
+            boxShadow: '0 4px 14px rgba(15, 23, 42, 0.08)',
             opacity: loading ? 0.75 : 1,
           }}
         >
@@ -145,22 +141,8 @@ export function LoginClient() {
         </button>
 
         {error ? (
-          <p style={{ margin: 0, fontSize: '14px', color: theme.colors.error, textAlign: 'center' }}>
-            {error}
-          </p>
+          <p style={{ margin: 0, fontSize: '14px', color: '#b91c1c', textAlign: 'center' }}>{error}</p>
         ) : null}
-
-        <p
-          style={{
-            margin: 0,
-            fontSize: '14px',
-            color: theme.colors.textMuted,
-            textAlign: 'center',
-            lineHeight: 1.5,
-          }}
-        >
-          מערכת ניהול תקלות לבניינים
-        </p>
       </div>
     </div>
   )

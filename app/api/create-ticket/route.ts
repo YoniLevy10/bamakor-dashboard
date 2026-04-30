@@ -3,7 +3,8 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 import { requireSessionClientId } from '@/lib/api-auth'
-import { sanitizeId } from '@/lib/api-validation'
+import { checkRateLimitIpEndpoint, sanitizeId } from '@/lib/api-validation'
+import { notifyNewTicketPush } from '@/lib/push-notifications'
 import { whatsappDbPhoneKey } from '@/lib/whatsapp-test-phone'
 import { queuePendingResidentApproval } from '@/lib/pending-resident-from-ticket'
 
@@ -211,6 +212,23 @@ export async function POST(req: Request) {
       )
     }
 
+    const isPublicWebForm = !auth.ok && !!projectCodeFromBody
+    if (isPublicWebForm) {
+      const ip =
+        (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
+        (req as Request & { ip?: string }).ip ||
+        'unknown'
+      const rl = await checkRateLimitIpEndpoint({
+        supabaseAdmin,
+        ip,
+        endpoint: 'POST /api/create-ticket',
+        maxRequests: 20,
+      })
+      if (rl.isLimited) {
+        return NextResponse.json({ error: 'יותר מדי בקשות, נסה שוב בעוד דקה' }, { status: 429 })
+      }
+    }
+
     // MODE 1: WEB FORM
     if (projectCodeFromBody) {
       if (description.length < 3) {
@@ -236,10 +254,7 @@ export async function POST(req: Request) {
       }
 
       if (!project) {
-        return NextResponse.json(
-          { error: `Project not found for code ${projectCodeFromBody}` },
-          { status: 404 }
-        )
+        return NextResponse.json({ error: 'לא נמצא פרויקט' }, { status: 404 })
       }
 
       const storedReporterPhone = reporterPhone ? whatsappDbPhoneKey(reporterPhone) : null
@@ -319,6 +334,8 @@ export async function POST(req: Request) {
         const uploadResult = await uploadAttachments(supabaseAdmin, createdTicket.id, files)
         imageUploadWarning = uploadResult.warning
       }
+
+      void notifyNewTicketPush(supabaseAdmin, project.client_id as string, description).catch(() => {})
 
       return NextResponse.json({
         success: true,
@@ -445,10 +462,7 @@ export async function POST(req: Request) {
       .maybeSingle()
 
     if (projectError || !project) {
-      return NextResponse.json(
-        { error: `Project not found for code ${projectCode}` },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'לא נמצא פרויקט' }, { status: 404 })
     }
 
     const initialDescription = description || 'ללא תיאור'
@@ -552,6 +566,8 @@ export async function POST(req: Request) {
         { status: 500 }
       )
     }
+
+    void notifyNewTicketPush(supabaseAdmin, project.client_id as string, initialDescription).catch(() => {})
 
     return NextResponse.json({
       success: true,
