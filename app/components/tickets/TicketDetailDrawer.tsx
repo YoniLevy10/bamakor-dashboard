@@ -106,7 +106,7 @@ export function TicketDetailDrawer({
       open={!!selectedTicket}
       onClose={onClose}
       title={`תקלה #${selectedTicket?.ticket_number}`}
-      subtitle={selectedTicket?.project_name || selectedTicket?.project_code}
+      subtitle={selectedTicket?.project_name || 'פרטי בניין'}
       isMobile={isMobile}
     >
       {selectedTicket && (

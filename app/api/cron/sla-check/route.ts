@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     const { data: tickets, error } = await admin
       .from('tickets')
       .select('id, ticket_number, created_at, project_id, client_id, sla_alerted, status')
+      .is('deleted_at', null)
       .neq('status', 'CLOSED')
       .eq('sla_alerted', false)
 
@@ -93,7 +94,11 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const { error: upErr } = await admin.from('tickets').update({ sla_alerted: true }).eq('id', row.id)
+      const { error: upErr } = await admin
+        .from('tickets')
+        .update({ sla_alerted: true })
+        .eq('id', row.id)
+        .is('deleted_at', null)
       if (!upErr) marked++
     }
 

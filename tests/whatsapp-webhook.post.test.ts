@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto'
+
 /**
  * Flow coverage:
  * - Duplicate webhook (same dedupe id / Postgres 23505) exits before side effects — no double tickets / mixed welcome.
@@ -28,18 +30,19 @@ vi.mock('@/lib/pending-resident-from-ticket', () => ({
   queuePendingResidentApproval: vi.fn().mockResolvedValue(false),
 }))
 
-const processedIds = new Set<string>()
+const processedKeys = new Set<string>()
 
 vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdmin: () => ({
     from: (table: string) => {
       if (table === 'processed_webhooks') {
         return {
-          insert: (row: { message_id: string }) => {
-            if (processedIds.has(row.message_id)) {
+          insert: (row: { message_id: string; client_id: string }) => {
+            const k = `${row.client_id}:${row.message_id}`
+            if (processedKeys.has(k)) {
               return Promise.resolve({ error: { code: '23505' } })
             }
-            processedIds.add(row.message_id)
+            processedKeys.add(k)
             return Promise.resolve({ error: null })
           },
         }
@@ -102,15 +105,17 @@ describe('POST /api/webhook/whatsapp — duplicate delivery', () => {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     WHATSAPP_VERIFY_TOKEN: process.env.WHATSAPP_VERIFY_TOKEN,
+    WHATSAPP_APP_SECRET: process.env.WHATSAPP_APP_SECRET,
   }
 
   beforeEach(() => {
-    processedIds.clear()
+    processedKeys.clear()
     sendWhatsApp.mockClear()
     process.env.BAMAKOR_CLIENT_ID = 'test-client-id'
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role'
     process.env.WHATSAPP_VERIFY_TOKEN = 'test-verify'
+    process.env.WHATSAPP_APP_SECRET = 'unit-test-meta-secret'
   })
 
   afterEach(() => {
@@ -118,15 +123,30 @@ describe('POST /api/webhook/whatsapp — duplicate delivery', () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = prev.NEXT_PUBLIC_SUPABASE_URL
     process.env.SUPABASE_SERVICE_ROLE_KEY = prev.SUPABASE_SERVICE_ROLE_KEY
     process.env.WHATSAPP_VERIFY_TOKEN = prev.WHATSAPP_VERIFY_TOKEN
+    process.env.WHATSAPP_APP_SECRET = prev.WHATSAPP_APP_SECRET
   })
 
+  function signWebhookBody(raw: string) {
+    const secret = process.env.WHATSAPP_APP_SECRET || 'unit-test-meta-secret'
+    const digest = createHmac('sha256', secret).update(raw, 'utf8').digest('hex')
+    return `sha256=${digest}`
+  }
+
   it('POST with message id already in processed_webhooks is ignored and sends no WhatsApp replies', async () => {
-    processedIds.add('wamid.ALREADY_IN_DB')
+    processedKeys.add('test-client-id:wamid.ALREADY_IN_DB')
     const { POST } = await import('@/app/api/webhook/whatsapp/route')
     const payload = minimalTextPayload('wamid.ALREADY_IN_DB')
+    const raw = JSON.stringify(payload)
 
     const res = await POST(
-      new NextRequest('http://localhost/api/webhook/whatsapp', { method: 'POST', body: JSON.stringify(payload) })
+      new NextRequest('http://localhost/api/webhook/whatsapp', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signWebhookBody(raw),
+        },
+        body: raw,
+      })
     )
 
     expect(res.status).toBe(200)

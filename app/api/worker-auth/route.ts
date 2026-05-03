@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
       .from('workers')
       .select('id, client_id, full_name, is_active')
       .eq('access_token', token)
+      .is('deleted_at', null)
       .maybeSingle()
 
     if (error || !data || !data.is_active) {

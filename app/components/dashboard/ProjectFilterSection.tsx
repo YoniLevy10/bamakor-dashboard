@@ -45,7 +45,6 @@ export function ProjectFilterSection({
               title={`Click to ${selectedProjectCode === project.project_code ? 'deselect' : 'filter by'} ${project.name}`}
             >
               <div style={styles.projectChipName}>{project.name}</div>
-              <div style={styles.projectChipCode}>{project.project_code}</div>
               <div style={styles.projectChipCount}>
                 {project.open > 0 && (
                   <span style={styles.projectChipOpenCount}>{project.open}</span>
@@ -107,11 +106,6 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 600,
     color: theme.colors.textPrimary,
     whiteSpace: 'nowrap',
-  },
-  projectChipCode: {
-    fontSize: '12px',
-    color: theme.colors.primary,
-    fontWeight: 500,
   },
   projectChipCount: {
     fontSize: '12px',

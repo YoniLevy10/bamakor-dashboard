@@ -25,6 +25,7 @@ import {
   theme,
 } from '../components/ui'
 import { getIsMobileViewport } from '@/lib/mobile-viewport'
+import { PageListSkeleton } from '../components/page-skeleton'
 
 type ClientRow = {
   id: string
@@ -317,9 +318,17 @@ function SettingsPageInner() {
           />
         )}
 
+        <p style={{ margin: '0 0 16px', fontSize: '14px', color: theme.colors.textMuted }}>
+          <Link href="/privacy">מדיניות פרטיות</Link> · קובץ התבניה המלא בתיקיית הריפו{' '}
+          <code>PRIVACY_POLICY_TEMPLATE.md</code>
+        </p>
+
         {loading ? (
           <div style={styles.loadingContainer}>
-            <LoadingSpinner size="lg" />
+            <PageListSkeleton rows={5} />
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+              <LoadingSpinner size="lg" />
+            </div>
           </div>
         ) : (
           <>

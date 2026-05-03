@@ -189,11 +189,22 @@ export default function OnboardingPage() {
         )}
 
         {step === 4 && (
-          <Card title="סיימתם!" subtitle="המערכת מוכנה לשימוש">
-            <p style={styles.done}>אפשר להתחיל לנהל תקלות ודיירים מהלוח הראשי.</p>
-            <Button variant="primary" onClick={() => router.push('/')}>
-              מעבר ללוח הבקרה
-            </Button>
+          <Card title="סיימתם!" subtitle="QR לדיווח דיירים בוואטסאפ">
+            <p style={styles.done}>
+              בדף &quot;קודי QR&quot; בלוח הבקרה תמצאו לכל בניין קוד התחלה ו־QR שמפנים לוואטסאפ. דייר סורק ושולח את
+              ההודעה — נפתחת תקלה אוטומטית.
+            </p>
+            <p style={{ ...styles.done, fontSize: '13px', opacity: 0.85 }}>
+              TODO: טקסט הסבר מותאם מותג / וידאו קצר בעתיד.
+            </p>
+            <div style={styles.row}>
+              <Button variant="secondary" onClick={() => router.push('/qr')}>
+                פתיחת קודי QR
+              </Button>
+              <Button variant="primary" onClick={() => router.push('/')}>
+                מעבר ללוח הבקרה
+              </Button>
+            </div>
           </Card>
         )}
       </div>

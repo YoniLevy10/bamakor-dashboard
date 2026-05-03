@@ -3,7 +3,9 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 import { requireSessionClientId } from '@/lib/api-auth'
-import { checkRateLimitIpEndpoint, sanitizeId } from '@/lib/api-validation'
+import { sanitizeId } from '@/lib/api-validation'
+import { createTicketJsonBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit, checkIpPostRouteLimit } from '@/lib/rate-limit'
 import { notifyNewTicketPush } from '@/lib/push-notifications'
 import { whatsappDbPhoneKey } from '@/lib/whatsapp-test-phone'
 import { queuePendingResidentApproval } from '@/lib/pending-resident-from-ticket'
@@ -177,7 +179,12 @@ export async function POST(req: Request) {
       const attachmentFiles = formData.getAll('attachments')
       files = attachmentFiles.filter((f) => f instanceof File) as File[]
     } else {
-      body = await req.json()
+      const rawJson = await req.json()
+      const jp = createTicketJsonBodySchema.safeParse(rawJson)
+      if (!jp.success) {
+        return NextResponse.json({ error: jp.error.flatten() }, { status: 400 })
+      }
+      body = jp.data as unknown as TicketRequestBody
     }
 
     const message = body?.message ? String(body.message).trim() : ''
@@ -212,19 +219,19 @@ export async function POST(req: Request) {
       )
     }
 
-    const isPublicWebForm = !auth.ok && !!projectCodeFromBody
-    if (isPublicWebForm) {
-      const ip =
-        (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
-        (req as Request & { ip?: string }).ip ||
-        'unknown'
-      const rl = await checkRateLimitIpEndpoint({
-        supabaseAdmin,
-        ip,
-        endpoint: 'POST /api/create-ticket',
-        maxRequests: 20,
-      })
-      if (rl.isLimited) {
+    const ipFwd =
+      (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
+      (req as Request & { ip?: string }).ip ||
+      'unknown'
+
+    if (auth.ok) {
+      const ux = await checkAuthenticatedPostRouteLimit(supabaseAdmin, auth.ctx.userId, 'create-ticket')
+      if (ux.isLimited) {
+        return NextResponse.json({ error: 'יותר מדי בקשות, נסה שוב בעוד דקה' }, { status: 429 })
+      }
+    } else {
+      const ax = await checkIpPostRouteLimit(supabaseAdmin, ipFwd, 'create-ticket')
+      if (ax.isLimited) {
         return NextResponse.json({ error: 'יותר מדי בקשות, נסה שוב בעוד דקה' }, { status: 429 })
       }
     }
@@ -382,6 +389,7 @@ export async function POST(req: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingSession.active_ticket_id)
+        .is('deleted_at', null)
         .select('id, ticket_number, updated_at, status')
         .single()
 

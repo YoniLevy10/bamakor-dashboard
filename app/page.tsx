@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
+import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
+import { withClientId } from '@/lib/supabase/with-client-id'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 import { TM } from '@/lib/toast-messages'
@@ -125,22 +127,27 @@ export default function DashboardPage() {
     setLoading(true)
     await asyncHandler(
       async () => {
+        const clientId = await resolveBamakorClientIdForBrowser()
         const [ticketsResult, projectsResult, workersResult, logsResult] = await Promise.all([
-          supabase
-            .from('tickets')
-            .select(`
+          withClientId(
+            supabase.from('tickets').select(`
               id, ticket_number, project_id, client_id, reporter_phone, description, 
               status, priority, assigned_worker_id, created_at, closed_at,
               projects (project_code, name)
-            `)
+            `),
+            clientId
+          )
+            .is('deleted_at', null)
             .order('created_at', { ascending: false }),
-          supabase
-            .from('projects')
-            .select('id, name, project_code')
-            .order('project_code', { ascending: true }),
-          supabase
-            .from('workers')
-            .select('id, full_name')
+          withClientId(
+            supabase.from('projects').select('id, name, project_code'),
+            clientId
+          ).order('project_code', { ascending: true }),
+          withClientId(
+            supabase.from('workers').select('id, full_name'),
+            clientId
+          )
+            .is('deleted_at', null)
             .order('full_name', { ascending: true }),
           supabase
             .from('ticket_logs')
@@ -409,7 +416,13 @@ export default function DashboardPage() {
           payload.closed_at = null
         }
         const closedNow = draftStatus === 'CLOSED' && selectedTicket.status !== 'CLOSED'
-        const { error } = await supabase.from('tickets').update(payload).eq('id', selectedTicket.id)
+        const saveClientId = await resolveBamakorClientIdForBrowser()
+        const { error } = await withClientId(
+          supabase.from('tickets').update(payload),
+          saveClientId
+        )
+          .eq('id', selectedTicket.id)
+          .is('deleted_at', null)
         if (error) throw error
         if (closedNow) toast.success(TM.ticketClosed)
         else if (didAssign) toast.success(TM.workerAssigned)

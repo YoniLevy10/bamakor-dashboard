@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getLogger } from '@/lib/logging'
 import { requireSessionClientId } from '@/lib/api-auth'
-import { sanitizeId } from '@/lib/api-validation'
+import { ticketIdBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
 import { notifyReporterTicketClosed } from '@/lib/reporter-ticket-closed-notify'
 
 /**
@@ -26,11 +27,16 @@ export async function POST(req: Request) {
     if (!auth.ok) return auth.response
     const clientId = auth.ctx.clientId
 
-    const body = await req.json()
-    const ticket_id = sanitizeId((body as { ticket_id?: unknown })?.ticket_id)
+    const rawBody = await req.json()
+    const validated = ticketIdBodySchema.safeParse(rawBody)
+    if (!validated.success) {
+      return NextResponse.json({ error: validated.error.flatten() }, { status: 400 })
+    }
+    const { ticket_id } = validated.data
 
-    if (!ticket_id) {
-      return NextResponse.json({ error: 'ticket_id is required' }, { status: 400 })
+    const rl = await checkAuthenticatedPostRouteLimit(supabaseAdmin, auth.ctx.userId, 'notify-reporter-closed')
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.' }, { status: 429 })
     }
 
     const { data: ticket, error: ticketError } = await supabaseAdmin
@@ -38,6 +44,7 @@ export async function POST(req: Request) {
       .select('id, status, reporter_phone, project_id, client_id, projects (name)')
       .eq('id', ticket_id)
       .eq('client_id', clientId)
+      .is('deleted_at', null)
       .single()
 
     if (ticketError || !ticket) {
@@ -79,7 +86,8 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
-    logger.error('NOTIFY_CLOSED', 'Route error', err, { requestId: `notify-reporter-closed-${Date.now()}` })
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    console.error('[notify-reporter-ticket-closed]', err)
+    logger.error('NOTIFY_CLOSED', 'Route error', err, { requestId })
+    return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

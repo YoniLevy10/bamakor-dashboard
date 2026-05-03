@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { fetchWithTimeout } from '@/lib/fetch-timeout'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { checkRateLimitDistributed } from '@/lib/api-validation'
+import { translateTicketBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
 import { getLogger } from '@/lib/logging'
 import { requireSessionClientId } from '@/lib/api-auth'
 
@@ -12,32 +13,25 @@ export async function POST(req: Request) {
     const auth = await requireSessionClientId()
     if (!auth.ok) return auth.response
 
-    // Rate limit (protects external API spend)
-    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
     try {
       const supabaseAdmin = getSupabaseAdmin()
-      const rl = await checkRateLimitDistributed({
-        supabaseAdmin,
-        key: `ip:${ip}:translate-ticket`,
-        windowMs: 60_000,
-        maxRequests: 20,
-      })
+      const rl = await checkAuthenticatedPostRouteLimit(supabaseAdmin, auth.ctx.userId, 'translate-ticket')
       if (rl.isLimited) {
-        return NextResponse.json(
-          { error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId },
-          { status: 429 }
-        )
+        return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
       }
     } catch (e) {
-      // If env is misconfigured, do not block translation. Log only.
-      logger.warn('TRANSLATE_API', 'Rate limit check failed (non-blocking)', {
+      logger.warn('TRANSLATE_API', 'Rate limit check skipped (non-blocking)', {
         requestId,
         error: e instanceof Error ? e.message : String(e),
       })
     }
 
-    const body = await req.json()
-    const text = typeof body?.text === 'string' ? body.text.trim() : ''
+    const rawBody = await req.json()
+    const validated = translateTicketBodySchema.safeParse(rawBody)
+    if (!validated.success) {
+      return NextResponse.json({ error: validated.error.flatten() }, { status: 400 })
+    }
+    const text = validated.data.text.trim()
 
     if (!text || text.length < 2) {
       return NextResponse.json({ error: 'טקסט ריק', requestId }, { status: 400 })
@@ -100,7 +94,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ translation, requestId })
   } catch (e) {
+    console.error('[translate-ticket]', e)
     logger.error('TRANSLATE_API', 'Unhandled error', e instanceof Error ? e : new Error(String(e)), { requestId })
-    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
+    return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

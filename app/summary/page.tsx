@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
+import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
+import { withClientId } from '@/lib/supabase/with-client-id'
 import {
   AppShell,
   MobileHeader,
@@ -85,27 +87,30 @@ export default function SummaryPage() {
   async function loadData() {
     setLoading(true)
     try {
+      const clientId = await resolveBamakorClientIdForBrowser()
       const [
         { data: ticketsData, error: ticketsError },
         { data: projectsData, error: projectsError },
         { data: workersData, error: workersError },
       ] = await Promise.all([
-        supabase
-          .from('tickets')
-          .select(`
+        withClientId(
+          supabase.from('tickets').select(`
             id, ticket_number, project_id, reporter_phone, description,
             status, priority, assigned_worker_id, created_at, closed_at,
             projects (project_code, name)
-          `)
+          `),
+          clientId
+        )
+          .is('deleted_at', null)
           .order('created_at', { ascending: false }),
-        supabase
-          .from('projects')
-          .select('id, name, project_code')
-          .order('project_code', { ascending: true }),
-        supabase
-          .from('workers')
-          .select('id, full_name, phone, is_active')
-          .eq('is_active', true),
+        withClientId(
+          supabase.from('projects').select('id, name, project_code'),
+          clientId
+        ).order('project_code', { ascending: true }),
+        withClientId(
+          supabase.from('workers').select('id, full_name, phone, is_active').eq('is_active', true),
+          clientId
+        ).is('deleted_at', null),
       ])
 
       if (ticketsError) throw ticketsError
@@ -293,7 +298,6 @@ export default function SummaryPage() {
 
     const projectRows = projectStats.map((p) => ({
       פרויקט: p.name,
-      קוד: p.project_code,
       'סה״כ תקלות': p.total,
       פתוחות: p.open,
       בטיפול: p.assigned,
@@ -523,7 +527,6 @@ export default function SummaryPage() {
                         <div style={styles.priorityRank}>{idx + 1}</div>
                         <div style={styles.priorityInfo}>
                           <div style={styles.priorityName}>{project.name}</div>
-                          <div style={styles.priorityCode}>{project.project_code}</div>
                         </div>
                         <div style={styles.priorityStats}>
                           <span style={styles.priorityOpen}>{project.open} פתוחות</span>
@@ -601,7 +604,6 @@ export default function SummaryPage() {
                     <thead>
                       <tr>
                         <th style={styles.th}>פרויקט</th>
-                        <th style={styles.th}>קוד</th>
                         <th style={styles.th}>סה״כ</th>
                         <th style={styles.th}>פתוחות</th>
                         <th style={styles.th}>בטיפול</th>
@@ -617,9 +619,6 @@ export default function SummaryPage() {
                         >
                           <td style={styles.td}>
                             <span style={styles.projectName}>{project.name}</span>
-                          </td>
-                          <td style={styles.td}>
-                            <span style={styles.projectCode}>{project.project_code}</span>
                           </td>
                           <td style={styles.td}>{project.total}</td>
                           <td style={styles.td}>

@@ -10,7 +10,11 @@ import {
   type ParsedWhatsAppMessage,
 } from '@/lib/whatsapp-parser'
 import { webhookDedupeMessageId } from '@/lib/whatsapp-webhook-dedupe'
-import { isUrgentAngryMessage } from '@/lib/whatsapp-intent'
+import {
+  isStatusQuestion,
+  resolveTicketPriorityFromResidentMessage,
+  statusLabelHe,
+} from '@/lib/whatsapp-intent'
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp-send'
 import type { WhatsAppTemplateKey } from '@/lib/whatsapp-template-keys'
 import { resolveWhatsAppTemplateMessage } from '@/lib/whatsapp-templates'
@@ -21,9 +25,13 @@ import {
   createAttachmentRecord,
 } from '@/lib/whatsapp-media'
 import { getLogger } from '@/lib/logging'
+import { logger as webhookJsonLogger } from '@/lib/logger'
+import { verifyWhatsAppWebhookSignature } from '@/lib/whatsapp-meta-signature'
+import { checkWhatsAppWebhookPhoneRateLimit } from '@/lib/rate-limit'
 import { getPublicTicketsUrl } from '@/lib/public-app-url'
 import { isWhatsAppTestSender, whatsappDbPhoneKey, displayReporterForExternalMessage } from '@/lib/whatsapp-test-phone'
 import { queuePendingResidentApproval } from '@/lib/pending-resident-from-ticket'
+import { findResidentByPhoneClient, getOrCreateResident } from '@/lib/residents-whatsapp'
 
 // ARCHIVED: Old WhatsApp manager notification
 // This module previously sent WhatsApp messages to project managers
@@ -318,6 +326,7 @@ async function getTicketStatus(ticketId: string, supabaseAdmin: SupabaseClient):
     .from('tickets')
     .select('status')
     .eq('id', ticketId)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (error) {
@@ -343,6 +352,7 @@ async function findRecentTicketForPhone(
     .select('id, status, created_at')
     .eq('reporter_phone', from)
     .eq('client_id', clientId)
+    .is('deleted_at', null)
     .gte('created_at', sinceIso)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -436,34 +446,10 @@ async function attachPendingWhatsAppImageToTicketIfAny(
   return !!ok
 }
 
-async function logIncomingFreeTextToTicket(
-  ticketId: string,
-  from: string,
-  textBody: string,
-  supabaseAdmin: SupabaseClient
-) {
-  try {
-    const { error } = await supabaseAdmin.from('ticket_logs').insert({
-      ticket_id: ticketId,
-      action_type: 'USER_MESSAGE',
-      notes: textBody,
-      created_by: 'whatsapp_user',
-      meta: { phone: from },
-    })
-
-    if (error) {
-      console.error('⚠️ Failed to insert USER_MESSAGE log (non-blocking):', { ticketId, error })
-    }
-  } catch (e) {
-    console.error('⚠️ Unexpected error inserting USER_MESSAGE log (non-blocking):', e)
-  }
-}
-
-/** Same reporter + project, non-closed ticket opened within the last N minutes (duplicate follow-up guard). */
+/** Same reporter + tenant, non-closed ticket opened within the last N minutes (duplicate guard). */
 async function findOpenTicketForReporterInWindow(
   from: string,
   clientId: string,
-  projectId: string,
   windowMinutes: number,
   supabaseAdmin: SupabaseClient
 ): Promise<{ id: string; ticket_number: number; description: string | null; status: string } | null> {
@@ -473,7 +459,7 @@ async function findOpenTicketForReporterInWindow(
     .select('id, ticket_number, description, status')
     .eq('reporter_phone', from)
     .eq('client_id', clientId)
-    .eq('project_id', projectId)
+    .is('deleted_at', null)
     .neq('status', 'CLOSED')
     .gte('created_at', sinceIso)
     .order('created_at', { ascending: false })
@@ -484,44 +470,98 @@ async function findOpenTicketForReporterInWindow(
   return data as { id: string; ticket_number: number; description: string | null; status: string }
 }
 
-async function appendFollowUpToOpenTicket(
+type WaLocation = { lat: number; lng: number; name?: string; address?: string }
+
+async function mergeWhatsAppLocationIntoTicketMetadata(
+  admin: SupabaseClient,
   ticketId: string,
-  text: string,
-  from: string,
-  supabaseAdmin: SupabaseClient
+  loc: WaLocation
 ) {
-  const { data: row } = await supabaseAdmin.from('tickets').select('description').eq('id', ticketId).maybeSingle()
-  const prev = (row as { description?: string | null } | null)?.description
-  const next = prev && String(prev).trim() ? `${String(prev).trim()}\n${text}` : text
-  await supabaseAdmin.from('tickets').update({ description: next }).eq('id', ticketId)
-  await logIncomingFreeTextToTicket(ticketId, from, text, supabaseAdmin)
+  const { data } = await admin
+    .from('tickets')
+    .select('ticket_metadata')
+    .eq('id', ticketId)
+    .is('deleted_at', null)
+    .maybeSingle()
+  const raw = (data as { ticket_metadata?: unknown } | null)?.ticket_metadata
+  const prev = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {}
+  const next = {
+    ...prev,
+    whatsapp_location: {
+      lat: loc.lat,
+      lng: loc.lng,
+      name: loc.name,
+      address: loc.address,
+      received_at: new Date().toISOString(),
+    },
+  }
+  const { error } = await admin
+    .from('tickets')
+    .update({ ticket_metadata: next })
+    .eq('id', ticketId)
+    .is('deleted_at', null)
+  if (error) {
+    console.error('⚠️ mergeWhatsAppLocationIntoTicketMetadata failed:', error)
+  }
 }
+
+/** After ticket insert: copy stashed session location into ticket metadata. */
+async function attachPendingSessionLocationToTicketIfAny(
+  from: string,
+  clientId: string,
+  ticketId: string,
+  supabaseAdmin: SupabaseClient
+): Promise<boolean> {
+  const { data: openSession, error } = await supabaseAdmin
+    .from('sessions')
+    .select('id, pending_location')
+    .eq('phone_number', from)
+    .eq('client_id', clientId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (error) {
+    const msg = String((error as { message?: string }).message || '')
+    if (msg.includes('pending_location') || (error as { code?: string }).code === '42703') {
+      return false
+    }
+    console.error('⚠️ pending location: could not load session', { from, error })
+    return false
+  }
+
+  const pl = (openSession as { pending_location?: WaLocation | null } | null)?.pending_location
+  const sessionId = (openSession as { id?: string } | null)?.id
+  if (!pl || typeof pl.lat !== 'number' || typeof pl.lng !== 'number' || !sessionId) return false
+
+  await mergeWhatsAppLocationIntoTicketMetadata(supabaseAdmin, ticketId, pl)
+
+  const { error: clearErr } = await supabaseAdmin
+    .from('sessions')
+    .update({ pending_location: null, last_activity_at: new Date().toISOString() })
+    .eq('id', sessionId)
+
+  if (clearErr) {
+    const m = String((clearErr as { message?: string }).message || '')
+    if (!m.includes('pending_location') && (clearErr as { code?: string }).code !== '42703') {
+      console.error('⚠️ pending location: clear failed', clearErr)
+    }
+  }
+  return true
+}
+
+/** אופציונלי: טננט שנפתר ב-route לפני background — למניעת כפילות DB */
+type WaWebhookTenant = { clientId: string; row: Record<string, unknown> }
 
 async function runWhatsAppInboundBackground(
   body: unknown,
   requestId: string,
   parsedMessage: ParsedWhatsAppMessage,
-  supabaseAdmin: SupabaseClient
+  supabaseAdmin: SupabaseClient,
+  tenantPreResolved?: WaWebhookTenant
 ): Promise<void> {
   try {
-    const phoneNumberId = extractWhatsAppPhoneNumberId(body)
-    if (!phoneNumberId) {
-      console.error('❌ Missing WhatsApp phone_number_id in webhook metadata')
-      return
-    }
-
-    const waResolved = await resolveClientIdByWhatsAppPhoneNumberId(supabaseAdmin, phoneNumberId)
-    if (!waResolved) {
-      logger.error(
-        'WEBHOOK',
-        'No client for WhatsApp phone_number_id',
-        new Error('no_client_for_phone_number_id'),
-        { requestId, phoneNumberId }
-      )
-      return
-    }
-    const webhookClientId = waResolved.clientId
-    const waClient = waResolved.row as {
+    let webhookClientId: string
+    let waClient: {
       id: string
       name?: string | null
       sms_sender_name?: string | null
@@ -529,6 +569,30 @@ async function runWhatsAppInboundBackground(
       whatsapp_access_token?: string | null
       manager_phone?: string | null
     } | null
+
+    if (tenantPreResolved) {
+      webhookClientId = tenantPreResolved.clientId
+      waClient = tenantPreResolved.row as typeof waClient
+    } else {
+      const phoneNumberId = extractWhatsAppPhoneNumberId(body)
+      if (!phoneNumberId) {
+        console.error('❌ Missing WhatsApp phone_number_id in webhook metadata')
+        return
+      }
+
+      const waResolved = await resolveClientIdByWhatsAppPhoneNumberId(supabaseAdmin, phoneNumberId)
+      if (!waResolved) {
+        logger.error(
+          'WEBHOOK',
+          'No client for WhatsApp phone_number_id',
+          new Error('no_client_for_phone_number_id'),
+          { requestId, phoneNumberId }
+        )
+        return
+      }
+      webhookClientId = waResolved.clientId
+      waClient = waResolved.row as typeof waClient
+    }
 
     const residentWhatsAppCreds = {
       phoneNumberId: (waClient as { whatsapp_phone_number_id?: string | null } | null)
@@ -565,7 +629,7 @@ async function runWhatsAppInboundBackground(
     // Expire temporary WhatsApp session state if inactive (scoped to this tenant)
     await expireInactiveSessions(supabaseAdmin, webhookClientId)
 
-    const { from: waFrom, messageType, textBody, mediaId, mediaType } = parsedMessage
+    const { from: waFrom, messageType, textBody, mediaId, mediaType, location: waLocation } = parsedMessage
     const waRecipient = waFrom
     const from = whatsappDbPhoneKey(waFrom)
     const isTestWhatsAppSender = isWhatsAppTestSender(waFrom)
@@ -589,18 +653,152 @@ async function runWhatsAppInboundBackground(
       'לדיווח תקלה: כתבו בטקסט את תיאור הבעיה, או סרקו את קוד ה־QR בבניין.\n' +
       'אחרי שנפתחה פנייה – אפשר לשלוח גם תמונה של התקלה.'
 
-    if (
-      messageType === 'location' ||
-      messageType === 'contacts' ||
-      messageType === 'sticker' ||
-      messageType === 'audio' ||
-      messageType === 'video' ||
-      messageType === 'document'
-    ) {
+    /** Shared WhatsApp location → ticket metadata / session stash */
+    async function handleInboundLocation(loc: WaLocation) {
+      const { data: session, error: sessionError } = await supabaseAdmin
+        .from('sessions')
+        .select('id, phone_number, project_id, active_ticket_id, is_active')
+        .eq('phone_number', from)
+        .eq('client_id', webhookClientId)
+        .eq('is_active', true)
+        .order('last_activity_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (sessionError) {
+        console.error('❌ Error fetching session for location:', sessionError)
+      }
+
+      if (session?.active_ticket_id) {
+        await mergeWhatsAppLocationIntoTicketMetadata(supabaseAdmin, session.active_ticket_id, loc)
+        try {
+          await sendWa(
+            waRecipient,
+            'ticket_opened',
+            '📍 קיבלנו את המיקום וצירפנו אותו לתקלה.',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send location ack (active ticket):', sendError)
+        }
+        if (session.id) {
+          await supabaseAdmin
+            .from('sessions')
+            .update({ last_activity_at: new Date().toISOString() })
+            .eq('id', session.id)
+        }
+        return
+      }
+
+      const recentTicket = await findRecentTicketForPhone(from, supabaseAdmin, webhookClientId)
+      if (recentTicket && recentTicket.status !== 'CLOSED') {
+        await mergeWhatsAppLocationIntoTicketMetadata(supabaseAdmin, recentTicket.id, loc)
+        try {
+          await sendWa(waRecipient, 'ticket_opened', '📍 קיבלנו את המיקום וצירפנו לתקלה האחרונה.', residentWhatsAppCreds)
+        } catch (sendError) {
+          console.error('⚠️ Failed to send location ack (recent ticket):', sendError)
+        }
+        return
+      }
+
+      if (session?.id && session.project_id && !session.active_ticket_id) {
+        const payload = {
+          lat: loc.lat,
+          lng: loc.lng,
+          name: loc.name,
+          address: loc.address,
+          stashed_at: new Date().toISOString(),
+        }
+        const { error: stashErr } = await supabaseAdmin
+          .from('sessions')
+          .update({
+            pending_location: payload,
+            last_activity_at: new Date().toISOString(),
+          })
+          .eq('id', session.id)
+
+        if (stashErr) {
+          const msg = String((stashErr as { message?: string }).message || '')
+          if (!msg.includes('pending_location') && (stashErr as { code?: string }).code !== '42703') {
+            console.error('❌ pending_location stash failed:', stashErr)
+          }
+        }
+
+        try {
+          await sendWa(
+            waRecipient,
+            'ticket_opened',
+            '📍 קיבלנו את המיקום!\nכתבו עכשיו בקצרה את תיאור התקלה — נשלב את המיקום בפנייה.',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send location-before-text:', sendError)
+        }
+        return
+      }
+
       try {
         await sendWa(waRecipient, 'welcome', flowHelpMessage, residentWhatsAppCreds)
       } catch (sendError) {
-        console.error('⚠️ Failed to send non-text flow guidance:', sendError)
+        console.error('⚠️ Failed to send location-context guidance:', sendError)
+      }
+    }
+
+    if (messageType === 'location') {
+      if (waLocation) {
+        await handleInboundLocation(waLocation)
+      } else {
+        try {
+          await sendWa(
+            waRecipient,
+            'error_general',
+            'לא הצלחנו לקרוא את פרטי המיקום — נסו שוב או שלחו כתובת בטקסט.',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed to send invalid-location reply:', sendError)
+        }
+      }
+      return
+    }
+
+    if (messageType === 'sticker') {
+      try {
+        await sendWa(waRecipient, 'welcome', 'קיבלנו את ההודעה שלך 👍', residentWhatsAppCreds)
+      } catch (sendError) {
+        console.error('⚠️ Failed to send sticker reply:', sendError)
+      }
+      return
+    }
+
+    if (messageType === 'contacts') {
+      try {
+        await sendWa(waRecipient, 'welcome', 'לדיווח תקלה שלח הודעת טקסט', residentWhatsAppCreds)
+      } catch (sendError) {
+        console.error('⚠️ Failed to send contacts reply:', sendError)
+      }
+      return
+    }
+
+    if (messageType === 'audio') {
+      try {
+        await sendWa(waRecipient, 'welcome', 'לדיווח תקלה שלח הודעת טקסט', residentWhatsAppCreds)
+      } catch (sendError) {
+        console.error('⚠️ Failed to send audio reply:', sendError)
+      }
+      return
+    }
+
+    if (messageType === 'video' || messageType === 'document') {
+      try {
+        await sendWa(
+          waRecipient,
+          'error_general',
+          'לא הצלחנו לקרוא את ההודעה, נסה שוב בטקסט',
+          residentWhatsAppCreds
+        )
+      } catch (sendError) {
+        console.error('⚠️ Failed to send unsupported-media reply:', sendError)
       }
       return
     }
@@ -862,6 +1060,71 @@ async function runWhatsAppInboundBackground(
         }
         return
       }
+      const knownEmptyBodyTypes = new Set([
+        'text',
+        'image',
+        'location',
+        'contacts',
+        'sticker',
+        'audio',
+        'video',
+        'document',
+        'reaction',
+        'interactive',
+        'button',
+      ])
+      if (!knownEmptyBodyTypes.has(messageType)) {
+        try {
+          await sendWa(
+            waRecipient,
+            'error_general',
+            'לא הצלחנו לקרוא את ההודעה, נסה שוב בטקסט',
+            residentWhatsAppCreds
+          )
+        } catch (sendError) {
+          console.error('⚠️ Failed unknown-type reply:', sendError)
+        }
+      }
+      return
+    }
+
+    // Short status keywords — open tickets for this reporter + tenant
+    if (!textBody.toUpperCase().startsWith('START_') && isStatusQuestion(textBody)) {
+      const { data: openRows } = await supabaseAdmin
+        .from('tickets')
+        .select('ticket_number, status, workers ( full_name )')
+        .eq('reporter_phone', from)
+        .eq('client_id', webhookClientId)
+        .is('deleted_at', null)
+        .neq('status', 'CLOSED')
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      const lines =
+        openRows?.map((row: {
+          ticket_number: number
+          status: string
+          workers?: { full_name?: string | null } | { full_name?: string | null }[] | null
+        }) => {
+          const w = Array.isArray(row.workers) ? row.workers[0] : row.workers
+          let s = `תקלה #${row.ticket_number}: ${statusLabelHe(row.status)}.`
+          if (row.status === 'IN_PROGRESS' && w?.full_name) {
+            s += ` עובד ${w.full_name} מטפל.`
+          }
+          return s
+        }) ?? []
+
+      const body =
+        lines.length > 0
+          ? lines.join('\n')
+          : 'לא מצאנו תקלה פתוחה המקושרת למספר שלך במערכת. לפתיחת פנייה כתבו את הבניין או סרקו את קוד ה־QR.'
+
+      try {
+        await sendWa(waRecipient, 'welcome', body, residentWhatsAppCreds)
+      } catch (sendError) {
+        console.error('⚠️ Failed to send status reply:', sendError)
+      }
+
       return
     }
 
@@ -956,6 +1219,10 @@ async function runWhatsAppInboundBackground(
       console.log('✅ Session created:', createdSession.id)
       console.log('🏗️ Project linked:', project.name)
 
+      if (!isTestWhatsAppSender) {
+        await getOrCreateResident(supabaseAdmin, webhookClientId, from, project.id)
+      }
+
       try {
         const buildingLine = buildingNumber ? ` (בניין ${buildingNumber})` : ''
 
@@ -973,10 +1240,53 @@ async function runWhatsAppInboundBackground(
       return
     }
 
-    let ticketPriority: 'HIGH' | 'MEDIUM' = 'MEDIUM'
+    let ticketPriority = resolveTicketPriorityFromResidentMessage(textBody)
 
     // סשן פעיל = אחרי סריקת QR או אחרי בחירת בניין בחיפוש (1/2/3 / התאמה אוטומטית)
     let session = await getActiveSession(from, supabaseAdmin, webhookClientId)
+
+    // זיכרון דייר: אם הטלפון כבר ב-residents — דלג על QR / חיפוש בניין
+    if (!session && !isTestWhatsAppSender) {
+      const knownResident = await findResidentByPhoneClient(supabaseAdmin, webhookClientId, from)
+      if (knownResident?.project_id) {
+        await supabaseAdmin
+          .from('sessions')
+          .update({
+            is_active: false,
+            last_activity_at: new Date().toISOString(),
+          })
+          .eq('phone_number', from)
+          .eq('client_id', webhookClientId)
+          .eq('is_active', true)
+
+        const { error: insErr } = await supabaseAdmin.from('sessions').insert({
+          phone_number: from,
+          client_id: webhookClientId,
+          project_id: knownResident.project_id,
+          is_active: true,
+          active_ticket_id: null,
+          last_activity_at: new Date().toISOString(),
+        })
+
+        if (!insErr) {
+          await getOrCreateResident(supabaseAdmin, webhookClientId, from, knownResident.project_id)
+          session = await getActiveSession(from, supabaseAdmin, webhookClientId)
+          if (session) {
+            try {
+              await sendWa(
+                waRecipient,
+                'ticket_opened',
+                'מה הבעיה? כתבו בקצרה את תיאור התקלה 📝',
+                residentWhatsAppCreds
+              )
+            } catch (sendError) {
+              console.error('⚠️ Failed to send resident-memory prompt:', sendError)
+            }
+            return
+          }
+        }
+      }
+    }
 
     if (!session) {
       logWhatsAppRuntimePath('NO_SESSION_PATH_ENTERED', {
@@ -1028,6 +1338,10 @@ async function runWhatsAppInboundBackground(
 
           // Clear pending selection
           await clearPendingSelection(from, supabaseAdmin, webhookClientId)
+
+          if (!isTestWhatsAppSender) {
+            await getOrCreateResident(supabaseAdmin, webhookClientId, from, selectedProject.id)
+          }
 
           // Send confirmation
           try {
@@ -1176,6 +1490,10 @@ async function runWhatsAppInboundBackground(
           return
         }
 
+        if (!isTestWhatsAppSender) {
+          await getOrCreateResident(supabaseAdmin, webhookClientId, from, matchedProject.id)
+        }
+
         // Send confirmation message with project name
         try {
           await sendWa(
@@ -1238,10 +1556,6 @@ async function runWhatsAppInboundBackground(
       return
     }
 
-    if (isUrgentAngryMessage(textBody)) {
-      ticketPriority = 'HIGH'
-    }
-
     logWhatsAppRuntimePath('TICKET_CREATE_PATH_ENTERED', {
       textBody,
       phone_number: from,
@@ -1252,15 +1566,8 @@ async function runWhatsAppInboundBackground(
     // Session is only used to bridge: (project identified) -> (ticket description) -> ticket created.
 
     if (session.project_id) {
-      const dupTicket = await findOpenTicketForReporterInWindow(
-        from,
-        webhookClientId,
-        session.project_id,
-        5,
-        supabaseAdmin
-      )
+      const dupTicket = await findOpenTicketForReporterInWindow(from, webhookClientId, 5, supabaseAdmin)
       if (dupTicket) {
-        await appendFollowUpToOpenTicket(dupTicket.id, textBody, from, supabaseAdmin)
         await supabaseAdmin
           .from('sessions')
           .update({ last_activity_at: new Date().toISOString() })
@@ -1269,12 +1576,11 @@ async function runWhatsAppInboundBackground(
           await sendWa(
             waRecipient,
             'ticket_opened',
-            'קיבלנו את העדכון והוספנו לפנייה #{{ticket_number}} ✅',
-            residentWhatsAppCreds,
-            { ticket_number: String(dupTicket.ticket_number) }
+            `קיבלנו כבר את הדיווח שלך, מספר תקלה: ${dupTicket.ticket_number}. נעדכן אותך בהתקדמות.`,
+            residentWhatsAppCreds
           )
         } catch (sendError) {
-          console.error('⚠️ Failed to send duplicate-follow-up reply:', sendError)
+          console.error('⚠️ Failed to send duplicate-ticket reply:', sendError)
         }
         return
       }
@@ -1331,6 +1637,16 @@ async function runWhatsAppInboundBackground(
       console.log('✅ Pending WhatsApp image attached to new ticket', { ticketId: createdTicket.id })
     }
 
+    const pendingLocationAttached = await attachPendingSessionLocationToTicketIfAny(
+      from,
+      webhookClientId,
+      createdTicket.id,
+      supabaseAdmin
+    )
+    if (pendingLocationAttached) {
+      console.log('✅ Pending WhatsApp location merged into new ticket', { ticketId: createdTicket.id })
+    }
+
     const pendingForApproval =
       !!session.project_id &&
       (await queuePendingResidentApproval({
@@ -1381,7 +1697,7 @@ async function runWhatsAppInboundBackground(
 
         if (managerDestination) {
           console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket) → manager')
-          const smsSent = await sendManagerSMS(managerDestination, smsMessage, smsSenderName)
+          const smsSent = await sendManagerSMS(managerDestination, smsMessage, smsSenderName, webhookClientId)
           if (smsSent) {
             console.log('✅ manager_sms_sent: Manager notification sent successfully via SMS')
           } else {
@@ -1395,12 +1711,13 @@ async function runWhatsAppInboundBackground(
             .select('phone, full_name')
             .eq('id', projectForNotification.assigned_worker_id)
             .eq('client_id', webhookClientId)
+            .is('deleted_at', null)
             .maybeSingle()
 
           if (workerRow?.phone) {
             const workerMsg = `תקלה חדשה ב${projectForNotification.name}\n#${createdTicket.ticket_number}\n${ticketDescription || 'ללא פירוט'}\nמדווח: ${displayReporterForExternalMessage(waRecipient)}\n${getPublicTicketsUrl()}\n${clientName}`
             console.log('📱 NOTIFICATION_CHANNEL: SMS (new ticket) → assigned worker')
-            const wOk = await sendWorkerSMS(workerRow.phone, workerMsg, smsSenderName)
+            const wOk = await sendWorkerSMS(workerRow.phone, workerMsg, smsSenderName, webhookClientId)
             if (wOk) {
               console.log('✅ worker_sms_sent: Assigned worker notified')
             } else {
@@ -1486,30 +1803,45 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const requestId = `webhook-whatsapp-${Date.now()}`
   logger.info('WEBHOOK', 'WhatsApp webhook POST received', { requestId })
-  
+  webhookJsonLogger.info('whatsapp-webhook-request', { requestId })
+
   try {
+    const rawBody = await req.text()
+    const metaSecret = (process.env.WHATSAPP_APP_SECRET || '').trim()
+    const sigHdr = req.headers.get('x-hub-signature-256')
+
+    if (metaSecret && !verifyWhatsAppWebhookSignature(rawBody, sigHdr, metaSecret)) {
+      webhookJsonLogger.error(
+        'whatsapp-webhook-invalid-signature',
+        new Error('meta_signature_mismatch'),
+        { requestId }
+      )
+      return NextResponse.json({ error: 'invalid signature' }, { status: 403 })
+    }
+
+    let body: unknown
+    try {
+      body = JSON.parse(rawBody) as unknown
+    } catch {
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
     let supabaseAdmin: SupabaseClient
     try {
       supabaseAdmin = getSupabaseAdmin()
     } catch (envError) {
       const error = envError instanceof Error ? envError : new Error(String(envError))
       logger.error('WEBHOOK', 'Failed to initialize Supabase admin', error, { requestId })
-      console.error('❌ Environment configuration error:', envError)
-      return NextResponse.json(
-        {
-          error: 'Server configuration error',
-          details: process.env.NODE_ENV === 'development' ? String(envError) : undefined,
-        },
-        { status: 500 }
-      )
+      webhookJsonLogger.error('whatsapp-webhook-supabase-env', envError, { requestId })
+      return NextResponse.json({ received: true }, { status: 200 })
     }
 
-    const body = await req.json()
-
-    // Avoid logging full payload in production (may contain PII/tokens).
     if (process.env.NODE_ENV !== 'production') {
-      console.log('✅ WEBHOOK DB VERSION ACTIVE')
-      console.log('📩 WhatsApp webhook payload:', JSON.stringify(body, null, 2))
+      webhookJsonLogger.info('whatsapp-webhook-payload-summary', {
+        requestId,
+        bytes: rawBody.length,
+        hasEntry: Array.isArray((body as { entry?: unknown }).entry),
+      })
       logger.debug('WEBHOOK', 'Full webhook payload (dev only)', { requestId, payload: body })
     } else {
       logger.debug('WEBHOOK', 'Webhook payload received', {
@@ -1521,45 +1853,79 @@ export async function POST(req: NextRequest) {
     const parsedMessage = parseIncomingWhatsAppMessage(body)
 
     if (!parsedMessage) {
-      console.log('ℹ️ No incoming user message in payload')
-      logger.debug('WEBHOOK', 'No incoming message in payload', { requestId })
+      webhookJsonLogger.info('whatsapp-webhook-no-user-message', { requestId })
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
+    const phoneNumberId = extractWhatsAppPhoneNumberId(body)
+    if (!phoneNumberId) {
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
+    const waRl = await checkWhatsAppWebhookPhoneRateLimit(supabaseAdmin, phoneNumberId)
+    if (waRl.isLimited) {
+      webhookJsonLogger.info('whatsapp-webhook-phone-rate-limited', { requestId, phoneNumberId })
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
+    const tenantResolved = await resolveClientIdByWhatsAppPhoneNumberId(supabaseAdmin, phoneNumberId)
+    if (!tenantResolved) {
+      logger.error(
+        'WEBHOOK',
+        'No client for WhatsApp phone_number_id',
+        new Error('no_client_for_phone_number_id'),
+        { requestId, phoneNumberId }
+      )
+      webhookJsonLogger.error(
+        'whatsapp-webhook-unknown-phone-number-id',
+        new Error('no_client_for_phone_number_id'),
+        { requestId, phoneNumberId }
+      )
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
     const dedupeMessageId = webhookDedupeMessageId(parsedMessage)
     const { error: dupErr } = await supabaseAdmin.from('processed_webhooks').insert({
       message_id: dedupeMessageId,
+      client_id: tenantResolved.clientId,
     })
     if (dupErr && dupErr.code === '23505') {
-      console.log('⚠️ Duplicate webhook, skipping:', dedupeMessageId)
+      webhookJsonLogger.info('whatsapp-webhook-duplicate', { requestId, dedupeMessageId })
       return NextResponse.json({ received: true }, { status: 200 })
     }
     if (dupErr) {
-      console.error('⚠️ processed_webhooks insert (non-blocking):', dupErr)
+      webhookJsonLogger.error('whatsapp-webhooks-dedupe-insert', dupErr, { requestId, dedupeMessageId })
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
+    const tenantPayload: WaWebhookTenant = {
+      clientId: tenantResolved.clientId,
+      row: tenantResolved.row,
     }
 
     after(() => {
-      void runWhatsAppInboundBackground(body, requestId, parsedMessage, supabaseAdmin).catch((err) => {
+      void runWhatsAppInboundBackground(
+        body,
+        requestId,
+        parsedMessage,
+        supabaseAdmin,
+        tenantPayload
+      ).catch((err) => {
         logger.error(
           'WEBHOOK',
           'Background inbound failed',
           err instanceof Error ? err : new Error(String(err)),
           { requestId }
         )
+        webhookJsonLogger.error('whatsapp-webhook-background-error', err, { requestId })
       })
     })
-    return NextResponse.json({ status: 'ok' }, { status: 200 })
+    return NextResponse.json({ received: true, status: 'ok' }, { status: 200 })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
     logger.error('WEBHOOK', 'WhatsApp webhook POST error', err, { requestId })
-    console.error('❌ Webhook error:', error)
-    return NextResponse.json(
-      {
-        error: 'Invalid payload',
-        details: process.env.NODE_ENV === 'development' ? String(error) : undefined,
-      },
-      { status: 500 }
-    )
+    webhookJsonLogger.error('whatsapp-webhook-post-unhandled', err, { requestId })
+    return NextResponse.json({ received: true }, { status: 200 })
   }
 }
 

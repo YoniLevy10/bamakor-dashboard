@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
+import { withClientId } from '@/lib/supabase/with-client-id'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 import { TM } from '@/lib/toast-messages'
@@ -110,6 +111,7 @@ export default function ProjectsPage() {
       .from('workers')
       .select('id, full_name')
       .eq('client_id', activeClientId)
+      .is('deleted_at', null)
       .order('full_name', { ascending: true })
 
     if (error) throw error
@@ -119,10 +121,10 @@ export default function ProjectsPage() {
   async function updateProjectAssignedWorker(projectId: string, workerId: string) {
     await asyncHandler(
       async () => {
-        const { error } = await supabase
-          .from('projects')
-          .update({ assigned_worker_id: workerId || null })
-          .eq('id', projectId)
+        const { error } = await withClientId(
+          supabase.from('projects').update({ assigned_worker_id: workerId || null }),
+          clientId
+        ).eq('id', projectId)
         if (error) throw error
         toast.success(TM.projectMaintainerUpdated)
         await loadProjects()
@@ -142,6 +144,7 @@ export default function ProjectsPage() {
             .from('workers')
             .select('id, full_name')
             .eq('client_id', fetchedClientId)
+            .is('deleted_at', null)
             .order('full_name', { ascending: true }),
           supabase
             .from('projects')
@@ -213,10 +216,13 @@ export default function ProjectsPage() {
     setLoadingTickets(true)
     await asyncHandler(
       async () => {
-        const { data, error } = await supabase
-          .from('tickets')
-          .select('id, ticket_number, status, priority')
+        const scoped = clientId || (await resolveBamakorClientIdForBrowser())
+        const { data, error } = await withClientId(
+          supabase.from('tickets').select('id, ticket_number, status, priority'),
+          scoped
+        )
           .eq('project_id', projectId)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false })
 
         if (error) throw error
@@ -262,10 +268,10 @@ export default function ProjectsPage() {
         }
 
         if (editingProject) {
-          const { error } = await supabase
-            .from('projects')
-            .update(payload)
-            .eq('id', editingProject.id)
+          const { error } = await withClientId(supabase.from('projects').update(payload), clientId).eq(
+            'id',
+            editingProject.id
+          )
           if (error) throw error
           toast.success(TM.projectUpdated)
         } else {
@@ -298,10 +304,10 @@ export default function ProjectsPage() {
   async function toggleProjectStatus(project: ProjectRow) {
     await asyncHandler(
       async () => {
-        const { error } = await supabase
-          .from('projects')
-          .update({ is_active: !project.is_active })
-          .eq('id', project.id)
+        const { error } = await withClientId(
+          supabase.from('projects').update({ is_active: !project.is_active }),
+          clientId
+        ).eq('id', project.id)
 
         if (error) throw error
         toast.success(project.is_active ? TM.projectDeactivated : TM.projectActivated)
@@ -314,7 +320,7 @@ export default function ProjectsPage() {
 
   async function deleteProject(project: ProjectRow) {
     const confirmed = window.confirm(
-      `למחוק לצמיתות את "${project.name}" (${project.project_code})?\n\nיימחקו גם כל התקלות, הדיירים והסשנים המשויכים לפרויקט. פעולה בלתי הפיכה.`
+      `למחוק לצמיתות את "${project.name}"?\n\nיימחקו גם נתונים משויכים לפרויקט. פעולה בלתי הפיכה.`
     )
     if (!confirmed) return
 
@@ -465,7 +471,6 @@ export default function ProjectsPage() {
                   <div style={styles.projectHeader}>
                     <div>
                       <div style={styles.projectName}>{project.name}</div>
-                      <div style={styles.projectCode}>{project.project_code}</div>
                     </div>
                     <StatusBadge status={project.is_active ? 'ACTIVE' : 'INACTIVE'} size="sm" />
                   </div>

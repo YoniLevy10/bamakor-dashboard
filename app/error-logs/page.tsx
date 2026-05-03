@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
+import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
+import { withClientId } from '@/lib/supabase/with-client-id'
 import { toast } from '@/lib/error-handler'
 import {
   AppShell,
@@ -14,6 +16,7 @@ import {
   theme,
 } from '../components/ui'
 import { getIsMobileViewport } from '@/lib/mobile-viewport'
+import { PageListSkeleton } from '../components/page-skeleton'
 
 type Row = {
   id: string
@@ -48,13 +51,16 @@ export default function ErrorLogsPage() {
     setLoading(true)
     setMissing(false)
     try {
-      const { count: openCount } = await supabase
-        .from('error_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('resolved', false)
+      const clientId = await resolveBamakorClientIdForBrowser()
+      const { count: openCount } = await withClientId(
+        supabase.from('error_logs').select('*', { count: 'exact', head: true }).eq('resolved', false),
+        clientId
+      )
       setUnresolvedCount(openCount ?? 0)
 
-      let q = supabase.from('error_logs').select('*').order('created_at', { ascending: false }).limit(500)
+      let q = withClientId(supabase.from('error_logs').select('*'), clientId)
+        .order('created_at', { ascending: false })
+        .limit(500)
       if (filter === 'unresolved') q = q.eq('resolved', false)
       if (filter === 'resolved') q = q.eq('resolved', true)
       const { data, error } = await q
@@ -87,10 +93,11 @@ export default function ErrorLogsPage() {
   async function markResolved(id: string) {
     setBusyId(id)
     try {
-      const { error } = await supabase
-        .from('error_logs')
-        .update({ resolved: true, resolved_at: new Date().toISOString() })
-        .eq('id', id)
+      const scoped = await resolveBamakorClientIdForBrowser()
+      const { error } = await withClientId(
+        supabase.from('error_logs').update({ resolved: true, resolved_at: new Date().toISOString() }),
+        scoped
+      ).eq('id', id)
       if (error) throw error
       setRows((prev) => prev.map((r) => (r.id === id ? { ...r, resolved: true } : r)))
       toast.success('סומן כטופל')
@@ -105,7 +112,8 @@ export default function ErrorLogsPage() {
     if (!window.confirm('למחוק את כל הרשומות שסומנו כטופלו?')) return
     setBulkBusy(true)
     try {
-      const { error } = await supabase.from('error_logs').delete().eq('resolved', true)
+      const scoped = await resolveBamakorClientIdForBrowser()
+      const { error } = await withClientId(supabase.from('error_logs').delete(), scoped).eq('resolved', true)
       if (error) throw error
       toast.success('נמחקו רשומות שטופלו')
       await load()
@@ -183,7 +191,10 @@ export default function ErrorLogsPage() {
         <Card noPadding>
           {loading ? (
             <div style={styles.loading}>
-              <LoadingSpinner />
+              <PageListSkeleton rows={6} />
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+                <LoadingSpinner />
+              </div>
             </div>
           ) : missing ? (
             <p style={styles.empty}>הריצו את המיגרציה supabase/migrations/020_saas_audit_features.sql ב-Supabase.</p>

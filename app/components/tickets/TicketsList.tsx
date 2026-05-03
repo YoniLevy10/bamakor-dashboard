@@ -192,7 +192,7 @@ export function TicketsList({
                 <div style={styles.ticketAge}>{getTicketAge(ticket.created_at)}</div>
 
                 {/* Project */}
-                <div style={styles.ticketProject}>{ticket.project_name || ticket.project_code || '—'}</div>
+                <div style={styles.ticketProject}>{ticket.project_name || '—'}</div>
 
                 {/* Quick Actions - Open Drawer */}
                 <button

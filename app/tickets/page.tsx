@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
+import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
+import { withClientId } from '@/lib/supabase/with-client-id'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 import { TM } from '@/lib/toast-messages'
@@ -34,6 +36,7 @@ import { PageListSkeleton } from '../components/page-skeleton'
 type TicketRow = {
   id: string
   ticket_number: number
+  client_id?: string | null
   project_id?: string | null
   project_code?: string
   project_name?: string
@@ -43,6 +46,7 @@ type TicketRow = {
   status: string
   priority?: string | null
   assigned_worker_id?: string | null
+  building_number?: string | null
   created_at?: string
   closed_at?: string | null
   projects?:
@@ -89,14 +93,16 @@ const statusOptions = [
 
 const priorityOptions = [
   { label: 'כל העדיפויות', value: 'ALL' },
+  { label: 'דחופה', value: 'URGENT' },
   { label: 'גבוהה', value: 'HIGH' },
   { label: 'בינונית', value: 'MEDIUM' },
   { label: 'נמוכה', value: 'LOW' },
 ]
 
 const TICKETS_LIST_SELECT = `
-  id, ticket_number, project_id, reporter_phone, reporter_name,
-  description, status, priority, assigned_worker_id, created_at, closed_at,
+  id, ticket_number, client_id, project_id, reporter_phone, reporter_name,
+  description, status, priority, assigned_worker_id, building_number,
+  created_at, closed_at,
   projects (name, project_code)
 `.trim()
 
@@ -134,6 +140,7 @@ export default function TicketsPage() {
   const [mergeCandidates, setMergeCandidates] = useState<TicketRow[]>([])
   const [mergeLoading, setMergeLoading] = useState(false)
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
+  const [tenantClientId, setTenantClientId] = useState('')
 
   useEffect(() => {
     const check = () => setIsMobile(getIsMobileViewport())
@@ -168,19 +175,19 @@ export default function TicketsPage() {
     setLoading(true)
     await asyncHandler(
       async () => {
+        const clientId = await resolveBamakorClientIdForBrowser()
+        setTenantClientId(clientId)
         const [ticketsResult, workersResult, projectsResult] = await Promise.all([
-          supabase
-            .from('tickets')
-            .select(TICKETS_LIST_SELECT)
+          withClientId(supabase.from('tickets').select(TICKETS_LIST_SELECT), clientId)
+            .is('deleted_at', null)
             .order('created_at', { ascending: false }),
-          supabase
-            .from('workers')
-            .select('id, full_name, phone, email, role, is_active')
+          withClientId(supabase.from('workers').select('id, full_name, phone, email, role, is_active'), clientId)
+            .is('deleted_at', null)
             .order('full_name', { ascending: true }),
-          supabase
-            .from('projects')
-            .select('id, name, project_code')
-            .order('project_code', { ascending: true }),
+          withClientId(supabase.from('projects').select('id, name, project_code'), clientId).order(
+            'project_code',
+            { ascending: true }
+          ),
         ])
 
         if (ticketsResult.error) throw ticketsResult.error
@@ -279,22 +286,34 @@ export default function TicketsPage() {
     CLOSED: 'סגור',
   }
   const priorityLabelHe: Record<string, string> = {
+    URGENT: 'דחופה',
     HIGH: 'גבוהה',
     MEDIUM: 'בינונית',
     LOW: 'נמוכה',
   }
 
+  function treatmentDaysForExport(t: TicketRow): string {
+    if (!t.created_at) return ''
+    const start = new Date(t.created_at).getTime()
+    const end = t.closed_at ? new Date(t.closed_at).getTime() : Date.now()
+    const days = (end - start) / 86_400_000
+    if (!Number.isFinite(days) || days < 0) return '0'
+    return days < 1 ? '<1' : days.toFixed(1)
+  }
+
   function exportToExcel() {
     const list = filteredTickets
     const rows = list.map((t) => ({
-      'מספר טיקט': t.ticket_number,
-      תיאור: t.description || '',
-      סטטוס: statusLabelHe[t.status] || t.status,
-      עדיפות: priorityLabelHe[(t.priority || 'MEDIUM').toUpperCase()] || (t.priority || ''),
-      פרויקט: t.project_name || t.project_code || '',
-      'עובד משויך': getWorkerName(t.assigned_worker_id),
+      'מספר תקלה': t.ticket_number,
       'תאריך פתיחה': t.created_at ? new Date(t.created_at).toLocaleString('he-IL') : '',
       'תאריך סגירה': t.closed_at ? new Date(t.closed_at).toLocaleString('he-IL') : '',
+      בניין: t.project_name || t.project_code || '',
+      דירה: t.building_number || '',
+      תיאור: t.description || '',
+      עדיפות: priorityLabelHe[(t.priority || 'MEDIUM').toUpperCase()] || (t.priority || ''),
+      סטטוס: statusLabelHe[t.status] || t.status,
+      'עובד משויך': getWorkerName(t.assigned_worker_id),
+      'זמן טיפול (ימים)': treatmentDaysForExport(t),
     }))
 
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -309,16 +328,19 @@ export default function TicketsPage() {
     if (!ticket.project_id) return
     setMergeLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('tickets')
-        .select(
+      const cid = tenantClientId || (await resolveBamakorClientIdForBrowser())
+      const { data, error } = await withClientId(
+        supabase.from('tickets').select(
           `
           id, ticket_number, project_id, description, status, created_at,
           projects (name, project_code)
         `
-        )
+        ),
+        cid
+      )
         .eq('project_id', ticket.project_id)
         .neq('id', ticket.id)
+        .is('deleted_at', null)
         .neq('status', 'CLOSED')
         .order('created_at', { ascending: false })
 
@@ -480,10 +502,16 @@ export default function TicketsPage() {
         payload.closed_at = null
       }
 
-      const { error } = await supabase
-        .from('tickets')
-        .update(payload)
+      const saveCid =
+        tenantClientId ||
+        selectedTicket.client_id ||
+        (await resolveBamakorClientIdForBrowser())
+      const { error } = await withClientId(
+        supabase.from('tickets').update(payload),
+        saveCid
+      )
         .eq('id', selectedTicket.id)
+        .is('deleted_at', null)
 
       if (error) throw error
 
@@ -904,6 +932,7 @@ export default function TicketsPage() {
                   { label: 'נמוכה', value: 'LOW' },
                   { label: 'בינונית', value: 'MEDIUM' },
                   { label: 'גבוהה', value: 'HIGH' },
+                  { label: 'דחופה', value: 'URGENT' },
                 ]}
                 style={{ width: '100%' }}
               />

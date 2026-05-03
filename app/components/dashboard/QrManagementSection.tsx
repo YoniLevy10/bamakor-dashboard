@@ -35,7 +35,6 @@ export function QrManagementSection({ projects, onCopyText }: QrManagementSectio
           return (
             <div key={project.id} style={styles.qrCard}>
               <div style={styles.qrCardHeader}>
-                <span style={styles.qrCardCode}>{project.project_code}</span>
                 <span style={styles.qrCardName}>{project.name}</span>
               </div>
               <div style={styles.qrCardMeta}>
@@ -75,18 +74,14 @@ const styles: Record<string, CSSProperties> = {
   },
   qrCardHeader: {
     display: 'flex',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     marginBottom: '12px',
   },
-  qrCardCode: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: theme.colors.primary,
-  },
   qrCardName: {
-    fontSize: '13px',
-    color: theme.colors.textSecondary,
+    fontSize: '15px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
   },
   qrCardMeta: {
     marginBottom: '12px',

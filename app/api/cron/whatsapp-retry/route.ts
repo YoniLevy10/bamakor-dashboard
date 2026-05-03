@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
 
       retried++
       try {
-        await sendRawWhatsAppPayloadWithCredentials(
+        const sent = await sendRawWhatsAppPayloadWithCredentials(
           client.whatsapp_phone_number_id,
           client.whatsapp_access_token,
           {
@@ -73,15 +73,19 @@ export async function GET(req: NextRequest) {
             text: { body: d.body },
           }
         )
-        await admin
-          .from('error_logs')
-          .update({
-            resolved: true,
-            resolved_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', row.id)
-        fixed++
+        if (sent) {
+          await admin
+            .from('error_logs')
+            .update({
+              resolved: true,
+              resolved_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', row.id)
+          fixed++
+        } else {
+          throw new Error('WhatsApp retry send returned null')
+        }
       } catch (e) {
         const nextAttempts = attempts + 1
         await admin

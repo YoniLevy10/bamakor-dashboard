@@ -21,6 +21,7 @@ import {
 } from '../components/ui'
 import { getIsMobileViewport } from '@/lib/mobile-viewport'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
+import { PageListSkeleton } from '../components/page-skeleton'
 import { digitsForWaMeLink } from '@/lib/wa-me-phone'
 
 type ProjectRow = {
@@ -260,7 +261,10 @@ export default function QrPage() {
 
           {loading ? (
             <div style={styles.loadingContainer}>
-              <LoadingSpinner />
+              <PageListSkeleton rows={8} />
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+                <LoadingSpinner />
+              </div>
             </div>
           ) : filteredProjects.length === 0 ? (
             <EmptyState
@@ -290,7 +294,6 @@ export default function QrPage() {
                     <div style={styles.qrCardHeader}>
                       <div>
                         <div style={styles.projectName}>{project.name}</div>
-                        <div style={styles.projectCode}>{project.project_code}</div>
                       </div>
                       <StatusBadge status={inactive ? 'INACTIVE' : 'ACTIVE'} size="sm" />
                     </div>
@@ -376,7 +379,7 @@ export default function QrPage() {
         open={isDrawerOpen}
         onClose={closeProjectDrawer}
         title={selectedProject?.name || ''}
-        subtitle={selectedProject?.project_code}
+        subtitle={selectedProject?.address?.trim() || undefined}
         isMobile={isMobile}
       >
         {selectedProject && (() => {
@@ -583,11 +586,6 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '17px',
     fontWeight: 600,
     color: theme.colors.textPrimary,
-  },
-  projectCode: {
-    fontSize: '13px',
-    color: theme.colors.textMuted,
-    marginTop: '2px',
   },
   qrContainer: {
     display: 'flex',

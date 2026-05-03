@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { checkRateLimitDistributed } from '@/lib/api-validation'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
 import { requireSessionClientId } from '@/lib/api-auth'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 
@@ -16,13 +16,7 @@ export async function POST(req: Request) {
     const clientId = auth.ctx.clientId
 
     const admin = getSupabaseAdmin()
-    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
-    const rl = await checkRateLimitDistributed({
-      supabaseAdmin: admin,
-      key: `ip:${ip}:settings:upload-logo`,
-      windowMs: 60_000,
-      maxRequests: 10,
-    })
+    const rl = await checkAuthenticatedPostRouteLimit(admin, auth.ctx.userId, 'settings-upload-logo')
     if (rl.isLimited) {
       return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
     }
@@ -65,7 +59,8 @@ export async function POST(req: Request) {
     audit.logAction('UPLOAD', 'CLIENT_LOGO', clientId, clientId, 'dashboard')
     return NextResponse.json({ url: pub.publicUrl, requestId })
   } catch (e) {
+    console.error('[settings/upload-logo]', e)
     logger.error('SETTINGS', 'Unhandled upload-logo error', e instanceof Error ? e : new Error(String(e)), { requestId })
-    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
+    return NextResponse.json({ error: 'internal', requestId }, { status: 500 })
   }
 }

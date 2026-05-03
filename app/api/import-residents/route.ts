@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { checkRateLimitDistributed, sanitizeString } from '@/lib/api-validation'
+import { sanitizeString } from '@/lib/api-validation'
+import { importResidentsBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
 import { requireSessionClientId } from '@/lib/api-auth'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 
@@ -26,27 +28,23 @@ export async function POST(req: Request) {
   const audit = getAuditLogger()
   const requestId = `import-residents-${Date.now()}`
   try {
-    const supabase = getSupabaseAdmin()
-    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
-    const rl = await checkRateLimitDistributed({
-      supabaseAdmin: supabase,
-      key: `ip:${ip}:import-residents`,
-      windowMs: 60_000,
-      maxRequests: 10,
-    })
-    if (rl.isLimited) {
-      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
-    }
-
     const auth = await requireSessionClientId()
     if (!auth.ok) return auth.response
     const bamakorClientId = auth.ctx.clientId
 
-    const body = (await req.json()) as { rows?: ImportRow[] } | null
-    const rows = body?.rows
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return NextResponse.json({ error: 'rows is required', requestId }, { status: 400 })
+    const supabase = getSupabaseAdmin()
+    const rl = await checkAuthenticatedPostRouteLimit(supabase, auth.ctx.userId, 'import-residents')
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
     }
+
+    const rawBody = await req.json()
+    const validated = importResidentsBodySchema.safeParse(rawBody)
+    if (!validated.success) {
+      return NextResponse.json({ error: validated.error.flatten() }, { status: 400 })
+    }
+
+    const rows = validated.data.rows as ImportRow[]
 
     // Load projects once for matching
     const { data: projects, error: pErr } = await supabase
@@ -132,6 +130,7 @@ export async function POST(req: Request) {
       requestId,
     })
   } catch (e) {
+    console.error('[import-residents]', e)
     logger.error('RESIDENTS_API', 'Unhandled import-residents error', e instanceof Error ? e : new Error(String(e)), { requestId })
     return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
   }

@@ -39,6 +39,7 @@ function ReportPageContent() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [imageUploadError, setImageUploadError] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [loadingProjects, setLoadingProjects] = useState(false)
 
   const SUPPORTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
   const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
@@ -51,33 +52,38 @@ function ReportPageContent() {
 
   useEffect(() => {
     async function loadProjects() {
-      await asyncHandler(
-        async () => {
-          if (!effectiveClientId) {
-            setProjects([])
-            return
-          }
-          const url = new URL('/api/public/projects', window.location.origin)
-          url.searchParams.set('client_id', effectiveClientId)
-          if (debouncedSearch.length >= 2) {
-            url.searchParams.set('q', debouncedSearch)
-          } else if (paramProjectCode) {
-            url.searchParams.set('project', paramProjectCode)
-          }
+      setLoadingProjects(true)
+      try {
+        await asyncHandler(
+          async () => {
+            if (!effectiveClientId) {
+              setProjects([])
+              return
+            }
+            const url = new URL('/api/public/projects', window.location.origin)
+            url.searchParams.set('client_id', effectiveClientId)
+            if (debouncedSearch.length >= 2) {
+              url.searchParams.set('q', debouncedSearch)
+            } else if (paramProjectCode) {
+              url.searchParams.set('project', paramProjectCode)
+            }
 
-          const res = await fetchWithTimeout(url.toString())
-          if (!res.ok) {
-            const j = await res.json().catch(() => ({}))
-            throw new Error((j as { error?: string }).error || 'Failed to load buildings')
+            const res = await fetchWithTimeout(url.toString())
+            if (!res.ok) {
+              const j = await res.json().catch(() => ({}))
+              throw new Error((j as { error?: string }).error || 'Failed to load buildings')
+            }
+            const j = (await res.json()) as { projects?: ProjectRow[] }
+            setProjects(j.projects || [])
+          },
+          {
+            context: 'Failed to load buildings',
+            showErrorToast: true,
           }
-          const j = (await res.json()) as { projects?: ProjectRow[] }
-          setProjects(j.projects || [])
-        },
-        {
-          context: 'Failed to load buildings',
-          showErrorToast: true,
-        }
-      )
+        )
+      } finally {
+        setLoadingProjects(false)
+      }
     }
 
     loadProjects()
@@ -253,6 +259,11 @@ function ReportPageContent() {
               <label htmlFor="buildingSearch" style={styles.label}>
                 Search Building
               </label>
+              {loadingProjects && effectiveClientId ? (
+                <div style={{ padding: '12px 0', color: '#6B7280', fontSize: '14px' }} aria-busy>
+                  טוען בניינים…
+                </div>
+              ) : null}
               <div style={styles.searchContainer}>
                 <input
                   id="buildingSearch"
@@ -295,7 +306,7 @@ function ReportPageContent() {
               </div>
               {selectedProjectCode && !paramProjectCode && (
                 <div style={styles.selectedLabel}>
-                  Selected: <strong>{selectedProject?.name || selectedProjectCode}</strong>
+                  Selected: <strong>{selectedProject?.name || 'בניין נבחר'}</strong>
                 </div>
               )}
             </div>

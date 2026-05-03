@@ -29,20 +29,24 @@ export async function GET() {
         .from('tickets')
         .select('*', { count: 'exact', head: true })
         .eq('client_id', clientId)
+        .is('deleted_at', null)
         .gte('created_at', monthStart),
       admin
         .from('residents')
         .select('*', { count: 'exact', head: true })
-        .eq('client_id', clientId),
+        .eq('client_id', clientId)
+        .is('deleted_at', null),
       admin
         .from('workers')
         .select('*', { count: 'exact', head: true })
         .eq('client_id', clientId)
-        .eq('is_active', true),
+        .eq('is_active', true)
+        .is('deleted_at', null),
       admin
         .from('tickets')
         .select('created_at')
         .eq('client_id', clientId)
+        .is('deleted_at', null)
         .gte('created_at', new Date(Date.now() - 56 * 24 * 60 * 60 * 1000).toISOString()),
     ])
 

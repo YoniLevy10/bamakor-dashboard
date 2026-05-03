@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { createClient } from '@/utils/supabase/server'
+import { getPublicSiteUrlFromHeaders } from '@/lib/site-url'
 
 function sanitizeNext(raw: string | null): string {
   if (!raw) return '/'
@@ -15,10 +16,12 @@ function sanitizeNext(raw: string | null): string {
  * Redirect URLs: https://<your-domain>/auth/callback
  */
 export async function GET(request: NextRequest) {
+  const hdrs = await headers()
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const next = sanitizeNext(url.searchParams.get('next'))
-  const origin = url.origin
+  const siteBase = getPublicSiteUrlFromHeaders(hdrs)
+  const origin = siteBase || url.origin
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=auth`)

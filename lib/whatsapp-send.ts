@@ -5,6 +5,9 @@ export type WhatsAppFailureLog = {
   clientId: string
 }
 
+/** Task 37: WhatsApp Cloud API outbound timeout */
+const WHATSAPP_API_TIMEOUT_MS = 15_000
+
 type WhatsAppTemplateComponent = {
   type: string
   parameters?: Array<{
@@ -18,30 +21,40 @@ export async function sendRawWhatsAppPayloadWithCredentials(
   phoneNumberId: string,
   accessToken: string,
   payload: Record<string, unknown>
-) {
-  const response = await fetchWithTimeout(
-    `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
+): Promise<Record<string, unknown> | null> {
+  try {
+    const response = await fetchWithTimeout(
+      `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          ...payload,
+        }),
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        ...payload,
-      }),
+      WHATSAPP_API_TIMEOUT_MS
+    )
+    if (!response) {
+      console.error('⚠️ WhatsApp send (credentials): timeout or network error')
+      return null
     }
-  )
-  if (!response) return null
 
-  const data = await response.json()
+    const data = (await response.json()) as Record<string, unknown>
 
-  if (!response.ok) {
-    throw new Error(`WhatsApp send failed: ${JSON.stringify(data)}`)
+    if (!response.ok) {
+      console.error('⚠️ WhatsApp send failed (credentials):', JSON.stringify(data))
+      return null
+    }
+
+    return data
+  } catch (e) {
+    console.error('⚠️ WhatsApp send exception (credentials):', e instanceof Error ? e.message : String(e))
+    return null
   }
-
-  return data
 }
 
 export async function sendWhatsAppTextMessageWithCredentials(
@@ -49,7 +62,7 @@ export async function sendWhatsAppTextMessageWithCredentials(
   accessToken: string,
   to: string,
   body: string
-) {
+): Promise<Record<string, unknown> | null> {
   return sendRawWhatsAppPayloadWithCredentials(phoneNumberId, accessToken, {
     to,
     type: 'text',
@@ -64,41 +77,52 @@ type WhatsAppCredentials = {
   accessToken?: string
 }
 
-async function sendRawWhatsAppPayload(payload: Record<string, unknown>, creds?: WhatsAppCredentials) {
+async function sendRawWhatsAppPayload(
+  payload: Record<string, unknown>,
+  creds?: WhatsAppCredentials
+): Promise<Record<string, unknown> | null> {
   const accessToken = creds?.accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN
   const phoneNumberId = creds?.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID
 
-  if (!accessToken) {
-    throw new Error('Missing WHATSAPP_ACCESS_TOKEN')
+  if (!accessToken || !phoneNumberId) {
+    console.error('⚠️ WhatsApp send skipped: missing WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID')
+    return null
   }
 
-  if (!phoneNumberId) {
-    throw new Error('Missing WHATSAPP_PHONE_NUMBER_ID')
-  }
-
-  const response = await fetchWithTimeout(
-    `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
+  try {
+    const response = await fetchWithTimeout(
+      `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          ...payload,
+        }),
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        ...payload,
-      }),
+      WHATSAPP_API_TIMEOUT_MS
+    )
+
+    if (!response) {
+      console.error('⚠️ WhatsApp send: timeout or network error')
+      return null
     }
-  )
-  if (!response) return null
 
-  const data = await response.json()
+    const data = (await response.json()) as Record<string, unknown>
 
-  if (!response.ok) {
-    throw new Error(`WhatsApp send failed: ${JSON.stringify(data)}`)
+    if (!response.ok) {
+      console.error('⚠️ WhatsApp send rejected:', JSON.stringify(data))
+      return null
+    }
+
+    return data
+  } catch (e) {
+    console.error('⚠️ WhatsApp send exception:', e instanceof Error ? e.message : String(e))
+    return null
   }
-
-  return data
 }
 
 export async function sendWhatsAppTextMessage(
@@ -106,27 +130,25 @@ export async function sendWhatsAppTextMessage(
   body: string,
   creds?: WhatsAppCredentials,
   failureLog?: WhatsAppFailureLog
-) {
+): Promise<Record<string, unknown> | null> {
   console.log('📤 Sending WhatsApp text message to:', to)
 
-  try {
-    return await sendRawWhatsAppPayload(
-      {
-        to,
-        type: 'text',
-        text: {
-          body,
-        },
+  const result = await sendRawWhatsAppPayload(
+    {
+      to,
+      type: 'text',
+      text: {
+        body,
       },
-      creds
-    )
-  } catch (e) {
-    if (failureLog?.clientId) {
-      const msg = e instanceof Error ? e.message : String(e)
-      await insertWhatsAppSendFailure(failureLog.clientId, to, body, msg)
-    }
-    throw e
+    },
+    creds
+  )
+
+  if (!result && failureLog?.clientId) {
+    await insertWhatsAppSendFailure(failureLog.clientId, to, body, 'WhatsApp send returned null (timeout/error)')
   }
+
+  return result
 }
 
 export async function sendWhatsAppTemplateMessage(
@@ -134,7 +156,7 @@ export async function sendWhatsAppTemplateMessage(
   templateName: string,
   bodyParams: string[] = [],
   languageCode = 'he'
-) {
+): Promise<Record<string, unknown> | null> {
   console.log('📤 Sending WhatsApp template message to:', to, 'template:', templateName)
 
   const components: WhatsAppTemplateComponent[] = []
@@ -169,23 +191,13 @@ export async function sendWhatsAppTextWithTemplateFallback(
   templateParams: string[] = [],
   languageCode = 'he'
 ) {
-  try {
-    return await sendWhatsAppTextMessage(to, body)
-  } catch (error: unknown) {
-    const errorText = String((error instanceof Error ? error.message : error) || '')
+  const direct = await sendWhatsAppTextMessage(to, body)
+  if (direct) return direct
 
-    const is24HourWindowError =
-      errorText.includes('131047') ||
-      errorText.toLowerCase().includes('re-engagement message') ||
-      errorText.toLowerCase().includes('more than 24 hours have passed')
-
-    if (!is24HourWindowError) {
-      throw error
-    }
-
-    console.warn('⚠️ 24h window blocked text message, falling back to template:', templateName)
-
-    return sendWhatsAppTemplateMessage(to, templateName, templateParams, languageCode)
+  console.warn('⚠️ WhatsApp text send failed — attempting template:', templateName)
+  const templ = await sendWhatsAppTemplateMessage(to, templateName, templateParams, languageCode)
+  if (!templ) {
+    console.error('⚠️ WhatsApp template send also failed')
   }
+  return templ
 }
-

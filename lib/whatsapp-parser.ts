@@ -5,6 +5,7 @@ export type ParsedWhatsAppMessage = {
   messageId?: string
   mediaId?: string
   mediaType?: 'image' | 'audio' | 'video' | 'document'
+  location?: { lat: number; lng: number; name?: string; address?: string }
 }
 
 /**
@@ -99,6 +100,20 @@ export function parseIncomingWhatsAppMessage(body: unknown): ParsedWhatsAppMessa
   } else if (message?.type === 'document' && (message?.document as Record<string, unknown>)?.id) {
     result.mediaId = String((message.document as Record<string, unknown>).id)
     result.mediaType = 'document'
+  }
+
+  if (message?.type === 'location') {
+    const loc = message?.location as Record<string, unknown> | undefined
+    const lat = loc?.latitude != null ? Number(loc.latitude) : Number.NaN
+    const lng = loc?.longitude != null ? Number(loc.longitude) : Number.NaN
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      result.location = {
+        lat,
+        lng,
+        name: typeof loc?.name === 'string' ? loc.name : undefined,
+        address: typeof loc?.address === 'string' ? loc.address : undefined,
+      }
+    }
   }
 
   return result

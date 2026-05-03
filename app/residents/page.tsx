@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
+import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
+import { withClientId } from '@/lib/supabase/with-client-id'
 import { toast } from '@/lib/error-handler'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 import { TM } from '@/lib/toast-messages'
@@ -119,9 +121,15 @@ export default function ResidentsPage() {
     setLoading(true)
     setResidentsTableMissing(false)
     try {
+      const tenantId = await resolveBamakorClientIdForBrowser()
       const [pRes, rRes, pendingRes] = await Promise.all([
-        supabase.from('projects').select('id, name, project_code, client_id').order('name'),
-        supabase.from('residents').select('id, project_id, client_id, full_name, phone, apartment_number, notes').order('full_name'),
+        withClientId(supabase.from('projects').select('id, name, project_code, client_id'), tenantId).order('name'),
+        withClientId(
+          supabase.from('residents').select('id, project_id, client_id, full_name, phone, apartment_number, notes'),
+          tenantId
+        )
+          .is('deleted_at', null)
+          .order('full_name'),
         fetchWithTimeout('/api/pending-residents'),
       ])
 
@@ -199,7 +207,16 @@ export default function ResidentsPage() {
     setDeletingResident(true)
     setAddError('')
     try {
-      const { error } = await supabase.from('residents').delete().eq('id', editResidentId)
+      const tenantDel = await resolveBamakorClientIdForBrowser()
+      const { error } = await withClientId(
+        supabase.from('residents').update({
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+        tenantDel
+      )
+        .eq('id', editResidentId)
+        .is('deleted_at', null)
       if (error) throw error
       setResidents((prev) => prev.filter((x) => x.id !== editResidentId))
       closeResidentModal()
@@ -233,16 +250,18 @@ export default function ResidentsPage() {
     setAddError('')
     try {
       if (editResidentId) {
-        const updateRes = await supabase
-          .from('residents')
-          .update({
+        const scoped = await resolveBamakorClientIdForBrowser()
+        const updateRes = await withClientId(
+          supabase.from('residents').update({
             project_id: projectId,
             client_id: clientId,
             full_name: fullName,
             phone: addPhone.trim() || null,
             apartment_number: addApartment.trim() || null,
             notes: addNotes.trim() || null,
-          })
+          }),
+          scoped
+        )
           .eq('id', editResidentId)
           .select('id, project_id, client_id, full_name, phone, apartment_number, notes')
           .single()
@@ -463,7 +482,7 @@ export default function ResidentsPage() {
                       <div style={styles.pendingRow}>
                         <span style={styles.pendingLabel}>פרויקט</span>
                         <span>
-                          {p.project_name} ({p.project_code})
+                          {p.project_name}
                         </span>
                       </div>
                       {p.ticket_number != null && (

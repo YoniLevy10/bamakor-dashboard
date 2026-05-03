@@ -9,6 +9,7 @@ async function resolveWorkerFromToken(token: string | null) {
     .from('workers')
     .select('id, client_id, full_name, is_active')
     .eq('access_token', token)
+    .is('deleted_at', null)
     .maybeSingle()
   if (error || !data || !data.is_active) return null
   return data as { id: string; client_id: string; full_name: string }
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
       .select('id, ticket_number, description, status, created_at')
       .eq('client_id', worker.client_id)
       .eq('assigned_worker_id', worker.id)
+      .is('deleted_at', null)
       .neq('status', 'CLOSED')
       .order('created_at', { ascending: false })
 
@@ -73,6 +75,7 @@ export async function PATCH(req: NextRequest) {
       .eq('id', ticketId)
       .eq('client_id', worker.client_id)
       .eq('assigned_worker_id', worker.id)
+      .is('deleted_at', null)
       .select('id, status')
       .maybeSingle()
 

@@ -49,8 +49,9 @@ export async function notifyReporterTicketClosed(
       waFallback,
       { project_name: building }
     )
-    await sendWhatsAppTextMessage(reporterPhone, waBody, residentWhatsAppCreds, { clientId })
-    result.whatsappSent = true
+    const wa = await sendWhatsAppTextMessage(reporterPhone, waBody, residentWhatsAppCreds, { clientId })
+    result.whatsappSent = !!wa
+    if (!wa) result.whatsappError = 'WhatsApp send failed (logged)'
   } catch (e) {
     result.whatsappError = e instanceof Error ? e.message : String(e)
   }

@@ -4,7 +4,9 @@ import { sendWorkerSMS } from '@/lib/sms-send'
 import { requireSessionClientId } from '@/lib/api-auth'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 import { getPublicTicketsUrl } from '@/lib/public-app-url'
-import { checkRateLimitDistributed, sanitizeId } from '@/lib/api-validation'
+import { assignWorkerBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
+import { logAudit } from '@/lib/audit'
 
 // ARCHIVED: Old WhatsApp notification
 // import { sendWhatsAppTextWithTemplateFallback } from '@/lib/whatsapp-send'
@@ -38,17 +40,14 @@ export async function POST(req: Request) {
     if (!auth.ok) return auth.response
     const bamakorClientId = auth.ctx.clientId
 
-    const body = await req.json()
-    const ticket_id = sanitizeId((body as { ticket_id?: unknown })?.ticket_id)
-    const worker_id = sanitizeId((body as { worker_id?: unknown })?.worker_id)
+    const rawBody = await req.json()
+    const validated = assignWorkerBodySchema.safeParse(rawBody)
+    if (!validated.success) {
+      return NextResponse.json({ error: validated.error.flatten() }, { status: 400 })
+    }
+    const { ticket_id, worker_id } = validated.data
 
-    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
-    const rl = await checkRateLimitDistributed({
-      supabaseAdmin,
-      key: `ip:${ip}:assign-ticket`,
-      windowMs: 60_000,
-      maxRequests: 60,
-    })
+    const rl = await checkAuthenticatedPostRouteLimit(supabaseAdmin, auth.ctx.userId, 'assign-ticket')
     if (rl.isLimited) {
       return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
     }
@@ -70,6 +69,7 @@ export async function POST(req: Request) {
         project_id,
         client_id,
         status,
+        assigned_worker_id,
         projects (
           name,
           project_code
@@ -77,6 +77,7 @@ export async function POST(req: Request) {
       `)
       .eq('id', ticket_id)
       .eq('client_id', bamakorClientId)
+      .is('deleted_at', null)
 
     const { data: ticket, error: ticketError } = await ticketQuery.single()
 
@@ -97,13 +98,14 @@ export async function POST(req: Request) {
 
     const clientName = (clientRow as { name?: string | null } | null)?.name || 'המערכת'
     const smsSenderName =
-      (clientRow as { sms_sender_name?: string | null } | null)?.sms_sender_name || 'במקור'
+      (clientRow as { sms_sender_name?: string | null } | null)?.sms_sender_name?.trim() || 'Bamakor'
 
     const { data: worker, error: workerError } = await supabaseAdmin
       .from('workers')
       .select('id, full_name, phone, role, is_active')
       .eq('id', worker_id)
       .eq('client_id', clientId)
+      .is('deleted_at', null)
       .single()
 
     if (workerError || !worker) {
@@ -125,6 +127,7 @@ export async function POST(req: Request) {
       })
       .eq('id', ticket_id)
       .eq('client_id', clientId)
+      .is('deleted_at', null)
       .select()
       .single()
 
@@ -140,8 +143,21 @@ export async function POST(req: Request) {
     audit.logTicketAssigned(clientId, ticket_id, worker_id)
     logger.info('TICKET_API', 'Ticket assigned successfully', { requestId, ticket_id, worker_id })
 
+    await logAudit({
+      clientId,
+      userId: auth.ctx.userId,
+      action: 'ASSIGN_TICKET',
+      entityType: 'ticket',
+      entityId: ticket_id,
+      oldValues: {
+        assigned_worker_id: (ticket as { assigned_worker_id?: string | null }).assigned_worker_id ?? null,
+        status: (ticket as { status?: string }).status,
+      },
+      newValues: { assigned_worker_id: worker_id, status: 'ASSIGNED' },
+    })
+
     const project = Array.isArray(ticket.projects) ? ticket.projects[0] : ticket.projects
-    const projectName = project?.name || 'ללא שם פרויקט'
+    const buildingName = project?.name || 'ללא שם בניין'
 
     const { error: logError } = await supabaseAdmin
       .from('ticket_logs')
@@ -166,8 +182,9 @@ export async function POST(req: Request) {
         console.log('Sending worker notification to:', worker.phone)
 
         // CURRENT CHANNEL: SMS for worker notifications
-        const smsMessage = `תקלה חדשה הוקצתה לך\nפרויקט: ${projectName}\nתקלה: #${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא פירוט'}\nכניסה למערכת:\n${getPublicTicketsUrl()}\n${clientName}`
-        const smsSent = await sendWorkerSMS(worker.phone, smsMessage, smsSenderName)
+        const dashboardUrl = getPublicTicketsUrl()
+        const smsMessage = `שויכת לתקלה #${ticket.ticket_number} בבניין ${buildingName}: ${ticket.description || 'ללא תיאור'}. לפרטים: ${dashboardUrl}`
+        const smsSent = await sendWorkerSMS(worker.phone, smsMessage, smsSenderName, clientId)
         workerSmsSent = smsSent
         if (smsSent) {
           console.log('worker_sms_sent: Worker SMS OK', worker.phone)
@@ -182,10 +199,10 @@ export async function POST(req: Request) {
         /*
         await sendWhatsAppTextWithTemplateFallback(
           worker.phone,
-          `הוקצתה לך תקלה חדשה.\n\nפרויקט: ${projectName}\nפנייה: ${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא תיאור'}`,
+          `הוקצתה לך תקלה חדשה.\n\nפרויקט: ${buildingName}\nפנייה: ${ticket.ticket_number}\nתיאור: ${ticket.description || 'ללא תיאור'}`,
           WORKER_TEMPLATE_NAME,
           [
-            projectName,
+            buildingName,
             String(ticket.ticket_number),
             ticket.description || 'ללא תיאור',
           ],
@@ -213,10 +230,10 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
+    console.error('[assign-ticket]', error)
     logger.error('TICKET_API', 'Assign ticket route error', err, { requestId })
-    console.error('❌ assign-ticket route error:', error)
     return NextResponse.json(
-      { error: 'Server error', requestId },
+      { error: 'internal', requestId },
       { status: 500 }
     )
   }

@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getLogger, getAuditLogger } from '@/lib/logging'
-import { checkRateLimitDistributed, sanitizeId, sanitizeString } from '@/lib/api-validation'
+import { sanitizeString } from '@/lib/api-validation'
+import { updateTicketBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
 import { requireSessionClientId } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 
 export async function POST(req: Request) {
   const logger = getLogger()
@@ -28,36 +31,25 @@ export async function POST(req: Request) {
     if (!auth.ok) return auth.response
     const bamakorClientId = auth.ctx.clientId
 
-    const body = await req.json()
-    const ticket_id = sanitizeId((body as { ticket_id?: unknown })?.ticket_id)
-    const priority = (body as { priority?: unknown })?.priority
-    const status = (body as { status?: unknown })?.status
+    const rawBody = await req.json()
+    const validated = updateTicketBodySchema.safeParse(rawBody)
+    if (!validated.success) {
+      return NextResponse.json({ error: validated.error.flatten() }, { status: 400 })
+    }
+    const { ticket_id, priority, status } = validated.data
 
-    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
-    const rl = await checkRateLimitDistributed({
-      supabaseAdmin,
-      key: `ip:${ip}:update-ticket`,
-      windowMs: 60_000,
-      maxRequests: 120,
-    })
+    const rl = await checkAuthenticatedPostRouteLimit(supabaseAdmin, auth.ctx.userId, 'update-ticket')
     if (rl.isLimited) {
       return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
-    }
-
-    if (!ticket_id) {
-      logger.error('TICKET_API', 'Missing ticket_id parameter', undefined, { requestId })
-      return NextResponse.json(
-        { error: 'ticket_id is required', requestId },
-        { status: 400 }
-      )
     }
 
     // Validate ticket exists
     const existsQuery = supabaseAdmin
       .from('tickets')
-      .select('id, client_id')
+      .select('id, client_id, priority, status')
       .eq('id', ticket_id)
       .eq('client_id', bamakorClientId)
+      .is('deleted_at', null)
     const { data: ticket, error: ticketError } = await existsQuery.single()
 
     if (ticketError || !ticket) {
@@ -74,7 +66,7 @@ export async function POST(req: Request) {
     const updatePayload: Record<string, unknown> = {}
     if (priority !== undefined && priority !== null) {
       const p = sanitizeString(priority).toUpperCase()
-      if (!['HIGH', 'MEDIUM', 'LOW'].includes(p)) {
+      if (!['HIGH', 'MEDIUM', 'LOW', 'URGENT'].includes(p)) {
         return NextResponse.json({ error: 'עדיפות לא תקינה', requestId }, { status: 400 })
       }
       updatePayload.priority = p
@@ -101,6 +93,7 @@ export async function POST(req: Request) {
       .update(updatePayload)
       .eq('id', ticket_id)
       .eq('client_id', clientId)
+      .is('deleted_at', null)
       .select()
 
     if (updateError) {
@@ -114,6 +107,18 @@ export async function POST(req: Request) {
     
     logger.info('TICKET_API', 'Ticket updated successfully', { requestId, ticket_id, updates: Object.keys(updatePayload) })
 
+    if (priority !== undefined && priority !== null) {
+      await logAudit({
+        clientId,
+        userId: auth.ctx.userId,
+        action: 'UPDATE_TICKET_PRIORITY',
+        entityType: 'ticket',
+        entityId: ticket_id,
+        oldValues: { priority: (ticket as { priority?: string | null }).priority ?? null },
+        newValues: { priority: sanitizeString(priority).toUpperCase() },
+      })
+    }
+
     return NextResponse.json({
       success: true,
       data: updatedTicket,
@@ -121,10 +126,10 @@ export async function POST(req: Request) {
     })
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error))
+    console.error('[update-ticket]', error)
     logger.error('TICKET_API', 'Update ticket route error', err, { requestId })
-    console.error('Error updating ticket:', error)
     return NextResponse.json(
-      { error: 'Server error', requestId },
+      { error: 'internal', requestId },
       { status: 500 }
     )
   }

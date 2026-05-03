@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getClientPlanRow, effectiveMaxWorkers } from '@/lib/plan-limits'
-import { checkRateLimitDistributed, sanitizeId, sanitizeString } from '@/lib/api-validation'
+import { sanitizeId, sanitizeString } from '@/lib/api-validation'
+import { createWorkerBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 import { requireSessionClientId } from '@/lib/api-auth'
 
@@ -11,19 +13,8 @@ export async function POST(req: Request) {
   const requestId = `create-worker-${Date.now()}`
   try {
     const hasServiceRoleKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
-    let body: any = null
-    try {
-      body = await req.json()
-    } catch (e) {
-      body = { __parse_error: e instanceof Error ? e.message : String(e) }
-    }
-    console.log('[create-worker] start', { requestId, hasServiceRoleKey, body })
 
     if (!hasServiceRoleKey) {
-      console.log('[create-worker] missing SUPABASE_SERVICE_ROLE_KEY (cannot use admin client)', {
-        requestId,
-        hasServiceRoleKey,
-      })
       return NextResponse.json(
         {
           error:
@@ -34,6 +25,19 @@ export async function POST(req: Request) {
       )
     }
 
+    let rawBody: unknown
+    try {
+      rawBody = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'גוף JSON לא תקין', requestId }, { status: 400 })
+    }
+
+    const parsedWorker = createWorkerBodySchema.safeParse(rawBody)
+    if (!parsedWorker.success) {
+      return NextResponse.json({ error: parsedWorker.error.flatten() }, { status: 400 })
+    }
+    const body = parsedWorker.data
+
     const auth = await requireSessionClientId()
     if (!auth.ok) return auth.response
 
@@ -41,26 +45,16 @@ export async function POST(req: Request) {
     try {
       supabase = getSupabaseAdmin()
     } catch (e) {
-      console.log('[create-worker] getSupabaseAdmin failed', {
-        requestId,
-        hasServiceRoleKey,
-        error: e instanceof Error ? { message: e.message, name: e.name, stack: e.stack } : String(e),
-      })
+      console.error('[create-worker]', e)
       throw e
     }
-    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
-    const rl = await checkRateLimitDistributed({
-      supabaseAdmin: supabase,
-      key: `ip:${ip}:create-worker`,
-      windowMs: 60_000,
-      maxRequests: 60,
-    })
+    const rl = await checkAuthenticatedPostRouteLimit(supabase, auth.ctx.userId, 'create-worker')
     if (rl.isLimited) {
       return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
     }
     const clientId = auth.ctx.clientId
 
-    const orgId = sanitizeId((body as { organization_id?: unknown })?.organization_id)
+    const orgId = body.organization_id ? sanitizeId(body.organization_id) : null
     if (orgId) {
       const { data: orgCheck, error: orgVerErr } = await supabase
         .from('organizations')
@@ -68,18 +62,12 @@ export async function POST(req: Request) {
         .eq('id', orgId)
         .maybeSingle()
       if (orgVerErr || !orgCheck || (orgCheck as { client_id?: string }).client_id !== clientId) {
-        if (orgVerErr) {
-          console.log('[create-worker] supabase error org verify', { requestId, orgVerErr })
-        }
         return NextResponse.json({ error: 'ארגון לא תקף', requestId }, { status: 403 })
       }
     }
 
     const { data: client, error: cErr } = await getClientPlanRow(supabase, clientId)
     if (cErr || !client) {
-      if (cErr) {
-        console.log('[create-worker] supabase error get client plan', { requestId, cErr })
-      }
       audit.logFailedOperation('READ', 'CLIENT', clientId, clientId, 'client_not_found')
       return NextResponse.json({ error: 'לקוח לא נמצא', requestId }, { status: 404 })
     }
@@ -90,9 +78,9 @@ export async function POST(req: Request) {
       .select('*', { count: 'exact', head: true })
       .eq('client_id', clientId)
       .eq('is_active', true)
+      .is('deleted_at', null)
 
     if (countErr) {
-      console.log('[create-worker] supabase error count workers', { requestId, countErr })
       logger.error('WORKER_API', 'Count workers failed', new Error(countErr.message), { requestId, clientId })
       return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
     }
@@ -110,11 +98,11 @@ export async function POST(req: Request) {
 
     const payload: Record<string, unknown> = {
       client_id: clientId,
-      full_name: sanitizeString(body?.full_name),
-      phone: body?.phone ? sanitizeString(body.phone) : null,
-      email: body?.email ? sanitizeString(body.email) : null,
-      role: body?.role ? sanitizeString(body.role) : null,
-      is_active: body?.is_active !== false,
+      full_name: sanitizeString(body.full_name),
+      phone: body.phone ? sanitizeString(body.phone) : null,
+      email: body.email ? sanitizeString(String(body.email)) : null,
+      role: body.role ? sanitizeString(String(body.role)) : null,
+      is_active: body.is_active !== false,
     }
     if (orgId) {
       payload.organization_id = orgId
@@ -142,7 +130,7 @@ export async function POST(req: Request) {
       .single()
 
     if (insErr) {
-      console.log('[create-worker] supabase error insert worker', { requestId, insErr, insertPayload })
+      console.error('[create-worker]', insErr.message, { requestId })
       logger.error('WORKER_API', 'Create worker failed', new Error(insErr.message), { requestId, clientId })
       audit.logFailedOperation('CREATE', 'WORKER', 'unknown', clientId, insErr.message)
       return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
@@ -152,7 +140,8 @@ export async function POST(req: Request) {
     logger.info('WORKER_API', 'Worker created', { requestId, clientId })
     return NextResponse.json({ worker: created, requestId })
   } catch (e) {
+    console.error('[create-worker]', e)
     logger.error('WORKER_API', 'Unhandled create-worker error', e instanceof Error ? e : new Error(String(e)), { requestId })
-    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
+    return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

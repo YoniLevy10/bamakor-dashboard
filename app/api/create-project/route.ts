@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getClientPlanRow, effectiveMaxBuildings } from '@/lib/plan-limits'
-import { checkRateLimitDistributed, sanitizeId, sanitizeString } from '@/lib/api-validation'
+import { sanitizeId, sanitizeString } from '@/lib/api-validation'
+import { createProjectBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 import { requireSessionClientId } from '@/lib/api-auth'
 
@@ -14,21 +16,20 @@ export async function POST(req: Request) {
     if (!auth.ok) return auth.response
 
     const supabase = getSupabaseAdmin()
-    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
-    const rl = await checkRateLimitDistributed({
-      supabaseAdmin: supabase,
-      key: `ip:${ip}:create-project`,
-      windowMs: 60_000,
-      maxRequests: 30,
-    })
+    const rl = await checkAuthenticatedPostRouteLimit(supabase, auth.ctx.userId, 'create-project')
     if (rl.isLimited) {
       return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
     }
 
-    const body = await req.json()
+    const rawBody = await req.json()
+    const validatedProject = createProjectBodySchema.safeParse(rawBody)
+    if (!validatedProject.success) {
+      return NextResponse.json({ error: validatedProject.error.flatten() }, { status: 400 })
+    }
+    const d = validatedProject.data
     const clientId = auth.ctx.clientId
 
-    let organizationId = sanitizeId((body as { organization_id?: unknown })?.organization_id)
+    let organizationId = sanitizeId(d.organization_id ?? null)
     if (!organizationId) {
       const { data: mem, error: memErr } = await supabase
         .from('organization_users')
@@ -83,13 +84,13 @@ export async function POST(req: Request) {
     }
 
     const payload: Record<string, unknown> = {
-      name: sanitizeString(body?.name),
-      project_code: sanitizeString(body?.project_code).toUpperCase(),
-      address: body?.address ? sanitizeString(body.address) || null : null,
-      qr_identifier: body?.qr_identifier ? sanitizeString(body.qr_identifier) || null : null,
-      is_active: body?.is_active !== false,
+      name: sanitizeString(d.name),
+      project_code: sanitizeString(d.project_code).toUpperCase(),
+      address: d.address ? sanitizeString(d.address) || null : null,
+      qr_identifier: d.qr_identifier ? sanitizeString(d.qr_identifier) || null : null,
+      is_active: d.is_active !== false,
       client_id: clientId,
-      assigned_worker_id: body?.assigned_worker_id ? String(body.assigned_worker_id) : null,
+      assigned_worker_id: d.assigned_worker_id && String(d.assigned_worker_id).trim() !== '' ? String(d.assigned_worker_id) : null,
     }
     if (organizationId) {
       payload.organization_id = organizationId
@@ -122,7 +123,8 @@ export async function POST(req: Request) {
     logger.info('PROJECT_API', 'Project created', { requestId, clientId })
     return NextResponse.json({ project: created, requestId })
   } catch (e) {
+    console.error('[create-project]', e)
     logger.error('PROJECT_API', 'Unhandled create-project error', e instanceof Error ? e : new Error(String(e)), { requestId })
-    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
+    return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

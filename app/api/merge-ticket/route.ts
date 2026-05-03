@@ -1,39 +1,39 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { checkRateLimitDistributed, sanitizeId } from '@/lib/api-validation'
+import { mergeTicketsBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
 import { requireSessionClientId } from '@/lib/api-auth'
 import { getLogger, getAuditLogger } from '@/lib/logging'
+import { logAudit } from '@/lib/audit'
 
 export async function POST(req: Request) {
   const logger = getLogger()
   const audit = getAuditLogger()
   const requestId = `merge-ticket-${Date.now()}`
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
-    const rl = await checkRateLimitDistributed({
-      supabaseAdmin,
-      key: `ip:${ip}:merge-ticket`,
-      windowMs: 60_000,
-      maxRequests: 30,
-    })
-    if (rl.isLimited) {
-      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
+    let supabaseAdmin
+    try {
+      supabaseAdmin = getSupabaseAdmin()
+    } catch (envError) {
+      console.error('[merge-ticket]', envError)
+      return NextResponse.json({ error: 'internal' }, { status: 500 })
     }
 
     const auth = await requireSessionClientId()
     if (!auth.ok) return auth.response
     const bamakorClientId = auth.ctx.clientId
-    const body = await req.json()
-    const sourceTicketId = sanitizeId((body as { source_ticket_id?: unknown })?.source_ticket_id)
-    const targetTicketId = sanitizeId((body as { target_ticket_id?: unknown })?.target_ticket_id)
 
-    if (!sourceTicketId || !targetTicketId) {
-      return NextResponse.json(
-        { error: 'נדרשים source_ticket_id ו-target_ticket_id', requestId },
-        { status: 400 }
-      )
+    const rl = await checkAuthenticatedPostRouteLimit(supabaseAdmin, auth.ctx.userId, 'merge-ticket')
+    if (rl.isLimited) {
+      return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
     }
+
+    const rawBody = await req.json()
+    const validated = mergeTicketsBodySchema.safeParse(rawBody)
+    if (!validated.success) {
+      return NextResponse.json({ error: validated.error.flatten() }, { status: 400 })
+    }
+    const { source_ticket_id: sourceTicketId, target_ticket_id: targetTicketId } = validated.data
 
     if (sourceTicketId === targetTicketId) {
       return NextResponse.json({ error: 'לא ניתן למזג תקלה לעצמה', requestId }, { status: 400 })
@@ -44,6 +44,7 @@ export async function POST(req: Request) {
       .select('id, ticket_number, project_id, description, status, client_id')
       .eq('id', sourceTicketId)
       .eq('client_id', bamakorClientId)
+      .is('deleted_at', null)
     const { data: source, error: sErr } = await sourceQuery.single()
 
     if (sErr || !source) {
@@ -57,6 +58,7 @@ export async function POST(req: Request) {
       .select('id, ticket_number, project_id, status')
       .eq('id', targetTicketId)
       .eq('client_id', clientId)
+      .is('deleted_at', null)
       .single()
 
     if (tErr || !target) {
@@ -85,10 +87,12 @@ export async function POST(req: Request) {
         closed_at: new Date().toISOString(),
         description: newDescription,
         merged_into_ticket_id: targetTicketId,
+        is_merged: true,
         updated_at: new Date().toISOString(),
       })
       .eq('id', sourceTicketId)
       .eq('client_id', clientId)
+      .is('deleted_at', null)
 
     if (upErr) {
       logger.error('TICKET_API', 'Merge update failed', new Error(upErr.message), { requestId, sourceTicketId, targetTicketId })
@@ -108,9 +112,26 @@ export async function POST(req: Request) {
     })
 
     audit.logAction('MERGE', 'TICKET', sourceTicketId, clientId, 'dashboard')
+
+    await logAudit({
+      clientId,
+      userId: auth.ctx.userId,
+      action: 'MERGE_TICKETS',
+      entityType: 'ticket',
+      entityId: sourceTicketId,
+      oldValues: { merged_from_ticket_number: (source as { ticket_number?: number }).ticket_number, status: (source as { status?: string }).status },
+      newValues: {
+        merged_into_ticket_id: targetTicketId,
+        merged_into_ticket_number: (target as { ticket_number?: number }).ticket_number,
+        status: 'CLOSED',
+        is_merged: true,
+      },
+    })
+
     return NextResponse.json({ success: true, merged_into_ticket_number: target.ticket_number, requestId })
   } catch (e) {
+    console.error('[merge-ticket]', e)
     logger.error('TICKET_API', 'Unhandled merge-ticket error', e instanceof Error ? e : new Error(String(e)), { requestId })
-    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
+    return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

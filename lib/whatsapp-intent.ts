@@ -35,13 +35,25 @@ export function isGreetingSmallTalk(text: string): boolean {
 const URGENT_KEYWORDS =
   /דחוף|חירום|מצב\s*חירום|אש\b|שריפה|מים\s*שוטפים|מים\s*שוטף|נזילה\s*דחופה|sos|urgent|emergency|!!!{2,}/i
 
+/** Strict tenant keywords → DB priority URGENT (task 31). */
+const URGENT_PRIORITY_STRICT = /דחוף|urgent|אחריותית|אחריותי/i
+
 export function isUrgentAngryMessage(text: string): boolean {
   return URGENT_KEYWORDS.test(text.trim())
+}
+
+/** Maps resident free text to ticket priority incl. URGENT. */
+export function resolveTicketPriorityFromResidentMessage(text: string): 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' {
+  const t = text.trim()
+  if (URGENT_PRIORITY_STRICT.test(t)) return 'URGENT'
+  if (isUrgentAngryMessage(t)) return 'HIGH'
+  return 'MEDIUM'
 }
 
 /** Status / progress questions (avoid matching casual "מה קורה" in long descriptions). */
 export function isStatusQuestion(text: string): boolean {
   const t = text.trim()
+  if (/^(סטטוס|מה\s*קורה|עדכון)(\s*[?؟]*)?$/i.test(t.replace(/\u200f/g, ''))) return true
   if (t.length > 120) return false
   if (/עדכון\s*[?؟]?$/i.test(t)) return true
   if (/מתי\s*(יהיה\s*)?(טיפול|יטפלו|תטפלו|מגיע)/i.test(t)) return true

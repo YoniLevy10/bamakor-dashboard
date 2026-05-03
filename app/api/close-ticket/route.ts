@@ -3,7 +3,9 @@ import { NextResponse } from 'next/server'
 import { requireSessionClientId } from '@/lib/api-auth'
 import { getLogger } from '@/lib/logging'
 import { notifyReporterTicketClosed } from '@/lib/reporter-ticket-closed-notify'
-import { checkRateLimitDistributed, sanitizeId } from '@/lib/api-validation'
+import { ticketIdBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
+import { logAudit } from '@/lib/audit'
 
 export async function POST(req: Request) {
   const logger = getLogger()
@@ -29,26 +31,16 @@ export async function POST(req: Request) {
     if (!auth.ok) return auth.response
     const bamakorClientId = auth.ctx.clientId
 
-    const body = await req.json()
-    const ticket_id = sanitizeId((body as { ticket_id?: unknown })?.ticket_id)
+    const rawBody = await req.json()
+    const validated = ticketIdBodySchema.safeParse(rawBody)
+    if (!validated.success) {
+      return NextResponse.json({ error: validated.error.flatten() }, { status: 400 })
+    }
+    const { ticket_id } = validated.data
 
-    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
-    const rl = await checkRateLimitDistributed({
-      supabaseAdmin,
-      key: `ip:${ip}:close-ticket`,
-      windowMs: 60_000,
-      maxRequests: 60,
-    })
+    const rl = await checkAuthenticatedPostRouteLimit(supabaseAdmin, auth.ctx.userId, 'close-ticket')
     if (rl.isLimited) {
       return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
-    }
-
-    if (!ticket_id) {
-      logger.error('TICKET_API', 'Missing ticket_id parameter', undefined, { requestId })
-      return NextResponse.json(
-        { error: 'ticket_id is required', requestId },
-        { status: 400 }
-      )
     }
 
     const ticketQuery = supabaseAdmin
@@ -56,6 +48,7 @@ export async function POST(req: Request) {
       .select('id, status, reporter_phone, project_id, client_id, projects (name)')
       .eq('id', ticket_id)
       .eq('client_id', bamakorClientId)
+      .is('deleted_at', null)
 
     const { data: ticket, error: ticketError } = await ticketQuery.single()
 
@@ -103,6 +96,16 @@ export async function POST(req: Request) {
     }
     
     logger.info('TICKET_API', 'Ticket closed successfully', { requestId, ticket_id })
+
+    await logAudit({
+      clientId,
+      userId: auth.ctx.userId,
+      action: 'CLOSE_TICKET',
+      entityType: 'ticket',
+      entityId: ticket_id,
+      oldValues: { status: ticket.status },
+      newValues: { status: 'CLOSED', closed_at: new Date().toISOString() },
+    })
 
     type TicketWithProject = {
       reporter_phone?: string | null
@@ -167,11 +170,11 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
+    console.error('[close-ticket]', error)
     logger.error('TICKET_API', 'Close ticket route error', err, { requestId })
-    console.error('❌ Error closing ticket:', error)
     return NextResponse.json(
       {
-        error: 'Server error',
+        error: 'internal',
         requestId,
       },
       { status: 500 }

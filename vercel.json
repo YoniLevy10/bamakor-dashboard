@@ -1,1 +1,7 @@
-{"crons":[{"path":"/api/cron/sla-check","schedule":"0 8 * * *"},{"path":"/api/cron/whatsapp-retry","schedule":"0 9 * * *"}]}
+{
+  "crons": [
+    { "path": "/api/cron/sla-check", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/whatsapp-retry", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/health-check", "schedule": "*/5 * * * *" }
+  ]
+}

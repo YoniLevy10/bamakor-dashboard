@@ -176,7 +176,7 @@ export default function PendingResidentsPage() {
                 >
                   <div style={{ fontWeight: 600, marginBottom: 6 }}>{row.project_name}</div>
                   <div style={{ fontSize: 13, color: theme.colors.textMuted, marginBottom: 8 }}>
-                    קוד: {row.project_code || '—'} · טלפון: {displayPhone(row.reporter_phone_normalized)}
+                    טלפון: {displayPhone(row.reporter_phone_normalized)}
                     {row.ticket_number != null ? ` · תקלה #${row.ticket_number}` : ''}
                   </div>
                   <div style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 12 }}>

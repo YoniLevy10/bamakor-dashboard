@@ -81,7 +81,7 @@ export function TicketChat({ ticketId, clientId }: TicketChatProps) {
 
   async function send(e: React.FormEvent) {
     e.preventDefault()
-    if (!ticketId || !body.trim()) return
+    if (!ticketId || !body.trim() || !clientId) return
     const name = senderName.trim() || 'צוות'
     setSending(true)
     const { error } = await supabase.from('ticket_internal_messages').insert({

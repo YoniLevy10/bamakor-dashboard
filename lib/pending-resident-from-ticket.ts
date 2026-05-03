@@ -34,6 +34,7 @@ export async function reporterListedInProjectResidents(
     .select('phone')
     .eq('project_id', projectId)
     .eq('client_id', clientId)
+    .is('deleted_at', null)
 
   if (error || !data?.length) return false
   return data.some((r) => phonesLikelySameResident(String((r as { phone?: string | null }).phone || ''), reporterWaFrom))

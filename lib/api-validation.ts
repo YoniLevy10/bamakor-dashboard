@@ -5,6 +5,7 @@
 
 import { NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 // ============================================================================
 // 1. TYPES & INTERFACES
@@ -354,28 +355,18 @@ export async function checkRateLimitDistributed(params: {
   const windowMs = params.windowMs ?? 60_000
   const maxRequests = params.maxRequests ?? 100
 
-  // Use DB-backed limiter via RPC (atomic across serverless instances).
-  const { data, error } = await params.supabaseAdmin.rpc('bamakor_rate_limit', {
-    p_key: params.key,
-    p_window_ms: windowMs,
-    p_max: maxRequests,
-  })
-
-  if (error) {
-    // Fail-open (do not block traffic if limiter is misconfigured).
+  const r = await checkRateLimit(params.supabaseAdmin, params.key, maxRequests, windowMs)
+  if ('rpcFailed' in r && r.rpcFailed) {
     return checkRateLimitMemory(params.key, windowMs, maxRequests)
   }
 
-  const row = Array.isArray(data) ? data[0] : data
-  const resetAt = row?.reset_at ? new Date(row.reset_at as string).getTime() : Date.now() + windowMs
-  const remaining = typeof row?.remaining === 'number' ? (row.remaining as number) : undefined
-  const isLimited = !!row?.is_limited
-
+  const resetAt = r.resetMs ?? Date.now() + windowMs
+  const remaining = r.remaining
   return {
     key: params.key,
     requestCount: remaining !== undefined ? maxRequests - remaining : 0,
     resetTime: resetAt,
-    isLimited,
+    isLimited: r.isLimited,
     remaining,
   }
 }

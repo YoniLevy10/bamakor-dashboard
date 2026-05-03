@@ -123,6 +123,7 @@ function WorkerPageInner() {
         .select('id, full_name')
         .eq('client_id', clientId)
         .eq('is_active', true)
+        .is('deleted_at', null)
         .order('full_name')
       if (error) throw error
       setWorkers((data as Worker[]) || [])
@@ -146,6 +147,7 @@ function WorkerPageInner() {
           .select('id, ticket_number, description, status, created_at')
           .eq('client_id', clientId)
           .eq('assigned_worker_id', wid)
+          .is('deleted_at', null)
           .neq('status', 'CLOSED')
           .order('created_at', { ascending: false })
         if (error) throw error
@@ -234,6 +236,7 @@ function WorkerPageInner() {
         .update(payload)
         .eq('id', ticketId)
         .eq('client_id', clientId)
+        .is('deleted_at', null)
       if (error) throw error
       toast.success(status === 'CLOSED' ? TM.ticketClosed : TM.ticketUpdated)
       await loadTicketsDashboard(workerId)

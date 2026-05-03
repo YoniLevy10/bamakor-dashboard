@@ -4,6 +4,8 @@ import { normalizeWhatsAppPhoneDigits } from '@/lib/whatsapp-test-phone'
 import { requireSessionClientId } from '@/lib/api-auth'
 import { pendingResidentsQueryUnavailable } from '@/lib/supabase-table-errors'
 import { checkRateLimitDistributed, sanitizeId, sanitizeString } from '@/lib/api-validation'
+import { pendingResidentsApproveBodySchema } from '@/lib/api-body-schemas'
+import { checkAuthenticatedPostRouteLimit } from '@/lib/rate-limit'
 import { getLogger, getAuditLogger } from '@/lib/logging'
 
 const MIGRATION_HINT =
@@ -75,7 +77,11 @@ export async function GET() {
         ? supabase.from('projects').select('id, name, project_code').in('id', projectIds)
         : Promise.resolve({ data: [] as { id: string; name: string; project_code: string }[] }),
       ticketIds.length > 0
-        ? supabase.from('tickets').select('id, ticket_number').in('id', ticketIds)
+        ? supabase
+            .from('tickets')
+            .select('id, ticket_number')
+            .in('id', ticketIds)
+            .is('deleted_at', null)
         : Promise.resolve({ data: [] as { id: string; ticket_number: number }[] }),
     ])
     const projects = projectsRes.data
@@ -94,8 +100,9 @@ export async function GET() {
       requestId,
     })
   } catch (e) {
+    console.error('[pending-residents]', e)
     logger.error('RESIDENTS_API', 'Unhandled pending-residents GET error', e instanceof Error ? e : new Error(String(e)), { requestId })
-    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
+    return NextResponse.json({ error: 'internal', requestId }, { status: 500 })
   }
 }
 
@@ -109,26 +116,18 @@ export async function PATCH(req: NextRequest) {
     const clientId = auth.ctx.clientId
 
     const supabase = getSupabaseAdmin()
-    const rl = await checkRateLimitDistributed({
-      supabaseAdmin: supabase,
-      key: `global:pending-residents:PATCH`,
-      windowMs: 60_000,
-      maxRequests: 60,
-    })
+    const rl = await checkAuthenticatedPostRouteLimit(supabase, auth.ctx.userId, 'pending-residents-patch')
     if (rl.isLimited) {
       return NextResponse.json({ error: 'יותר מדי בקשות. נסו שוב בעוד דקה.', requestId }, { status: 429 })
     }
-    const body = (await req.json()) as {
-      id?: string
-      action?: 'approve' | 'reject'
-      full_name?: string
+    const rawBody = await req.json()
+    const parsed = pendingResidentsApproveBodySchema.safeParse(rawBody)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
     }
 
-    const id = sanitizeId(body?.id)
-    const action = body?.action
-    if (!id || !action) {
-      return NextResponse.json({ error: 'id and action are required', requestId }, { status: 400 })
-    }
+    const id = parsed.data.id
+    const action = parsed.data.action
 
     const { data: row, error: fetchErr } = await supabase
       .from('pending_resident_join_requests')
@@ -176,7 +175,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true, status: 'rejected', requestId })
     }
 
-    const fullName = sanitizeString(body.full_name) || 'דייר (אושר מהוואטסאפ)'
+    const fullName = sanitizeString(parsed.data.full_name) || 'דייר (אושר מהוואטסאפ)'
     const digits = normalizeWhatsAppPhoneDigits((row as { reporter_phone_normalized: string }).reporter_phone_normalized)
     const phone = formatPhoneForResident(digits)
 
@@ -202,7 +201,7 @@ export async function PATCH(req: NextRequest) {
         resolved_at: now,
         resolved_by: 'dashboard',
       })
-      .eq('id', body.id)
+      .eq('id', id)
       .eq('client_id', clientId)
 
     if (up) {
@@ -216,7 +215,8 @@ export async function PATCH(req: NextRequest) {
     audit.logAction('APPROVE', 'PENDING_RESIDENT', id, clientId, 'dashboard')
     return NextResponse.json({ ok: true, status: 'approved', requestId })
   } catch (e) {
+    console.error('[pending-residents]', e)
     logger.error('RESIDENTS_API', 'Unhandled pending-residents PATCH error', e instanceof Error ? e : new Error(String(e)), { requestId })
-    return NextResponse.json({ error: 'Server error', requestId }, { status: 500 })
+    return NextResponse.json({ error: 'internal', requestId }, { status: 500 })
   }
 }

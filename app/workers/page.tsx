@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
+import { withClientId } from '@/lib/supabase/with-client-id'
 import { toast, asyncHandler } from '@/lib/error-handler'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 import { TM } from '@/lib/toast-messages'
@@ -103,6 +104,7 @@ export default function WorkersPage() {
       .from('workers')
       .select('*')
       .eq('client_id', activeClientId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -174,14 +176,16 @@ export default function WorkersPage() {
     setLoadingWorkerTickets(true)
     await asyncHandler(
       async () => {
-        const { data, error } = await supabase
-          .from('tickets')
-          .select(`
+        const scoped = clientId || (await resolveBamakorClientIdForBrowser())
+        const { data, error } = await withClientId(
+          supabase.from('tickets').select(`
             id, ticket_number, status, priority,
             projects (project_code, name)
-          `)
+          `),
+          scoped
+        )
           .eq('assigned_worker_id', workerId)
-          .eq('client_id', clientId)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(10)
 
@@ -256,10 +260,10 @@ export default function WorkersPage() {
         }
 
         if (editingWorker) {
-          const { error } = await supabase
-            .from('workers')
-            .update(payload)
-            .eq('id', editingWorker.id)
+          const { error } = await withClientId(
+            supabase.from('workers').update(payload),
+            clientId
+          ).eq('id', editingWorker.id)
           if (error) throw error
           toast.success(TM.workerUpdated)
         } else {
@@ -291,10 +295,10 @@ export default function WorkersPage() {
   async function toggleWorkerStatus(worker: WorkerRow) {
     await asyncHandler(
       async () => {
-        const { error } = await supabase
-          .from('workers')
-          .update({ is_active: !worker.is_active })
-          .eq('id', worker.id)
+        const { error } = await withClientId(
+          supabase.from('workers').update({ is_active: !worker.is_active }),
+          clientId
+        ).eq('id', worker.id)
 
         if (error) throw error
         toast.success(worker.is_active ? TM.workerDeactivated : TM.workerActivated)
@@ -311,7 +315,12 @@ export default function WorkersPage() {
 
     await asyncHandler(
       async () => {
-        const { error } = await supabase.from('workers').delete().eq('id', worker.id)
+        const { error } = await withClientId(
+          supabase.from('workers').update({ deleted_at: new Date().toISOString() }),
+          clientId
+        )
+          .eq('id', worker.id)
+          .is('deleted_at', null)
         if (error) throw error
         toast.success(TM.workerDeleted)
         await loadWorkers()
@@ -650,7 +659,7 @@ export default function WorkersPage() {
                     <div key={ticket.id} style={styles.ticketItem}>
                       <div>
                         <span style={styles.ticketNumber}>#{ticket.ticket_number}</span>
-                        <span style={styles.ticketProject}>{ticket.project_code}</span>
+                        <span style={styles.ticketProject}>{ticket.project_name}</span>
                       </div>
                       <StatusBadge status={ticket.status} size="sm" />
                     </div>

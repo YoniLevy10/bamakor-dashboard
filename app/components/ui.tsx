@@ -620,8 +620,8 @@ const bottomNavStyles: Record<string, CSSProperties> = {
   },
   link: {
     flex: '0 0 auto',
-    width: '72px',
-    maxWidth: '72px',
+    width: '64px',
+    maxWidth: '64px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -637,8 +637,8 @@ const bottomNavStyles: Record<string, CSSProperties> = {
   },
   settingsLink: {
     flex: '0 0 auto',
-    width: '72px',
-    maxWidth: '72px',
+    width: '64px',
+    maxWidth: '64px',
   },
   linkActive: {
     color: theme.colors.primary,
@@ -689,11 +689,13 @@ export function AppShell({
     >
       <Sidebar hidden={mobile} />
       <main
+        dir="rtl"
         data-app-main
         style={{
           flex: 1,
           marginInlineStart: mobile ? 0 : '240px',
           minWidth: 0,
+          textAlign: 'right',
           paddingBottom: bottomNav ? 'calc(58px + env(safe-area-inset-bottom, 0px))' : undefined,
         }}
       >
@@ -1316,6 +1318,7 @@ const badgeStyles: Record<string, CSSProperties> = {
 
 export function PriorityDot({ priority }: { priority: string }) {
   const colors: Record<string, string> = {
+    URGENT: '#b91c1c',
     HIGH: theme.colors.error,
     MEDIUM: theme.colors.warning,
     LOW: theme.colors.success,
