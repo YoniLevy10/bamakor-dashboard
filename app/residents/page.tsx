@@ -13,6 +13,7 @@
  * קשור ל: /pending-residents (דיירים שדיווחו אך עדיין לא בפנקס)
  */
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
@@ -74,6 +75,7 @@ function isResidentsTableMissingError(err: { message?: string } | null): boolean
 }
 
 export default function ResidentsPage() {
+  const router = useRouter()
   const [projects, setProjects] = useState<ResidentProjectRow[]>([])
   const [residents, setResidents] = useState<ResidentRow[]>([])
   const [residentsTableMissing, setResidentsTableMissing] = useState(false)
@@ -103,6 +105,25 @@ export default function ResidentsPage() {
   type SortDir = 'asc' | 'desc'
   const [sortKey, setSortKey] = useState<SortKey>('full_name')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  // Read initial filter from URL (?project=ID&q=term)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const p = params.get('project')
+    const q = params.get('q')
+    if (p) setProjectFilter(p)
+    if (q) setSearchTerm(q)
+  }, [])
+
+  // Sync filter changes to URL
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (projectFilter !== 'ALL') params.set('project', projectFilter)
+    if (searchTerm.trim()) params.set('q', searchTerm.trim())
+    const qs = params.toString()
+    const newUrl = qs ? `?${qs}` : window.location.pathname
+    router.replace(newUrl, { scroll: false })
+  }, [projectFilter, searchTerm, router])
 
   const [mainTab, setMainTab] = useState<'active' | 'pending'>('active')
   const [pendingItems, setPendingItems] = useState<
@@ -701,6 +722,34 @@ export default function ResidentsPage() {
                   </Button>
                 </div>
               )}
+
+              {/* Mobile: card view */}
+              {isMobile ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '4px 0' }}>
+                  {sorted.map((r) => (
+                    <div key={r.id} style={{ background: selectedIds.has(r.id) ? theme.colors.primaryMuted : theme.colors.surface, border: `1px solid ${selectedIds.has(r.id) ? theme.colors.primary : theme.colors.border}`, borderRadius: theme.radius.md, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)} aria-label={`בחר ${r.full_name}`} />
+                          <span style={{ fontWeight: 600, fontSize: '15px', color: theme.colors.textPrimary }}>{r.full_name}</span>
+                        </div>
+                        <Button variant="secondary" size="sm" type="button" onClick={() => openEdit(r)}>עריכה</Button>
+                      </div>
+                      {r.phone && (
+                        <button type="button" onClick={() => copyPhone(r.phone!)} title="לחץ להעתקה" style={{ background: 'none', border: 'none', cursor: 'pointer', color: theme.colors.primary, fontFamily: 'inherit', fontSize: '14px', padding: 0, direction: 'ltr', textAlign: 'right', alignSelf: 'flex-start' }}>
+                          {r.phone}
+                        </button>
+                      )}
+                      <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: theme.colors.textSecondary }}>
+                        {r.apartment_number && <span>דירה {r.apartment_number}</span>}
+                        {projectName[r.project_id] && <span>{projectName[r.project_id]}</span>}
+                      </div>
+                      {r.notes && <p style={{ fontSize: '12px', color: theme.colors.textMuted, margin: 0 }}>{r.notes.length > 100 ? `${r.notes.slice(0, 100)}…` : r.notes}</p>}
+                    </div>
+                  ))}
+                  {sorted.length === 0 && <p style={styles.empty}>אין דיירים להצגה.</p>}
+                </div>
+              ) : (
               <table style={styles.table}>
                 <thead>
                   <tr>
@@ -765,7 +814,8 @@ export default function ResidentsPage() {
                   ))}
                 </tbody>
               </table>
-              {filtered.length === 0 && (
+              )}
+              {filtered.length === 0 && !isMobile && (
                 <p style={styles.empty}>אין דיירים להצגה. הוסיפו רשומות ב-Supabase.</p>
               )}
             </div>

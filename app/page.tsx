@@ -115,6 +115,8 @@ export default function DashboardPage() {
   const [addTicketError, setAddTicketError] = useState('')
 
   const [activeKpi, setActiveKpi] = useState<'ALL' | 'NEW' | 'IN_PROGRESS' | 'CLOSED'>('ALL')
+  const [residentsCount, setResidentsCount] = useState<number | null>(null)
+  const [workersCount, setWorkersCount] = useState<number | null>(null)
 
   type ActivityItem = {
     id: string
@@ -139,7 +141,7 @@ export default function DashboardPage() {
     await asyncHandler(
       async () => {
         const clientId = await resolveBamakorClientIdForBrowser()
-        const [ticketsResult, projectsResult, workersResult, logsResult] = await Promise.all([
+        const [ticketsResult, projectsResult, workersResult, logsResult, resCountResult, wCountResult] = await Promise.all([
           withClientId(
             supabase.from('tickets').select(`
               id, ticket_number, project_id, client_id, reporter_phone, description, 
@@ -175,6 +177,8 @@ export default function DashboardPage() {
             )
             .order('created_at', { ascending: false })
             .limit(5),
+          withClientId(supabase.from('residents').select('id', { count: 'exact', head: true }), clientId).is('deleted_at', null),
+          withClientId(supabase.from('workers').select('id', { count: 'exact', head: true }), clientId).is('deleted_at', null),
         ])
 
         if (ticketsResult.error) throw ticketsResult.error
@@ -205,6 +209,8 @@ export default function DashboardPage() {
           map[worker.id] = worker.full_name
         })
         setWorkersMap(map)
+        setResidentsCount(resCountResult.count ?? null)
+        setWorkersCount(wCountResult.count ?? null)
 
         const fromLogs = buildActivityFromLogs(logsResult.data, logsResult.error)
         if (fromLogs.length > 0) {
@@ -231,6 +237,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     void loadData()
+  }, [loadData])
+
+  // Supabase Realtime — refresh tickets when any change arrives
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard-tickets-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => {
+        void loadData()
+      })
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
   }, [loadData])
 
   function buildActivityFromLogs(
@@ -590,12 +607,14 @@ export default function DashboardPage() {
           <>
             <div style={{
               ...styles.kpiGrid,
-              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
             }}>
               <KpiCard label="סה״כ תקלות" value={stats.total} accent="primary" onClick={() => setActiveKpi('ALL')} />
               <KpiCard label="פתוחות" value={stats.open} accent="warning" onClick={() => setActiveKpi('NEW')} />
               <KpiCard label="בטיפול" value={stats.inProgress} accent="primary" onClick={() => setActiveKpi('IN_PROGRESS')} />
               <KpiCard label="נסגרו" value={stats.closed} accent="success" onClick={() => setActiveKpi('CLOSED')} />
+              {residentsCount !== null && <KpiCard label="דיירים רשומים" value={residentsCount} accent="primary" />}
+              {workersCount !== null && <KpiCard label="עובדים פעילים" value={workersCount} accent="success" />}
             </div>
 
             <div style={{ ...styles.mainGrid, gridTemplateColumns: isMobile ? '1fr' : '1fr 340px' }}>

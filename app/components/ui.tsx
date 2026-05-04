@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { type ReactNode, type CSSProperties, useEffect, useState } from 'react'
+import { type ReactNode, type CSSProperties, useEffect, useState, lazy, Suspense } from 'react'
 import { createClient } from '@/utils/supabase/client'
+
+const GlobalSearch = lazy(() => import('./GlobalSearch').then((m) => ({ default: m.GlobalSearch })))
 
 // ============================================================================
 // DESIGN TOKENS - Apple-Inspired Premium Design System
@@ -688,9 +690,21 @@ export function AppShell({
 }) {
   const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
 
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   // Hydration safety: do not let `isMobile` (client-only) change SSR markup.
@@ -719,7 +733,53 @@ export function AppShell({
         {children}
       </main>
       {bottomNav ? <MobileBottomNav /> : null}
+      <BackToTop />
+      {mounted && (
+        <Suspense fallback={null}>
+          <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+        </Suspense>
+      )}
     </div>
+  )
+}
+
+function BackToTop() {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    function onScroll() {
+      setVisible(window.scrollY > 300)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+  if (!visible) return null
+  return (
+    <button
+      type="button"
+      aria-label="חזרה למעלה"
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      style={{
+        position: 'fixed',
+        bottom: '28px',
+        left: '28px',
+        zIndex: 500,
+        width: '44px',
+        height: '44px',
+        borderRadius: theme.radius.full,
+        background: theme.colors.surface,
+        border: `1px solid ${theme.colors.border}`,
+        boxShadow: theme.shadows.lg,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: theme.colors.textSecondary,
+      }}
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m18 15-6-6-6 6" />
+      </svg>
+    </button>
   )
 }
 
