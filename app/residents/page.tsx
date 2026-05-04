@@ -95,6 +95,9 @@ export default function ResidentsPage() {
 
   const [importOpen, setImportOpen] = useState(false)
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
   const [mainTab, setMainTab] = useState<'active' | 'pending'>('active')
   const [pendingItems, setPendingItems] = useState<
     Array<{
@@ -415,6 +418,47 @@ export default function ResidentsPage() {
     })
   }, [residents, searchTerm, projectFilter])
 
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filtered.map((r) => r.id)))
+    }
+  }
+
+  async function bulkDelete() {
+    if (selectedIds.size === 0) return
+    const count = selectedIds.size
+    if (!window.confirm(`למחוק ${count} דיירים? לא ניתן לשחזר.`)) return
+    setBulkDeleting(true)
+    try {
+      const scoped = await resolveBamakorClientIdForBrowser()
+      const { error } = await withClientId(
+        supabase
+          .from('residents')
+          .update({ deleted_at: new Date().toISOString() })
+          .in('id', Array.from(selectedIds)),
+        scoped
+      )
+      if (error) throw error
+      setResidents((prev) => prev.filter((r) => !selectedIds.has(r.id)))
+      setSelectedIds(new Set())
+      toast.success(`${count} דיירים נמחקו`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'מחיקה נכשלה')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   return (
     <AppShell isMobile={isMobile}>
       {isMobile && (
@@ -580,9 +624,29 @@ export default function ResidentsPage() {
             </div>
           ) : (
             <div style={styles.tableWrap}>
+              {selectedIds.size > 0 && (
+                <div style={styles.bulkBar}>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>{selectedIds.size} נבחרו</span>
+                  <Button variant="secondary" size="sm" onClick={() => setSelectedIds(new Set())} type="button">
+                    ביטול בחירה
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={bulkDelete} loading={bulkDeleting} type="button">
+                    מחק {selectedIds.size} נבחרים
+                  </Button>
+                </div>
+              )}
               <table style={styles.table}>
                 <thead>
                   <tr>
+                    <th style={{ ...styles.th, width: '40px' }}>
+                      <input
+                        type="checkbox"
+                        checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                        ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filtered.length }}
+                        onChange={toggleSelectAll}
+                        aria-label="בחר הכל"
+                      />
+                    </th>
                     <th style={styles.th}>שם</th>
                     <th style={styles.th}>טלפון</th>
                     <th style={styles.th}>דירה</th>
@@ -593,7 +657,15 @@ export default function ResidentsPage() {
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
-                    <tr key={r.id}>
+                    <tr key={r.id} style={selectedIds.has(r.id) ? { background: theme.colors.primaryMuted } : undefined}>
+                      <td style={styles.td}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleSelect(r.id)}
+                          aria-label={`בחר ${r.full_name}`}
+                        />
+                      </td>
                       <td style={styles.td}>{r.full_name}</td>
                       <td style={styles.td}>{r.phone || '—'}</td>
                       <td style={styles.td}>{r.apartment_number || '—'}</td>
@@ -729,6 +801,15 @@ const styles: Record<string, CSSProperties> = {
   },
   loading: { padding: '48px', display: 'flex', justifyContent: 'center' },
   tableWrap: { padding: '0 0 24px', overflowX: 'auto' },
+  bulkBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 20px',
+    background: theme.colors.primaryMuted,
+    borderBottom: `1px solid ${theme.colors.primary}44`,
+    flexWrap: 'wrap' as const,
+  },
   table: { width: '100%', borderCollapse: 'collapse' },
   th: {
     textAlign: 'start',
