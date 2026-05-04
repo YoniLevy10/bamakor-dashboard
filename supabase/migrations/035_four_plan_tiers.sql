@@ -18,10 +18,12 @@ ALTER TABLE public.clients
 COMMENT ON COLUMN public.clients.max_tickets_per_month
   IS 'Per-client ticket quota override; NULL = use plan default from app code';
 
--- 2. Migrate legacy 'basic' → 'starter'
+-- 2. Migrate any value that is NOT already a valid tier → 'starter'
+--    (covers 'basic', NULL, and any other legacy/test values)
 UPDATE public.clients
 SET plan_tier = 'starter'
-WHERE plan_tier = 'basic' OR plan_tier IS NULL;
+WHERE plan_tier IS NULL
+   OR plan_tier NOT IN ('starter', 'pro', 'business', 'enterprise');
 
 -- 3. Ensure default is 'starter' going forward
 ALTER TABLE public.clients
