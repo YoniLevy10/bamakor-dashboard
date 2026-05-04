@@ -41,9 +41,18 @@ type ClientRow = {
 const TABS = [
   { id: 'notifications', label: 'התראות' },
   { id: 'whatsapp', label: 'וואטסאפ / הטמעה' },
+  { id: 'team', label: 'גישת צוות' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
+
+type OrgUser = {
+  id: string
+  user_id: string
+  email: string
+  role: string
+  created_at: string
+}
 
 function SettingsPageInner() {
   const router = useRouter()
@@ -54,6 +63,7 @@ function SettingsPageInner() {
 
   function goTab(id: TabId) {
     router.replace(`/settings?tab=${encodeURIComponent(id)}`, { scroll: false })
+    if (id === 'team') void loadTeam()
   }
 
   const [isMobile, setIsMobile] = useState(false)
@@ -77,6 +87,14 @@ function SettingsPageInner() {
   const [savingWhatsapp, setSavingWhatsapp] = useState(false)
   const [testingWa, setTestingWa] = useState(false)
   const [pushEnabling, setPushEnabling] = useState(false)
+
+  // Team tab state
+  const [orgUsers, setOrgUsers] = useState<OrgUser[]>([])
+  const [teamLoading, setTeamLoading] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState<'viewer' | 'manager' | 'admin'>('viewer')
+  const [inviting, setInviting] = useState(false)
+  const [removingId, setRemovingId] = useState<string | null>(null)
 
   const [origin, setOrigin] = useState('')
 
@@ -279,6 +297,54 @@ function SettingsPageInner() {
     setTestingWa(false)
   }
 
+  async function loadTeam() {
+    setTeamLoading(true)
+    try {
+      const res = await fetchWithTimeout('/api/invite-worker', { method: 'GET' })
+      const json = await res.json() as { users?: OrgUser[] }
+      setOrgUsers(json.users ?? [])
+    } catch {
+      toast.error('טעינת הצוות נכשלה')
+    } finally {
+      setTeamLoading(false)
+    }
+  }
+
+  async function doInvite() {
+    if (!inviteEmail.trim()) return
+    setInviting(true)
+    try {
+      const res = await fetchWithTimeout('/api/invite-worker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      })
+      const json = await res.json() as { error?: string }
+      if (!res.ok) throw new Error(json.error || 'שליחה נכשלה')
+      toast.success(`הזמנה נשלחה ל-${inviteEmail.trim()}`)
+      setInviteEmail('')
+      await loadTeam()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'שליחה נכשלה')
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  async function doRemove(ouId: string) {
+    setRemovingId(ouId)
+    try {
+      const res = await fetchWithTimeout(`/api/invite-worker?id=${encodeURIComponent(ouId)}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('הסרה נכשלה')
+      toast.success('משתמש הוסר')
+      setOrgUsers((prev) => prev.filter((u) => u.id !== ouId))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'הסרה נכשלה')
+    } finally {
+      setRemovingId(null)
+    }
+  }
+
   return (
     <AppShell isMobile={isMobile}>
       {isMobile && (
@@ -472,6 +538,75 @@ function SettingsPageInner() {
                     <Button variant="primary" onClick={saveWhatsapp} loading={savingWhatsapp}>
                       שמור שינויים
                     </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {activeTab === 'team' && (
+              <Card noPadding>
+                <div style={styles.cardInner}>
+                  <div style={{ fontSize: '14px', color: theme.colors.textSecondary, lineHeight: 1.6 }}>
+                    הזמינו עובדים לראות תקלות במערכת. הם יקבלו מייל עם קישור כניסה וייראו את כל התקלות של הלקוח.
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      <input
+                        type="email"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="כתובת מייל של העובד"
+                        style={{ ...styles.input, flex: 1, minWidth: '200px' }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') void doInvite() }}
+                      />
+                      <select
+                        className="app-select-input"
+                        value={inviteRole}
+                        onChange={(e) => setInviteRole(e.target.value as 'viewer' | 'manager' | 'admin')}
+                        style={{ padding: '12px 14px', borderRadius: theme.radius.md, border: `1px solid ${theme.colors.border}`, background: theme.colors.surface, fontSize: '14px', color: theme.colors.textPrimary }}
+                      >
+                        <option value="viewer">צופה (קריאה בלבד)</option>
+                        <option value="manager">מנהל</option>
+                        <option value="admin">מנהל מערכת</option>
+                      </select>
+                      <Button variant="primary" onClick={doInvite} loading={inviting} type="button">
+                        שלח הזמנה
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: theme.colors.textPrimary }}>משתמשים קיימים</span>
+                      <Button variant="secondary" onClick={loadTeam} loading={teamLoading} type="button">
+                        רענן
+                      </Button>
+                    </div>
+                    {teamLoading ? (
+                      <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><LoadingSpinner /></div>
+                    ) : orgUsers.length === 0 ? (
+                      <div style={{ color: theme.colors.textMuted, fontSize: '13px' }}>עדיין אין משתמשים מוזמנים.</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {orgUsers.map((u) => (
+                          <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: theme.radius.md, border: `1px solid ${theme.colors.border}`, background: theme.colors.surfaceElevated }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{ fontSize: '14px', fontWeight: 500, color: theme.colors.textPrimary }}>{u.email}</span>
+                              <span style={{ fontSize: '12px', color: theme.colors.textMuted }}>{u.role === 'admin' ? 'מנהל מערכת' : u.role === 'manager' ? 'מנהל' : 'צופה'}</span>
+                            </div>
+                            <Button
+                              variant="secondary"
+                              onClick={() => void doRemove(u.id)}
+                              loading={removingId === u.id}
+                              type="button"
+                            >
+                              הסר
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </Card>
