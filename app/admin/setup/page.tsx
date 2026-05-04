@@ -1,3 +1,17 @@
+/**
+ * /admin/setup — ויזארד פנימי להקמת לקוח חדש
+ *
+ * @description
+ * טופס פנימי (Yoni בלבד) להקמת לקוח חדש תוך פחות מדקה.
+ * שלב 1 — מסך נעילה: הזנת ADMIN_SETUP_SECRET (משתנה סביבה ב-Vercel).
+ * שלב 2 — טופס: שם חברה, תכנית, WhatsApp, מנהל, פרויקטים, עובדים.
+ * שלב 3 — תוצאות: client_id, הזמנה נשלחה, קישורי QR לכל פרויקט.
+ *
+ * קריאה: POST /api/admin/setup-client עם header x-admin-secret.
+ *
+ * @route /admin/setup
+ * @access פנימי — מוגן ב-ADMIN_SETUP_SECRET
+ */
 'use client'
 
 import { useState, type CSSProperties } from 'react'

@@ -12,9 +12,6 @@ export default withSentryConfig(nextConfig, {
   // Upload source maps only in CI / production builds
   widenClientFileUpload: true,
 
-  // Avoids shipping Sentry debug code to the browser
-  hideSourceMaps: true,
-
   // Tree-shake Sentry logger statements
   disableLogger: true,
 });

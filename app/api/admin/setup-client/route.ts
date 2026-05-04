@@ -1,3 +1,15 @@
+/**
+ * POST /api/admin/setup-client — הקמת לקוח חדש בפעולה אטומית
+ *
+ * @description
+ * API פנימי (מוגן ב-x-admin-secret header).
+ * מקים בבת-אחת: clients → organizations → auth.invite → organization_users → projects → workers.
+ * מחזיר: client_id, org_id, admin_user_id, קישורי QR לכל פרויקט.
+ *
+ * @security מחייב header: x-admin-secret = ADMIN_SETUP_SECRET (env var)
+ * @method POST
+ * @body {SetupSchema} body — ראה setupSchema למטה
+ */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { z } from 'zod'
@@ -166,14 +178,14 @@ export async function POST(req: Request) {
         role: w.role ?? null,
         is_active: true,
       }))
-      const { error: workerErr, count } = await supabase
+      const { data: workerData, error: workerErr } = await supabase
         .from('workers')
         .insert(workerInserts)
-        .select('id', { count: 'exact', head: true })
+        .select('id')
       if (workerErr) {
         return NextResponse.json({ error: `Workers creation failed: ${workerErr.message}` }, { status: 500 })
       }
-      workersCreated = count ?? d.workers.length
+      workersCreated = workerData?.length ?? d.workers.length
     }
 
     // ── 7. Build QR links ─────────────────────────────────────────────────────

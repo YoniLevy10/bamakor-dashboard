@@ -1,10 +1,10 @@
 # Bamakor Dashboard
 
 **במקור (Bamakor)** היא מערכת SaaS רב-דיירית לניהול תקלות ואחזקה בבניינים.  
-דיירים מדווחים דרך **טופס ציבורי** (`/report`) או **WhatsApp** (סרייק QR לפרויקט).  
+דיירים מדווחים דרך **טופס ציבורי** (`/report`) או **WhatsApp** (סריקת QR לפרויקט).  
 בעל העסק מנהל תקלות, עובדים, דיירים, ומקבל סיכומים ודוחות.
 
-**סטאק טכני:** Next.js 16 (App Router) · React 19 · TypeScript · Supabase (PostgreSQL + Auth + RLS) · Vercel · Zod · Vitest · Playwright
+**סטאק טכני:** Next.js 16 (App Router) · React 19 · TypeScript · Supabase (PostgreSQL + Auth + RLS) · Vercel · Zod · Vitest · Playwright · Sentry
 
 ---
 
@@ -27,17 +27,54 @@
 | `/onboarding` | הגדרה ראשונה למשתמש חדש (ארגון → פרויקט → עובד) | מחובר (חדש) |
 | `/report` | טופס דיווח ציבורי לדיירים | ציבורי |
 | `/worker` | מסך עובד שטח — צפייה ועדכון תקלות משויכות | ציבורי (`?token=`) / מחובר |
+| `/admin/setup` | **ויזארד פנימי** — הקמת לקוח חדש בדקה אחת | פנימי (`ADMIN_SETUP_SECRET`) |
 
 ---
 
-## הקמת לקוח חדש — ויזארד מנהל
+## 🚀 הקמת לקוח חדש — ויזארד מנהל (פחות מדקה!)
 
-אפשר להקים לקוח חדש **בפחות מדקה** דרך `/admin/setup`.  
-הממשק (מאובטח עם `ADMIN_SETUP_SECRET`) יוצר אוטומטית:
-- לקוח (`clients`) + ארגון (`organizations`)
-- הזמנה לאימייל המנהל (Supabase Auth invite)
-- פרויקטים עם קודי QR מוכנים
-- עובדים
+### איפה זה?
+**`https://app.bamakor.com/admin/setup`** (או `http://localhost:3000/admin/setup` בפיתוח)
+
+### איך עושים את זה?
+
+**שלב 1 — פתיחה:**
+גלוש ל-`/admin/setup`. יופיע מסך נעילה עם שדה סיסמה.
+
+**שלב 2 — קוד גישה:**
+הזן את ה-`ADMIN_SETUP_SECRET` שהגדרת ב-Vercel → לחץ "כניסה".
+
+**שלב 3 — מלא את הטופס:**
+
+| שדה | מה להזין | חובה |
+|-----|----------|-------|
+| שם החברה | שם הלקוח/ועד הבית | ✅ |
+| תכנית | Starter / Pro / Business / Enterprise | ✅ |
+| WhatsApp Phone Number ID | ה-ID מ-Meta Business Manager | לא |
+| מספר WhatsApp Business | הספרות שדיירים שולחים אליהן הודעה (ללא +) | לא |
+| אימייל מנהל | ישלח הזמנה אוטומטית ל-Supabase | ✅ |
+| טלפון מנהל | לצורך fallback בהודעות | לא |
+| פרויקטים | שם + קוד (PROJ1) + כתובת — לחץ "+ הוסף פרויקט" לכל בניין | ✅ לפחות 1 |
+| עובדים | שם מלא + טלפון + אימייל + תפקיד | לא |
+
+**שלב 4 — לחץ "הקם לקוח"**
+
+המערכת תיצור אוטומטית:
+- ✅ שורת `clients` + `organizations` ב-DB
+- ✅ הזמנה לאימייל המנהל (Supabase Auth) — ישקבל מייל עם לינק כניסה
+- ✅ פרויקטים עם `qr_identifier = START_{PROJECT_CODE}`
+- ✅ עובדים רשומים ומוכנים לשיוך
+
+**שלב 5 — תוצאות:**
+תוצג טבלה עם כל הפרויקטים + **קישורי QR מוכנים** — WhatsApp וכניסה ישירה.
+
+```
+פרויקט    | קוד    | WhatsApp QR              | קישור דיווח
+ועד הבית  | VAAD1  | https://wa.me/972...     | https://app.../report?project=VAAD1
+גן הורדים | GARDEN | https://wa.me/972...     | https://app.../report?project=GARDEN
+```
+
+> **טיפ:** לחץ על 📋 ליד קישור הדיווח כדי להעתיקו ישירות.
 
 ---
 
@@ -56,7 +93,8 @@ cp .env.example .env.local   # והשלמת ערכים (ראו רשימה למט
 npm run dev
 ```
 
-השרת על `http://localhost:3000`.
+השרת על `http://localhost:3000`.  
+**ויזארד:** http://localhost:3000/admin/setup
 
 ### משתני סביבה נדרשים
 
@@ -70,6 +108,7 @@ npm run dev
 | `WHATSAPP_VERIFY_TOKEN` | טוקן אימות Webhook של Meta |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push (אופציונלי) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | זהה ל-VAPID_PUBLIC_KEY |
+| `NEXT_PUBLIC_SENTRY_DSN` | DSN מ-Sentry.io (ניטור שגיאות, אופציונלי) |
 
 ---
 
@@ -100,8 +139,9 @@ npm test
 ```bash
 npx playwright test
 ```
-- `tests/e2e/flows.spec.ts` — **70+ בדיקות** המכסות: דפים ציבוריים, הפניות auth, security API, ניווט, ו-health endpoint
-- `tests/e2e/dashboard.spec.ts` — בדיקות לוח בקרה
+- `tests/e2e/full-coverage.spec.ts` — **85+ בדיקות** המכסות את כל הזרימות: ויזארד admin, כפתורים, forms, API security, redirect auth, מובייל
+- `tests/e2e/flows.spec.ts` — בדיקות ציבוריות, הפניות, health, admin API security
+- `tests/e2e/dashboard.spec.ts` — לוח בקרה
 - `tests/e2e/mobile.spec.ts` — תצוגת מובייל
 
 ---
@@ -117,6 +157,15 @@ npx playwright test
 
 ---
 
+## ניטור שגיאות — Sentry
+
+הפרויקט משתמש ב-**Sentry** לניטור שגיאות בייצור.  
+הגדרות: `sentry.client.config.ts` · `sentry.server.config.ts` · `sentry.edge.config.ts`  
+**פעיל רק ב-`NODE_ENV=production`** (לא ב-dev).  
+להפעלה: הוסף `NEXT_PUBLIC_SENTRY_DSN` ב-Vercel מתוך [sentry.io](https://sentry.io).
+
+---
+
 ## תיעוד נוסף
 
 - **`DEVELOPER_SUMMARY.md`** — ארכיטקטורה, RLS, מפת דפים מלאה (מקור טכני מפורט)
@@ -124,4 +173,4 @@ npx playwright test
 - **`KNOWN_ISSUES.md`** — TODO/FIXME/HACK מתועד מהקוד
 - **`PRIVACY_POLICY_TEMPLATE.md`** — תבנית למדיניות פרטיות
 
-במקרה של **Hydration errors** בסביבת dev: ניקוי Service Worker ישן (DevTools → Application) ובדיקת cache.
+> **Hydration errors** בסביבת dev? ניקוי Service Worker ישן (DevTools → Application → Service Workers → Unregister + Clear site data).

@@ -1,3 +1,12 @@
+/**
+ * lib/plan-limits.ts — הגדרות מסלולים ומגבלות
+ *
+ * @description
+ * מגדיר את 4 מסלולי המחיר (starter / pro / business / enterprise)
+ * עם מגבלות per-plan על בניינים, עובדים, ותקלות לחודש.
+ * normalizeTier() ממיר ערכים ישנים ('basic', null) ל-'starter'.
+ * getClientPlanRow() שולף את שורת הלקוח מ-DB עם כל מגבלות ה-override.
+ */
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**

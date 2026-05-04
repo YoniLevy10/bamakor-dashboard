@@ -1,3 +1,11 @@
+/**
+ * lib/api-auth.ts — אימות API routes דשבורד
+ *
+ * @description
+ * כל API route של הדשבורד קורא ל-requireSessionClientId() בתחילה.
+ * הפונקציה מחזירה: { ok, ctx: { userId, clientId, admin } }
+ * אם אין session חוקי → { ok: false, response: 401/403/500 }
+ */
 import { NextResponse } from 'next/server'
 import { createSupabaseRouteHandlerClient } from '@/lib/supabase-route-handler'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'

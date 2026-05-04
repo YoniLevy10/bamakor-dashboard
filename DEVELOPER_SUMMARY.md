@@ -1,8 +1,16 @@
-# תמונת מצב מלאה — branch saas
+# תמונת מצב מלאה — branch main
 
-מסמך זה מתאר את המערכת כפי שהיא בקוד ב־branch **saas** (אפריל 2026). יש לעדכן אותו כשמתווספים מודולים או מדיניות RLS משמעותית.
+מסמך זה מתאר את המערכת כפי שהיא בקוד ב־branch **main** (מאי 2026). יש לעדכן אותו כשמתווספים מודולים או מדיניות RLS משמעותית.
 
-**עדכון אחרון (אפריל 2026):**  
+**עדכון אחרון (מאי 2026) — Sprint "Foundation Hardening + Admin Tooling":**
+
+- **ויזארד הקמת לקוח חדש (`/admin/setup`):** טופס פנימי מאובטח (ADMIN_SETUP_SECRET) — מקים clients → organizations → auth invite → organization_users → projects → workers בלחיצה אחת. API: `POST /api/admin/setup-client`. מחזיר קישורי QR מוכנים לכל פרויקט.
+- **Sentry:** `sentry.{client,server,edge}.config.ts` + `withSentryConfig` ב-next.config.ts. פעיל רק ב-production. DSN מ-`NEXT_PUBLIC_SENTRY_DSN`.
+- **Tickets pagination:** `.limit(300)` על שאילתת התקלות + באנר אזהרה אם הגיעו ל-300.
+- **4 מסלולי מחיר:** starter(₪299) / pro(₪499) / business(₪699) / enterprise(₪899+). מיגרציה 035 — CHECK constraint + normalizeTier().
+- **Soft delete:** מיגרציה 034 — `deleted_at` על tickets/workers/residents.
+- **Integration tests:** 122 בדיקות נגד Supabase חי (`tests/integration/supabase-schema.integration.test.ts`).
+- **E2E tests:** 85+ בדיקות Playwright (`tests/e2e/full-coverage.spec.ts`) — כיסוי כל זרימות המשתמש עד לרמת הכפתור.
 - **Auth / login:** `/login` — Google בלבד (`app/login/login-client.tsx`), `redirectTo: <origin>/auth/callback` (ללא אימייל/סיסמה).  
 - **PWA:** `public/manifest.json`, `public/sw.js` (**גרסת מטמון v2**: Network First ל־HTML, Cache First לנכסים סטטיים, מחיקת מטמונים ישנים, `public/offline.html`), אייקונים ו־metadata מבוססים על **`/apple-icon.png`**, רישום SW ב־`RegisterServiceWorker` (`app/layout.tsx`).  
   - **פיתוח (Dev):** ה־Service Worker **לא נרשם** (כדי למנוע cache של HTML/JS שיוצר Hydration mismatch / "נדרש התחברות"). אם כבר נרשם בעבר — להסיר ב־DevTools → Application → Service Workers → Unregister + Clear site data.  

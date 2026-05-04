@@ -1,3 +1,12 @@
+/**
+ * lib/tenant-resolution.ts — פתרון multi-tenant: userId → clientId
+ *
+ * @description
+ * שרשרת: auth.users → organization_users → organizations → clients.id
+ * resolveClientIdForUserId() — מחזיר את client_id הראשון שנמצא.
+ * requireClientIdForUser() — זורק שגיאה אם אין שיוך (לא הושלם onboarding).
+ * getSingletonClientId() — cache קצר-מועד בזיכרון לאותו process (SSR).
+ */
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
