@@ -1,5 +1,17 @@
 'use client'
 
+/**
+ * דף תוכנית וחיוב – סיכום צריכה ומגבלות המנוי הנוכחי.
+ *
+ * מציג: תוכנית פעילה (starter/pro/business/enterprise), KPI צריכה (תקלות החודש,
+ * דיירים, עובדים), גרף שימוש שבועי, ומגבלות התוכנית.
+ *
+ * מנוי:
+ *  - starter ₪299/חודש | pro ₪499 | business ₪699 | enterprise ₪899+
+ *  - לחיצה "שדרג תוכנית" → מנהל Bamakor מעדכן ידנית בDB
+ *
+ * קשור ל: lib/plan-limits.ts
+ */
 import { useEffect, useState, type CSSProperties } from 'react'
 import {
   AppShell,

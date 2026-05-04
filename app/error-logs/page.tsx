@@ -1,5 +1,14 @@
 'use client'
 
+/**
+ * דף יומן שגיאות – לוג פנימי של שגיאות מהמערכת (לשימוש פיתוח/תמיכה).
+ *
+ * מציג: רשימת שגיאות עם תאריך, קוד, הודעה, ומקור.
+ * נתונים: error_logs table ב-Supabase (רק תחת client_id של המשתמש).
+ *
+ * גישה: מוסתר מניווט ראשי — נגיש ידנית ב-/error-logs.
+ * משמש לדיאגנוסטיקה ולמעקב אחר בעיות ב-webhook/WhatsApp.
+ */
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'

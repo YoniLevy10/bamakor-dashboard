@@ -1,5 +1,16 @@
 'use client'
 
+/**
+ * דף הבית – לוח הבקרה הראשי.
+ *
+ * מציג: כרטיסי KPI (סה"כ תקלות / פתוחות / בטיפול / נסגרו), רשימת תקלות אחרונות,
+ * ומאפשר לפתוח תקלה חדשה ולעבור לפרטי תקלה ב-Drawer.
+ *
+ * ניווט:
+ *  - "תקלה חדשה" → פותח AddTicketModal
+ *  - לחיצה על שורת תקלה → פותח TicketDetailDrawer
+ *  - ניווט בסרגל → /tickets, /projects, /workers, /residents, /qr, /summary, /settings
+ */
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'

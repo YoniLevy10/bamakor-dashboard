@@ -1,5 +1,16 @@
 'use client'
 
+/**
+ * דף פרויקטים (בניינים) – ניהול כל הפרויקטים תחת הלקוח.
+ *
+ * מציג: ספירת פרויקטים פעילים/כלל, קארדים לכל פרויקט עם קוד QR ייחודי.
+ *
+ * פעולות:
+ *  - "פרויקט חדש" → Drawer עם טופס יצירה → POST /api/create-project
+ *  - עריכת פרויקט → PATCH /api/update-project (שם, כתובת, קוד)
+ *  - ארכיב/הסרה → PATCH is_active=false
+ *  - "קוד QR" → מנווט ל-/qr
+ */
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'

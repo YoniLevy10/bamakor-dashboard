@@ -1,5 +1,18 @@
 'use client'
 
+/**
+ * דף תקלות – רשימת כל התקלות עם סינון, חיפוש ויצוא.
+ *
+ * מציג: KPI לפי סטטוס, טבלת תקלות עם עמודות (מספר, פרויקט, דייר, סטטוס, עדיפות, תאריך),
+ * סינון לפי סטטוס / פרויקט / עדיפות, וחיפוש חופשי.
+ *
+ * פעולות:
+ *  - "יצוא Excel" → מוריד קובץ xlsx עם כל התקלות הנוכחיות
+ *  - לחיצה על שורה → פותח TicketDetailDrawer עם פרטים מלאים + לוג
+ *  - "סגירת תקלה" → PATCH /api/close-ticket
+ *  - "מיזוג" → POST /api/merge-ticket
+ *  - "הודעת סגירה" → POST /api/notify-reporter-ticket-closed
+ */
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -141,6 +154,7 @@ export default function TicketsPage() {
   const [mergeLoading, setMergeLoading] = useState(false)
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
   const [tenantClientId, setTenantClientId] = useState('')
+  const [ticketsTruncated, setTicketsTruncated] = useState(false)
 
   useEffect(() => {
     const check = () => setIsMobile(getIsMobileViewport())
@@ -180,7 +194,8 @@ export default function TicketsPage() {
         const [ticketsResult, workersResult, projectsResult] = await Promise.all([
           withClientId(supabase.from('tickets').select(TICKETS_LIST_SELECT), clientId)
             .is('deleted_at', null)
-            .order('created_at', { ascending: false }),
+            .order('created_at', { ascending: false })
+            .limit(300),
           withClientId(supabase.from('workers').select('id, full_name, phone, email, role, is_active'), clientId)
             .is('deleted_at', null)
             .order('full_name', { ascending: true }),
@@ -206,6 +221,7 @@ export default function TicketsPage() {
         )
 
         setTickets(normalizedTickets)
+        setTicketsTruncated(normalizedTickets.length >= 300)
         setWorkers((workersResult.data as WorkerRow[]) || [])
         setProjects((projectsResult.data as ProjectRow[]) || [])
         return true
@@ -692,6 +708,21 @@ export default function TicketsPage() {
           <KpiCard label="בטיפול" value={stats.assigned} accent="primary" />
           <KpiCard label="נסגרו" value={stats.resolved} accent="success" />
         </div>
+
+        {ticketsTruncated && (
+          <div style={{
+            background: '#FFF4E5',
+            border: '1.5px solid #FF9500',
+            borderRadius: '10px',
+            padding: '10px 16px',
+            fontSize: '13px',
+            color: '#7D4700',
+            marginBottom: '12px',
+            direction: 'rtl',
+          }}>
+            ⚠️ מציג 300 תקלות אחרונות בלבד. להצגת תקלות ישנות יותר, השתמש בייצוא לאקסל.
+          </div>
+        )}
 
         {/* Filters: desktop = full toolbar; mobile = search + one drawer for filters/export */}
         <Card noPadding>

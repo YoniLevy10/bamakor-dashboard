@@ -1,5 +1,18 @@
 'use client'
 
+/**
+ * דף קודי QR – הצגת קודי QR לכל פרויקט עבור דיווח תקלות.
+ *
+ * כל פרויקט מקבל שני קישורים:
+ *  - WhatsApp QR: https://wa.me/{phone}?text=START_{PROJECT_CODE}  → מתחיל שיחת WhatsApp עם הבוט
+ *  - Web QR: {APP_URL}/report?project={code}&client={clientId}  → טופס דיווח ווב
+ *
+ * מציג: גריד קארדים עם QR גרפי (qrcode.react), כפתורי הורדת PNG, ועמוד הדפסה.
+ *
+ * ניווט:
+ *  - לחיצה "הורד" → שומר PNG
+ *  - לחיצה "הדפס" → window.print()
+ */
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'

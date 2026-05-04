@@ -1,5 +1,17 @@
 'use client'
 
+/**
+ * דף סיכום – דוחות וניתוחים עסקיים לבעל העסק.
+ *
+ * מציג: KPI חודשי (תקלות, דיירים, עובדים), גרף עמודות לפי שבוע,
+ * טבלת ביצועים לפי פרויקט, ויצוא Excel מלא.
+ *
+ * סינון: חודש, פרויקט, סטטוס.
+ *
+ * פעולות:
+ *  - "יצוא Excel" → xlsx עם נתוני הסיכום
+ *  - שינוי חודש/פרויקט → מחשב מחדש את הדוח
+ */
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import * as XLSX from 'xlsx'

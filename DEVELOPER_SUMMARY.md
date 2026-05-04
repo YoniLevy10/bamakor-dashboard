@@ -172,14 +172,28 @@
 
 ---
 
-## 7. משימות אחרונות (סשן אפריל 2026)
+## 7. משימות אחרונות (סשן אפריל–מאי 2026)
+
+### סשן מאי 2026
+
+- ✅ **Auth SSR fix:** `lib/supabase.ts` — עבר ל-`createBrowserClient` מ-`@supabase/ssr`.  
+- ✅ **Multi-tenant resolver:** `lib/tenant-resolution.ts` — batch-fetch עד 20 ארגונים, `first valid client_id`.  
+- ✅ **Integration tests (122):** `tests/integration/supabase-schema.integration.test.ts` — בדיקות live נגד Supabase; introspection דרך `.select(col).limit(0)` (אין גישה ל-`information_schema`).  
+- ✅ **מיגרציה 034:** `deleted_at` ל-`tickets`, `workers`, `residents` עם `IF NOT EXISTS`.  
+- ✅ **4 תוכניות מחיר:** `lib/plan-limits.ts` — starter/pro/business/enterprise + `PLAN_PRICES` + `normalizeTier`.  
+- ✅ **מיגרציה 035:** `max_tickets_per_month`, CHECK constraint על `plan_tier`.  
+- ✅ **ויזארד הקמת לקוח:** `app/api/admin/setup-client/route.ts` — מוגן ב-`x-admin-secret`; יוצר clients → organizations → invite Auth → organization_users → projects → workers; מחזיר QR links.  
+- ✅ **Hebrew JSDoc לכל הדפים:** `app/page.tsx`, `app/tickets/page.tsx`, `app/projects/page.tsx`, `app/workers/page.tsx`, `app/residents/page.tsx`, `app/pending-residents/page.tsx`, `app/qr/page.tsx`, `app/summary/page.tsx`, `app/billing/page.tsx`, `app/error-logs/page.tsx`, `app/onboarding/page.tsx`.  
+- ✅ **E2E tests מלאים:** `tests/e2e/flows.spec.ts` — 70+ בדיקות: ציבורי, auth redirects, API security, health, ניווט.
+
+### סשן אפריל 2026
 
 - ✅ **משימה 1:** עובד שטח עם טוקן ייעודי (`access_token`, API, `/worker`, העתק קישור).  
 - ✅ **משימה 2:** PWA — מטמון משופר (`bamakor-v2`) + `offline.html`.  
 - ✅ **משימה 3:** Rate limiting דיווח ציבורי (`rate_limits` + RPC, 20/דקה/IP).  
 - ✅ **משימה 4:** Billing בסיסי (טריגרים + `/billing`).  
 - ✅ **משימה 5:** ייצוא Excel מתקלות מסוננות.  
-- ✅ **משימה 6:** Web Push (הגדרות + שליחה מ־`create-ticket`).  
+- ✅ **משימה 6:** Web Push (הגדרות + שליחה מ-`create-ticket`).  
 
 ### קצוות פתוחים
 

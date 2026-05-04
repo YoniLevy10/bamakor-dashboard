@@ -1,5 +1,17 @@
 'use client'
 
+/**
+ * דף דיירים – ניהול פנקס הדיירים הרשומים בפרויקטים.
+ *
+ * מציג: טאבים לפי פרויקט, רשימת דיירים עם טלפון, שם, קומה/דירה.
+ *
+ * פעולות:
+ *  - "הוסף דייר" → AddResidentModal → POST /api/create-resident
+ *  - "ייבוא Excel" → ImportResidentsModal → POST /api/import-residents (CSV/xlsx)
+ *  - מחיקת דייר → DELETE soft
+ *
+ * קשור ל: /pending-residents (דיירים שדיווחו אך עדיין לא בפנקס)
+ */
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'

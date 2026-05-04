@@ -1,5 +1,17 @@
 'use client'
 
+/**
+ * דף דיירים ממתינים – דיירים שדיווחו תקלה דרך WhatsApp אך טרם נרשמו בפנקס.
+ *
+ * כאשר נכנסת תקלה ממספר לא מוכר, הוא נשמר כ-"pending resident".
+ * מציג: רשימת ממתינים עם מספר טלפון, שם הפרויקט, ומספר תקלה מקושרת.
+ *
+ * פעולות:
+ *  - "אשר ורשום" → ממיר ל-resident + מקשר לפרויקט
+ *  - "דחה" → מסיר מהרשימה ללא רישום
+ *
+ * מגיע מ: /residents (לינק "דיירים ממתינים")
+ */
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from '@/lib/error-handler'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'

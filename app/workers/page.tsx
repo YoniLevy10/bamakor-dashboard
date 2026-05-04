@@ -1,5 +1,16 @@
 'use client'
 
+/**
+ * דף עובדים – ניהול צוות השירות שמטפל בתקלות.
+ *
+ * מציג: כרטיסי KPI (עובדים פעילים / סה"כ), טבלת עובדים עם שם, טלפון, תפקיד, סטטוס.
+ *
+ * פעולות:
+ *  - "עובד חדש" → Drawer עם טופס → POST /api/create-worker
+ *  - עריכת עובד → PATCH /api/update-worker
+ *  - הסרה/ארכיב → soft-delete (deleted_at)
+ *  - לחיצה על עובד → Drawer עם פרטים + תקלות שמשויכות אליו
+ */
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'

@@ -1,5 +1,16 @@
 'use client'
 
+/**
+ * דף אונבורדינג – הגדרה ראשונית לאחר הרשמה (רק למשתמשים חדשים).
+ *
+ * שלב 1: יצירת ארגון (שם החברה) → POST /api/onboarding/organization
+ * שלב 2: יצירת פרויקט ראשון (שם + קוד) → POST /api/onboarding/project
+ * שלב 3: יצירת עובד ראשון (שם + טלפון) → POST /api/onboarding/worker
+ *
+ * לאחר השלמת כל השלבים → redirect ל-/ (לוח הבקרה).
+ *
+ * הפניה אוטומטית: middleware.ts שולח לכאן משתמשים חדשים (גיל <30 יום, 0 פרויקטים).
+ */
 import { useRouter } from 'next/navigation'
 import { useState, type CSSProperties } from 'react'
 import { Card, Button, theme } from '../components/ui'
