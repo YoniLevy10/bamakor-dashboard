@@ -11,16 +11,15 @@ export async function GET() {
     if (error) {
       console.error('[health]', error.message)
       return NextResponse.json(
-        { status: 'error', db: 'disconnected', detail: error.message, ts: new Date().toISOString() },
+        { status: 'error', db: 'disconnected', ts: new Date().toISOString() },
         { status: 503 }
       )
     }
     return NextResponse.json({ status: 'ok', db: 'connected', ts: new Date().toISOString() })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error('[health]', msg)
+    console.error('[health]', e instanceof Error ? e.message : String(e))
     return NextResponse.json(
-      { status: 'error', db: 'disconnected', detail: msg, ts: new Date().toISOString() },
+      { status: 'error', db: 'disconnected', ts: new Date().toISOString() },
       { status: 503 }
     )
   }

@@ -260,9 +260,23 @@ function NavSignOutButton({ onAfterSignOut }: { onAfterSignOut?: () => void }) {
 export function Sidebar({ hidden }: { hidden?: boolean } = {}) {
   const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
+  const [userInitials, setUserInitials] = useState('?')
 
   useEffect(() => {
     setMounted(true)
+    const supabaseClient = createClient()
+    supabaseClient.auth.getUser().then(({ data }) => {
+      const email = data.user?.email ?? ''
+      const name = data.user?.user_metadata?.full_name as string | undefined
+      setUserEmail(name || email)
+      if (name) {
+        const parts = name.trim().split(/\s+/)
+        setUserInitials(parts.length >= 2 ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase() : parts[0].slice(0, 2).toUpperCase())
+      } else if (email) {
+        setUserInitials(email.slice(0, 2).toUpperCase())
+      }
+    }).catch(() => {})
   }, [])
 
   // Avoid dev-time hydration mismatches (Turbopack/HMR) by not SSR-rendering the menu.
@@ -322,9 +336,9 @@ export function Sidebar({ hidden }: { hidden?: boolean } = {}) {
       </div>
 
       <div style={sidebarStyles.footer}>
-        <div style={sidebarStyles.footerAvatar}>YL</div>
+        <div style={sidebarStyles.footerAvatar}>{userInitials}</div>
         <div style={sidebarStyles.footerInfo}>
-          <div style={sidebarStyles.footerName}>Yoni Levy</div>
+          <div style={sidebarStyles.footerName}>{userEmail || '—'}</div>
           <div style={sidebarStyles.footerRole}>מנהל מערכת</div>
         </div>
       </div>
