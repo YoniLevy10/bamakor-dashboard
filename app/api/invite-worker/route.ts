@@ -83,7 +83,7 @@ export async function POST(req: Request) {
       }
     }
 
-    audit.logSuccessfulOperation('CREATE', 'ORGANIZATION_USERS', orgId, clientId, `invited ${email} as ${role}`)
+    audit.logAction('CREATE', 'ORGANIZATION_USERS', orgId, clientId, undefined, undefined, 'SUCCESS', `invited ${email} as ${role}`)
 
     return NextResponse.json({ ok: true, email, role, user_id: userId, requestId })
   } catch (err) {
