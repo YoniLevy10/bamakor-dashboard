@@ -13,6 +13,7 @@
  * קשור ל: /pending-residents (דיירים שדיווחו אך עדיין לא בפנקס)
  */
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { resolveBamakorClientIdForBrowser } from '@/lib/bamakor-client'
 import { withClientId } from '@/lib/supabase/with-client-id'
@@ -97,6 +98,11 @@ export default function ResidentsPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+
+  type SortKey = 'full_name' | 'phone' | 'apartment_number' | 'project'
+  type SortDir = 'asc' | 'desc'
+  const [sortKey, setSortKey] = useState<SortKey>('full_name')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const [mainTab, setMainTab] = useState<'active' | 'pending'>('active')
   const [pendingItems, setPendingItems] = useState<
@@ -335,9 +341,10 @@ export default function ResidentsPage() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial residents list
     void load()
-  }, [])
+    // load is defined above and stable — intentional empty deps for mount-only call
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // mount only
 
   useEffect(() => {
     if (mainTab === 'pending') {
@@ -418,10 +425,55 @@ export default function ResidentsPage() {
     })
   }, [residents, searchTerm, projectFilter])
 
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      let av = ''
+      let bv = ''
+      if (sortKey === 'full_name') { av = a.full_name; bv = b.full_name }
+      else if (sortKey === 'phone') { av = a.phone || ''; bv = b.phone || '' }
+      else if (sortKey === 'apartment_number') {
+        const na = parseInt(a.apartment_number || '0', 10)
+        const nb = parseInt(b.apartment_number || '0', 10)
+        if (!isNaN(na) && !isNaN(nb)) return sortDir === 'asc' ? na - nb : nb - na
+        av = a.apartment_number || ''; bv = b.apartment_number || ''
+      }
+      else if (sortKey === 'project') { av = projectName[a.project_id] || ''; bv = projectName[b.project_id] || '' }
+      return sortDir === 'asc' ? av.localeCompare(bv, 'he') : bv.localeCompare(av, 'he')
+    })
+  }, [filtered, sortKey, sortDir, projectName])
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  function sortArrow(key: SortKey) {
+    if (sortKey !== key) return ' ↕'
+    return sortDir === 'asc' ? ' ↑' : ' ↓'
+  }
+
+  function copyPhone(phone: string) {
+    navigator.clipboard.writeText(phone).then(() => toast.success('טלפון הועתק')).catch(() => {})
+  }
+
+  function exportCsv() {
+    const rows = sorted.map((r) => ({
+      'שם מלא': r.full_name,
+      'טלפון': r.phone || '',
+      'דירה': r.apartment_number || '',
+      'בניין': projectName[r.project_id] || '',
+      'הערות': r.notes || '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'דיירים')
+    XLSX.writeFile(wb, 'דיירים.xlsx')
+  }
+
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
   }
@@ -458,6 +510,17 @@ export default function ResidentsPage() {
       setBulkDeleting(false)
     }
   }
+
+  // Escape סוגר מודאלים
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (addOpen) { closeResidentModal(); return }
+      if (importOpen) { setImportOpen(false); return }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [addOpen, importOpen])
 
   return (
     <AppShell isMobile={isMobile}>
@@ -606,6 +669,9 @@ export default function ResidentsPage() {
             <Button variant="secondary" size="sm" onClick={openImport} disabled={residentsTableMissing}>
               ייבוא דיירים
             </Button>
+            <Button variant="secondary" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>
+              ייצוא Excel
+            </Button>
             <Button variant="primary" size="sm" onClick={openAdd} disabled={residentsTableMissing}>
               הוספת דייר
             </Button>
@@ -647,16 +713,16 @@ export default function ResidentsPage() {
                         aria-label="בחר הכל"
                       />
                     </th>
-                    <th style={styles.th}>שם</th>
+                    <th style={{ ...styles.th, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('full_name')}>שם{sortArrow('full_name')}</th>
                     <th style={styles.th}>טלפון</th>
-                    <th style={styles.th}>דירה</th>
-                    <th style={styles.th}>בניין</th>
+                    <th style={{ ...styles.th, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('apartment_number')}>דירה{sortArrow('apartment_number')}</th>
+                    <th style={{ ...styles.th, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('project')}>בניין{sortArrow('project')}</th>
                     <th style={styles.th}>הערות</th>
                     <th style={{ ...styles.th, width: '100px' }}>פעולות</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((r) => (
+                  {sorted.map((r) => (
                     <tr key={r.id} style={selectedIds.has(r.id) ? { background: theme.colors.primaryMuted } : undefined}>
                       <td style={styles.td}>
                         <input
@@ -667,7 +733,18 @@ export default function ResidentsPage() {
                         />
                       </td>
                       <td style={styles.td}>{r.full_name}</td>
-                      <td style={styles.td}>{r.phone || '—'}</td>
+                      <td style={styles.td}>
+                        {r.phone ? (
+                          <button
+                            type="button"
+                            title="לחץ להעתקה"
+                            onClick={() => copyPhone(r.phone!)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: theme.colors.primary, fontFamily: 'inherit', fontSize: 'inherit', padding: 0, direction: 'ltr', display: 'inline-block' }}
+                          >
+                            {r.phone}
+                          </button>
+                        ) : '—'}
+                      </td>
                       <td style={styles.td}>{r.apartment_number || '—'}</td>
                       <td style={styles.td}>{projectName[r.project_id] || '—'}</td>
                       <td style={{ ...styles.td, maxWidth: '220px', color: theme.colors.textSecondary }}>
