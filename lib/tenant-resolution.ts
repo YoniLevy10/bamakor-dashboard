@@ -8,25 +8,48 @@ export async function resolveClientIdForUserId(
   admin: SupabaseClient,
   userId: string
 ): Promise<string | null> {
-  const { data: ou, error: ouErr } = await admin
+  const { data: ouRows, error: ouErr } = await admin
     .from('organization_users')
-    .select('organization_id')
+    .select('organization_id, created_at')
     .eq('user_id', userId)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+    .order('created_at', { ascending: false })
+    .limit(20)
 
-  if (ouErr || !ou?.organization_id) return null
+  if (ouErr || !ouRows?.length) return null
 
-  const { data: org, error: orgErr } = await admin
+  const orgIds = Array.from(
+    new Set(
+      ouRows
+        .map((row) => (row as { organization_id?: string | null }).organization_id)
+        .filter((id): id is string => Boolean(id && id.trim().length > 0))
+    )
+  )
+
+  if (!orgIds.length) return null
+
+  const { data: orgRows, error: orgErr } = await admin
     .from('organizations')
-    .select('client_id')
-    .eq('id', ou.organization_id)
-    .maybeSingle()
+    .select('id, client_id')
+    .in('id', orgIds)
 
-  if (orgErr || !org) return null
-  const cid = (org as { client_id?: string | null }).client_id
-  return cid && String(cid).length > 0 ? String(cid) : null
+  if (orgErr || !orgRows?.length) return null
+
+  const orgToClient = new Map<string, string>()
+  for (const row of orgRows as Array<{ id?: string | null; client_id?: string | null }>) {
+    const orgId = typeof row.id === 'string' ? row.id : ''
+    const clientId = typeof row.client_id === 'string' ? row.client_id.trim() : ''
+    if (orgId && clientId) {
+      orgToClient.set(orgId, clientId)
+    }
+  }
+
+  for (const row of ouRows as Array<{ organization_id?: string | null }>) {
+    const orgId = typeof row.organization_id === 'string' ? row.organization_id : ''
+    const clientId = orgToClient.get(orgId)
+    if (clientId) return clientId
+  }
+
+  return null
 }
 
 /**

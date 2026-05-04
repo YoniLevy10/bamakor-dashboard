@@ -88,11 +88,11 @@ export async function middleware(req: NextRequest) {
         !pathname.startsWith('/onboarding') &&
         !pathname.startsWith('/login')
       ) {
+        // Manual SQL onboarding can leave is_active null/false; any project means workspace exists.
         const { count, error: cErr } = await admin
           .from('projects')
           .select('*', { count: 'exact', head: true })
           .eq('client_id', clientId)
-          .eq('is_active', true)
 
         if (cErr) {
           return res

@@ -98,6 +98,7 @@ const navItems = [
   { href: '/', label: 'לוח בקרה', icon: 'home' },
   { href: '/tickets', label: 'תקלות', icon: 'ticket' },
   { href: '/projects', label: 'פרויקטים', icon: 'folder' },
+  { href: '/workers', label: 'עובדים', icon: 'users' },
   { href: '/residents', label: 'דיירים', icon: 'building' },
   { href: '/pending-residents', label: 'דיירים לאישור', icon: 'inbox' },
   { href: '/qr', label: 'קודי QR', icon: 'qr' },
