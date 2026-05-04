@@ -71,7 +71,6 @@ export function ImportResidentsModal({
 
   const canImport = useMemo(() => {
     if (rows.length === 0) return false
-    if (!mapping.full_name) return false
     const hasProjectMapping = Boolean(mapping.project_code || mapping.project_name || singleProjectId)
     return hasProjectMapping
   }, [rows.length, mapping, singleProjectId])
@@ -148,8 +147,9 @@ export function ImportResidentsModal({
     const forcedProjectName = project?.name || null
 
     const out = rows.map((r) => {
-      const fullName = String(r[mapping.full_name] ?? '').trim()
       const phoneRaw = mapping.phone ? String(r[mapping.phone] ?? '').trim() : ''
+      const rawName = mapping.full_name ? String(r[mapping.full_name] ?? '').trim() : ''
+      const fullName = rawName || sanitizePhone(phoneRaw) || ''
       const apt = mapping.apartment_number ? String(r[mapping.apartment_number] ?? '').trim() : ''
       const notes = mapping.notes ? String(r[mapping.notes] ?? '').trim() : ''
 
@@ -333,7 +333,7 @@ export function ImportResidentsModal({
 
               <div className="app-import-grid" style={styles.grid2}>
                 <div style={styles.row}>
-                  <label style={styles.label}>עמודת שם מלא (חובה)</label>
+                  <label style={styles.label}>עמודת שם מלא</label>
                   <select
                     className="app-select-input"
                     value={mapping.full_name}

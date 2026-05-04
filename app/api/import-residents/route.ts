@@ -77,11 +77,11 @@ export async function POST(req: Request) {
     const errors: { rowIndex: number; error: string }[] = []
 
     rows.forEach((r, idx) => {
-      const fullName = sanitizeString(r.full_name) || normalizeString(r.full_name)
-      if (!fullName) {
-        errors.push({ rowIndex: idx, error: 'שם מלא חסר' })
-        return
-      }
+      const fullName =
+        sanitizeString(r.full_name) ||
+        normalizeString(r.full_name) ||
+        normalizeString(r.phone) ||
+        'דייר ללא שם'
 
       const projectCode = normalizeProjectCode(r.project_code)
       const projectName = normalizeString(r.project_name).toLowerCase()
