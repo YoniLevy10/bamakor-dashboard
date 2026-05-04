@@ -280,7 +280,8 @@ export function Sidebar({ hidden }: { hidden?: boolean } = {}) {
   }, [])
 
   // Avoid dev-time hydration mismatches (Turbopack/HMR) by not SSR-rendering the menu.
-  if (!mounted || hidden) return null
+  if (hidden) return null
+  if (!mounted) return <aside style={{ display: 'none' }} aria-hidden="true" />
 
   return (
     <aside style={sidebarStyles.container}>
