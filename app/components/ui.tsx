@@ -526,6 +526,7 @@ const BOTTOM_NAV_ROUTES = new Set([
   '/',
   '/tickets',
   '/projects',
+  '/workers',
   '/residents',
   '/pending-residents',
   '/qr',
